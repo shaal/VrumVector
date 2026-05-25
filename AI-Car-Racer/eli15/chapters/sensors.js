@@ -19,7 +19,7 @@ export default {
     'rays — wide enough to hide an apex corner until the car is already on top of it.',
     'Bumping to 7 closes those gaps to ~17°. Combined with speed and two track-orientation',
     'features, that\'s the <strong>10 inputs</strong> feeding the first hidden layer.',
-    'Look at <code>car.js:42</code> and you\'ll see it: <code>new NeuralNetwork([sensor.rayCount+3, 8, 4])</code>.</p>',
+    'Look at <code>car.js:42</code> and you\'ll see it: <code>new NeuralNetwork([sensor.rayCount+3, 16, 4])</code>.</p>',
     '<p>The rays are drawn on the training canvas as faint lines sticking out of each car.',
     'Where a ray hits a wall, there\'s a tiny dot. That dot\'s distance is what the brain sees.</p>',
     '<h3>Try it yourself</h3>',
@@ -43,7 +43,7 @@ export default {
     '     0 = wall touching nose',
     '     1 = clear for 400px',
     '',
-    '  5 rays + 1 bias input  →  feeds NN layer 0  (6 neurons)',
+    '  7 rays + 3 features → feeds NN layer 0 (10 neurons)',
     '</pre>',
   ].join('\n'),
   related: [

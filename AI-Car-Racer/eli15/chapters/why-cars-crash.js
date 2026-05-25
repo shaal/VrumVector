@@ -11,8 +11,8 @@ export default {
     '"the AI isn\'t smart enough yet."</p>',
 
     '<h3>1. The brain is a frozen reflex table, not an agent</h3>',
-    '<p>Every car\'s "brain" is the 92-number neural net from the',
-    '<code>neural-network</code> chapter. Once a car is born, those 92 numbers are <strong>locked</strong>',
+    '<p>Every car\'s "brain" is the 244-number neural net from the',
+    '<code>neural-network</code> chapter. Once a car is born, those 244 numbers are <strong>locked</strong>',
     'for its entire life. No learning, no memory, no "oh I bumped that wall, I\'ll try something',
     'different next time." Each frame it does the same thing: feed sensor readings in the top,',
     'read four booleans out the bottom. It\'s a <em>lookup function</em> dressed up as a driver.',
@@ -21,7 +21,7 @@ export default {
 
     '<h3>2. Generation 0 is a bag of dice rolls</h3>',
     '<p>When a fresh population is born, every weight and bias is a uniform random number',
-    'in [-1, 1] — see <code>network.js:68</code>: <code>w[k] = Math.random()*2-1</code>.',
+    'in [-1, 1] — see <code>network.js:73</code>: <code>w[k] = Math.random()*2-1</code>.',
     'That means ~1 in 16 gen-0 brains happen to roll a bias pattern that makes the',
     '<em>forward</em> output neuron fire regardless of what the sensors say. Those cars are',
     '"always-forward zombies" — they drive perfectly straight until the first corner',
@@ -32,9 +32,9 @@ export default {
 
     '<h3>3. The first half-decent car becomes the ancestor of everyone</h3>',
     '<p>Fitness is brutally simple: <code>checkPointsCount + laps × cpLen</code>',
-    '(<code>sim-worker.js:296</code>). Whichever car grabs the first checkpoint <em>first</em>',
+    '(<code>sim-worker.js:331</code>). Whichever car grabs the first checkpoint <em>first</em>',
     'wins the generation, even if it immediately crashes one metre later. The GA then copies',
-    'that winner\'s 92 weights, sprinkles a bit of mutation noise, and the whole next',
+    'that winner\'s 244 weights, sprinkles a bit of mutation noise, and the whole next',
     'generation is its near-siblings. After ~10 generations of this, the population has',
     '<strong>locked in</strong> on whatever reflex the first lucky car happened to have —',
     'even if that reflex is "hug the left wall at 0.3 × max speed." Escaping that local',

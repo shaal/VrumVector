@@ -8,6 +8,20 @@ function pauseGame(){
         btn.classList.remove('start-cta');
     }
     window.__firstStart = false;
+
+    // Gentle first-time onboarding hint (only shown once)
+    if (!localStorage.getItem('seenFirstStartHint')) {
+        localStorage.setItem('seenFirstStartHint', '1');
+        setTimeout(() => {
+            try {
+                const hint = document.createElement('div');
+                hint.style.cssText = 'position:fixed;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.78);color:#ddd;padding:6px 14px;border-radius:4px;font-size:12px;z-index:9999;white-space:nowrap;';
+                hint.innerHTML = 'Demo running — cars are evolving. Use “✏️ Customize Track” or 🧪 Experiments for more options.';
+                document.body.appendChild(hint);
+                setTimeout(() => { if (hint && hint.parentNode) hint.parentNode.removeChild(hint); }, 7000);
+            } catch (_) {}
+        }, 1400);
+    }
     // Halt / resume the worker's AI step loop too. Without this, sim-worker
     // would keep burning CPU while the user has paused — and on resume the
     // accumulator would stampede a huge backlog of physics steps at once.

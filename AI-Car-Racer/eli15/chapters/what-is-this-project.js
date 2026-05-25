@@ -6,8 +6,8 @@ export default {
   oneLiner: 'A browser-based genetic-algorithm racer with a vector-memory bridge.',
   body: [
     '<p>This is a car racing game where nobody writes the driving logic by hand. Each',
-    'car has a tiny neural network — 92 floating-point numbers, arranged as a',
-    '<code>6 → 8 → 4</code> topology — that reads from sensors (rays poking out of the car)',
+    'car has a tiny neural network — 244 floating-point numbers, arranged as a',
+    '<code>10 → 16 → 4</code> topology — that reads from sensors (rays poking out of the car)',
     'and decides which pedals and steering to press. At the start of training the',
     'networks are <em>random</em>, so the cars drive like drunk toddlers. A few make it a',
     'little further than the others. Those are the "winners" of the generation.</p>',
