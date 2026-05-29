@@ -2218,6 +2218,89 @@ label {
     letter-spacing: 0.02em;
 }
 
+/* === Issue #3 / ADR-001 — ruvector audit log === */
+.rv-audit { width: 100%; }
+.rv-audit-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.rv-audit-counts {
+    font-size: 0.78em;
+    color: #9fb0cc;
+    font-variant-numeric: tabular-nums;
+}
+.rv-audit-clear { font-size: 0.75em; padding: 1px 8px; }
+.rv-audit-list {
+    max-height: 240px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.rv-audit-item {
+    background: rgba(10, 16, 32, 0.5);
+    border-radius: 3px;
+    border-left: 3px solid #4a5a7a;
+}
+.rv-audit-srow {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 3px 6px;
+    cursor: pointer;
+    font-size: 0.76em;
+    list-style: none;
+}
+.rv-audit-srow::-webkit-details-marker { display: none; }
+.rv-audit-op {
+    flex: 0 0 auto;
+    text-transform: uppercase;
+    font-weight: 700;
+    font-size: 0.85em;
+    letter-spacing: 0.04em;
+    min-width: 44px;
+}
+.rv-audit-clock {
+    flex: 0 0 auto;
+    color: #7f90ad;
+    font-variant-numeric: tabular-nums;
+}
+.rv-audit-text {
+    flex: 1 1 auto;
+    color: #cdd8ec;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rv-audit-ms {
+    flex: 0 0 auto;
+    color: #7f90ad;
+    font-variant-numeric: tabular-nums;
+}
+.rv-audit-raw {
+    margin: 0;
+    padding: 6px 8px;
+    border-top: 1px solid rgba(120, 140, 180, 0.2);
+    background: rgba(4, 8, 18, 0.6);
+    color: #aeb9d0;
+    font-size: 0.72em;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+}
+/* Per-op accent colours — match the search/store/vote vocabulary. */
+.rv-audit-op-search { border-left-color: #3a7bd5; }
+.rv-audit-op-search .rv-audit-op { color: #6ea8ff; }
+.rv-audit-op-store  { border-left-color: #3fa66a; }
+.rv-audit-op-store .rv-audit-op  { color: #62d199; }
+.rv-audit-op-vote   { border-left-color: #d38b4b; }
+.rv-audit-op-vote .rv-audit-op   { color: #f0a868; }
+.rv-audit-op-embed  { border-left-color: #9a6fd4; }
+.rv-audit-op-embed .rv-audit-op  { color: #c19af0; }
+
 /* === Phase A — Brain saves (named-slot persistence) === */
 /* Mounted directly below the legacy Save Best + Restart actions, so the
  * single-slot legacy buttons and the multi-slot named saves are

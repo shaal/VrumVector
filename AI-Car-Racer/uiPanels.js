@@ -1596,6 +1596,146 @@
     __rvShareRow = shareRow;
   }
 
+  // === Issue #3 / ADR-001 — ruvector audit log ===
+  // A live, reverse-chronological view of every interaction the presentation
+  // layer has with ruvector (search / store / vote / embed). Each row expands
+  // to the raw request string the bridge captured (ADR-001 Decision 2). Built
+  // here, then MOVED into the 🧪 Experiments disclosure by buildExperimentsPanel
+  // below. Off by default — the bridge records nothing until the toggle (or
+  // ?audit=1) calls setAuditEnabled, and the panel only subscribes while on.
+  let __rvAuditRow = null;
+  let _auditUnsub = null;
+  let _auditWant = false; // desired enabled-state; guards the boot poll below
+  let ensureAuditWiring = function () {};
+  let teardownAuditWiring = function () {};
+  {
+    const row = document.createElement('div');
+    row.className = 'rv-audit';
+    row.setAttribute('data-rv', 'audit');
+    row.innerHTML = [
+      '<div class="rv-audit-head">',
+      '  <span class="rv-audit-counts" data-rv="audit-counts">no events yet</span>',
+      '  <button type="button" class="controlButton rv-audit-clear" data-rv="audit-clear" title="Clear the audit buffer">Clear</button>',
+      '</div>',
+      '<div class="rv-audit-list" data-rv="audit-list"></div>',
+    ].join('');
+
+    const listEl = row.querySelector('[data-rv="audit-list"]');
+    const countsEl = row.querySelector('[data-rv="audit-counts"]');
+    const clearBtn = row.querySelector('[data-rv="audit-clear"]');
+    const MAX_ROWS = 50; // rendered-row cap; the bridge ring buffer holds the rest
+    const counts = { search: 0, store: 0, vote: 0, embed: 0 };
+
+    function fmtClock(t) {
+      try { return new Date(t).toLocaleTimeString(undefined, { hour12: false }); }
+      catch (_) { return ''; }
+    }
+    function summarize(rec) {
+      const a = rec.args || {};
+      const r = rec.result || {};
+      if (rec.op === 'search') {
+        const dim = (a.trackDim == null) ? '—' : a.trackDim;
+        const hits = (a.returned != null) ? a.returned : (r.returned || 0);
+        const top = (r && r.topSimPct != null) ? (' · top ' + r.topSimPct + '%') : '';
+        return 'k=' + (a.k != null ? a.k : '?') + ' dim=' + dim + ' → ' + hits +
+          ' hit' + (hits === 1 ? '' : 's') + (a.kind === 'circuits' ? ' (circuits)' : '') + top;
+      }
+      if (rec.op === 'store') {
+        return 'fit ' + (Math.round((a.fitness || 0) * 10) / 10) + ' · g' + (a.generation || 0) +
+          ' · p' + (a.parents || 0) + (a.hasDynamics ? ' · +dyn' : '') +
+          (a.remote ? ' · remote' : '') + ' → ' + (r.id != null ? r.id : '?');
+      }
+      if (rec.op === 'vote') {
+        const n = a.ids || 0;
+        return n + ' id' + (n === 1 ? '' : 's') + ' · outcome ' + (Math.round((a.outcomeFitness || 0) * 10) / 10);
+      }
+      if (rec.op === 'embed') {
+        return (a.width || 0) + '×' + (a.height || 0) + ' → ' + (r.dim || 0) + 'd';
+      }
+      return '';
+    }
+    function renderCounts() {
+      countsEl.textContent = (counts.search + counts.store + counts.vote + counts.embed) === 0
+        ? 'no events yet'
+        : 'search ' + counts.search + ' · store ' + counts.store + ' · vote ' + counts.vote +
+          (counts.embed ? ' · embed ' + counts.embed : '');
+    }
+    function renderRow(rec, prepend) {
+      const item = document.createElement('details');
+      item.className = 'rv-audit-item rv-audit-op-' + rec.op;
+      item.innerHTML = [
+        '<summary class="rv-audit-srow">',
+        '  <span class="rv-audit-op">', escapeHtml(rec.op), '</span>',
+        '  <span class="rv-audit-clock">', fmtClock(rec.t), '</span>',
+        '  <span class="rv-audit-text">', escapeHtml(summarize(rec)), '</span>',
+        '  <span class="rv-audit-ms">', rec.ms, 'ms</span>',
+        '</summary>',
+        '<pre class="rv-audit-raw">', escapeHtml(rec.raw || ''), '</pre>',
+      ].join('');
+      if (prepend && listEl.firstChild) listEl.insertBefore(item, listEl.firstChild);
+      else listEl.appendChild(item);
+      while (listEl.childElementCount > MAX_ROWS) listEl.removeChild(listEl.lastChild);
+    }
+
+    clearBtn.addEventListener('click', function () {
+      const b = window.__rvBridge;
+      try { if (b && typeof b.clearAuditLog === 'function') b.clearAuditLog(); } catch (_) {}
+      listEl.innerHTML = '';
+      counts.search = counts.store = counts.vote = counts.embed = 0;
+      renderCounts();
+    });
+
+    // Enable recording + subscribe. uiPanels.js runs BEFORE the async ruvector
+    // sidecar assigns window.__rvBridge (see index.html), so on a slow
+    // fetch/import the bridge — and setAuditEnabled/subscribeAudit — may not
+    // exist yet when the ?audit=1 preset (or an early click) fires. Keep polling
+    // for as long as the user still wants audit on (`_auditWant`), so an
+    // arbitrarily slow import still gets wired the moment it lands — toggling
+    // OFF clears `_auditWant` and ends the loop. Backs off from 100 ms to 1 s
+    // after the first few seconds so a bridge that never loads can't spin hot.
+    // A re-entrant call (e.g. toggle off→on) is a no-op once `_auditUnsub` is set.
+    ensureAuditWiring = async function () {
+      if (_auditUnsub) return; // already wired
+      _auditWant = true;
+      let attempt = 0;
+      while (_auditWant && !_auditUnsub) {
+        const b = window.__rvBridge;
+        if (b && typeof b.subscribeAudit === 'function' && typeof b.setAuditEnabled === 'function') {
+          try { b.setAuditEnabled(true); } catch (e) { console.warn('[rv-audit] setAuditEnabled failed', e); }
+          // Backfill anything recorded between enable and wiring (counts reflect
+          // the whole buffer; only the last MAX_ROWS are rendered, newest on top).
+          try {
+            const existing = (typeof b.getAuditLog === 'function') ? b.getAuditLog() : [];
+            listEl.innerHTML = '';
+            counts.search = counts.store = counts.vote = counts.embed = 0;
+            for (const rec of existing) if (counts[rec.op] != null) counts[rec.op]++;
+            for (const rec of existing.slice(-MAX_ROWS)) renderRow(rec, true);
+            renderCounts();
+          } catch (_) {}
+          _auditUnsub = b.subscribeAudit(function (rec) {
+            if (counts[rec.op] != null) counts[rec.op]++;
+            renderRow(rec, true);
+            renderCounts();
+          });
+          return;
+        }
+        attempt++;
+        await new Promise((res) => setTimeout(res, attempt < 30 ? 100 : 1000));
+      }
+    };
+    teardownAuditWiring = function () {
+      _auditWant = false;
+      if (_auditUnsub) { try { _auditUnsub(); } catch (_) {} _auditUnsub = null; }
+      try {
+        const b = window.__rvBridge;
+        if (b && typeof b.setAuditEnabled === 'function') b.setAuditEnabled(false);
+      } catch (_) {}
+    };
+
+    renderCounts();
+    __rvAuditRow = row;
+  }
+
   // === Phase A — UI discoverability pass: 🧪 Experiments disclosure ===
   //
   // Consolidates the RuLake-inspired feature toggles into one collapsible
@@ -1634,6 +1774,16 @@
       '    </label>',
       '    <span class="rv-experiments-hint-inline">flame-graph-lite for every generation</span>',
       '    <span data-eli15="where-the-time-goes" role="button" tabindex="0" aria-label="Learn: where the time goes"></span>',
+      '  </div>',
+      '  <div class="rv-experiments-row" data-rv="exp-audit-row">',
+      '    <label class="rv-experiments-toggle">',
+      '      <input type="checkbox" data-rv="exp-audit" />',
+      '      <span class="rv-experiments-emoji">📡</span>',
+      '      <span class="rv-experiments-label">ruvector audit log</span>',
+      '    </label>',
+      '    <span class="rv-experiments-hint-inline">every search / store / vote, with the raw request</span>',
+      '    <span data-eli15="vectordb-hnsw" role="button" tabindex="0" aria-label="Learn: the ruvector edge API"></span>',
+      '    <div class="rv-experiments-subbody" data-rv="exp-audit-subbody" hidden></div>',
       '  </div>',
       '  <div class="rv-experiments-row" data-rv="exp-snapshots-row">',
       '    <label class="rv-experiments-toggle">',
@@ -1681,6 +1831,8 @@
     const expFedRow = details.querySelector('[data-rv="exp-federation-row"]');
     const expConsRow = details.querySelector('[data-rv="exp-consistency-row"]');
     const expObsCb = details.querySelector('[data-rv="exp-observability"]');
+    const expAuditCb = details.querySelector('[data-rv="exp-audit"]');
+    const expAuditSub = details.querySelector('[data-rv="exp-audit-subbody"]');
 
     // Move existing DOM nodes into the disclosure. Listeners attached
     // earlier survive the appendChild move — that's the whole reason we
@@ -1706,6 +1858,9 @@
     }
     if (__rvShareRow && expSnapshotsSub) {
       expSnapshotsSub.appendChild(__rvShareRow);
+    }
+    if (__rvAuditRow && expAuditSub) {
+      expAuditSub.appendChild(__rvAuditRow);
     }
 
     // Snapshots toggle — show/hide the controls (which include both the
@@ -1751,11 +1906,28 @@
     // Apply after a tick so the obs panel is mounted by then.
     setTimeout(() => applyObsState(expObsCb.checked), 250);
 
+    // Audit-log toggle (issue #3 / ADR-001) — show/hide the panel and hand off
+    // to ensure/teardownAuditWiring, which own setAuditEnabled + subscription.
+    // ensureAuditWiring polls for the bridge, so the ?audit=1 preset is safe
+    // even when the sidecar hasn't injected window.__rvBridge yet (no timeout
+    // guess needed). Off by default.
+    function applyAuditState(on) {
+      if (expAuditSub) expAuditSub.hidden = !on;
+      if (on) ensureAuditWiring(); else teardownAuditWiring();
+    }
+    if (expAuditCb) {
+      expAuditCb.addEventListener('change', () => applyAuditState(expAuditCb.checked));
+    }
+    if (flagEq('audit', '1')) {
+      if (expAuditCb) expAuditCb.checked = true;
+      applyAuditState(true);
+    }
+
     // Default-collapsed: leave details closed unless any feature is
     // pre-toggled by a URL flag, in which case open it so the user can
     // see what their share-link enabled.
     if (flag('snapshots') || flag('crosstab') || flag('federation') ||
-        flag('consistency') || flag('archive')) {
+        flag('consistency') || flag('archive') || flag('audit')) {
       details.open = true;
     }
   })();
