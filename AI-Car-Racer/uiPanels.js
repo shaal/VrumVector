@@ -1361,13 +1361,23 @@
       } catch (_) { /* best-effort */ }
     }
 
-    // Recompute seeds for the badge/list. recommendSeeds is cheap (in-memory
-    // cosine over a few hundred entries), and only runs when one of the
-    // above inputs has moved.
+    // Seeds for the badge/list. The training loop (main.js buildBrainsBuffer)
+    // already runs recommendSeeds(trackVec, 10) once per generation; rather than
+    // fire an identical search again just to paint, reuse that result when it
+    // matches our query (same trackVec identity + at least our k). We only issue
+    // our own search when the loop hasn't seeded this track yet — e.g. a track
+    // finalised in phase 3 before training starts. Display-only; the bridge call
+    // stays a pure read either way.
     let seeds = [];
     if (ready && info && info.brains > 0) {
       try {
-        seeds = window.__rvBridge.recommendSeeds(trackVec, BADGE_K) || [];
+        const b = window.__rvBridge;
+        const last = (typeof b.peekLastRecommendation === 'function') ? b.peekLastRecommendation() : null;
+        if (last && last.trackVec === trackVec && last.k >= BADGE_K && Array.isArray(last.out)) {
+          seeds = last.out.slice(0, BADGE_K);
+        } else {
+          seeds = b.recommendSeeds(trackVec, BADGE_K) || [];
+        }
       } catch (e) {
         console.warn('[rv-panel] recommendSeeds failed', e);
         seeds = [];

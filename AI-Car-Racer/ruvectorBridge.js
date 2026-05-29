@@ -587,19 +587,27 @@ function _recordAudit(op, args, result, ms, rawValue) {
 // Audited public wrappers around the *Impl functions. Instrumenting at this
 // boundary (not at main.js call sites) captures every caller — including the
 // cross-tab _onRemoteBrain re-entry, which routes through archiveBrain() below.
+// Most-recent recommendSeeds result, stashed so display-only callers (the
+// rv-panel) can reuse it instead of re-issuing the identical query every tick.
+// See peekLastRecommendation(). One slot, overwritten per call — negligible.
+let _lastRecommendation = null;
+export function peekLastRecommendation() { return _lastRecommendation; }
+
 export function recommendSeeds(trackVec, k = 5) {
-  if (!_auditEnabled) return recommendSeedsImpl(trackVec, k);
-  const t0 = performance.now();
+  const t0 = _auditEnabled ? performance.now() : 0;
   const out = recommendSeedsImpl(trackVec, k) || [];
-  _recordAudit(
-    'search',
-    { k: k | 0, trackDim: trackVec instanceof Float32Array ? trackVec.length : null, returned: out.length },
-    out.length
-      ? { topId: out[0].id, topScore: Math.round((out[0].score || 0) * 1e4) / 1e4, topSimPct: Math.round(50 + 50 * (out[0].trackSim || 0)) }
-      : { topId: null },
-    performance.now() - t0,
-    { fn: 'recommendSeeds', trackVec, k: k | 0 },
-  );
+  _lastRecommendation = { trackVec, k: k | 0, out };
+  if (_auditEnabled) {
+    _recordAudit(
+      'search',
+      { k: k | 0, trackDim: trackVec instanceof Float32Array ? trackVec.length : null, returned: out.length },
+      out.length
+        ? { topId: out[0].id, topScore: Math.round((out[0].score || 0) * 1e4) / 1e4, topSimPct: Math.round(50 + 50 * (out[0].trackSim || 0)) }
+        : { topId: null },
+      performance.now() - t0,
+      { fn: 'recommendSeeds', trackVec, k: k | 0 },
+    );
+  }
   return out;
 }
 
@@ -2050,6 +2058,7 @@ export async function _debugReset() {
   _observations.clear();
   _insertionOrder = [];
   _queryDynamicsVec = null;
+  _lastRecommendation = null; // drop the cached seeds so the panel re-queries
   // Phase 2A — reset federation diagnostic counters. The shadow index is
   // rebuilt by the next hydrate / hydrateFromFixture call, so we don't
   // touch _brainDB_hyperbolic here (matching the pre-2A policy that
