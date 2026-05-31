@@ -2288,7 +2288,8 @@ label {
     color: #aeb9d0;
     font-size: 0.72em;
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: anywhere;
+    word-break: normal;
     overflow-x: auto;
 }
 /* Per-op accent colours — match the search/store/vote vocabulary. */

@@ -96,8 +96,13 @@ export function getAuditLog()        // returns a copy of the ring buffer (for l
 export function clearAuditLog()
 ```
 
-The tap is a **no-op when there is no subscriber** (same as `_federationCapturer` /
-`_crosstabOnReceive`), so headless tests and the disabled state pay nothing.
+When `_auditEnabled` is false, the wrappers short-circuit before touching
+`_auditLog`, so the disabled state pays only one boolean check. When
+`_auditEnabled` is true, `_recordAudit` appends to `_auditLog` even before
+`subscribeAudit` attaches a listener; this preserves the late-mount/backfill
+contract that `getAuditLog` exposes. With no subscribers, only the fan-out work is
+skipped, matching the optional UI-hook shape used by `_federationCapturer` and
+`_crosstabOnReceive`. `clearAuditLog` resets the in-memory buffer only.
 
 **4. Render a collapsible "Audit log" section in `#rv-panel`** (uiPanels.js): a
 reverse-chronological list of recent events with op badge, relative time, and the
@@ -123,8 +128,8 @@ never called and `recommendSeeds`/`archiveBrain` are byte-identical to today.
 
 ### Negative
 - Adds a small wrapper layer on two hot-path functions (`recommendSeeds`,
-  `archiveBrain`). Mitigated by the no-subscriber short-circuit (one boolean check), and
-  by building the raw-request string lazily (only when a subscriber is attached) with
+  `archiveBrain`). Mitigated by the disabled-state short-circuit (one boolean check), and
+  by building the raw-request string only while `_auditEnabled` is true with
   head-truncated vector previews so a record stays small.
 - One more panel section to maintain in an already-dense `uiPanels.js`.
 - The ring buffer is session-scoped and in-memory; events are lost on reload (an

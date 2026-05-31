@@ -531,7 +531,7 @@ export function subscribeAudit(fn) {
   _auditSubscribers.add(fn);
   return () => { _auditSubscribers.delete(fn); };
 }
-export function getAuditLog() { return _auditLog.slice(); }
+export function getAuditLog() { return _auditLog.map(_cloneAuditRecord); }
 export function clearAuditLog() { _auditLog.length = 0; }
 
 // Vector-aware, head-truncated stringifier. Any TypedArray (Float32Array track /
@@ -565,10 +565,28 @@ function _auditFlattenBrain(brain) {
   try { return flatten(brain); } catch (_) { return '[unflattenable brain]'; }
 }
 
+function _cloneAuditRecord(rec) {
+  return {
+    seq: rec.seq,
+    t: rec.t,
+    op: rec.op,
+    args: rec.args && typeof rec.args === 'object' ? { ...rec.args } : rec.args,
+    result: rec.result && typeof rec.result === 'object' ? { ...rec.result } : rec.result,
+    raw: rec.raw,
+    ms: rec.ms,
+  };
+}
+
+function _freezeAuditRecord(rec) {
+  if (rec.args && typeof rec.args === 'object') Object.freeze(rec.args);
+  if (rec.result && typeof rec.result === 'object') Object.freeze(rec.result);
+  return Object.freeze(rec);
+}
+
 // Append a record + fan out to subscribers. Only ever reached behind an
 // `if (_auditEnabled)` guard in the wrappers below.
 function _recordAudit(op, args, result, ms, rawValue) {
-  const rec = {
+  const rec = _freezeAuditRecord({
     seq: ++_auditSeq,
     t: Date.now(),
     op,
@@ -576,11 +594,11 @@ function _recordAudit(op, args, result, ms, rawValue) {
     result: result || null,
     raw: _auditStringify(rawValue),
     ms: Math.round((ms || 0) * 100) / 100,
-  };
+  });
   _auditLog.push(rec);
   if (_auditLog.length > AUDIT_CAP) _auditLog.splice(0, _auditLog.length - AUDIT_CAP);
   for (const fn of _auditSubscribers) {
-    try { fn(rec); } catch (e) { console.warn('[rv-audit] subscriber threw', e); }
+    try { fn(_cloneAuditRecord(rec)); } catch (e) { console.warn('[rv-audit] subscriber threw', e); }
   }
 }
 
