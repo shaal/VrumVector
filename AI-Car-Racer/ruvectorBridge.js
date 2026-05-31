@@ -500,9 +500,187 @@ export function setQueryDynamicsVec(vec) {
   _queryDynamicsVec = (vec instanceof Float32Array && vec.length === DYNAMICS_DIM) ? vec : null;
 }
 
-// ─── archive / retrieve ──────────────────────────────────────────────────────
+// ─── audit tap (issue #3 / ADR-001 "ruvector Audit Panel") ───────────────────
+//
+// Records every presentation-layer interaction (search / store / vote / embed)
+// into a bounded ring buffer that the rv-panel renders as a live "Audit log".
+// Off by default: `_auditEnabled` gates ALL recording, so recommendSeeds /
+// archiveBrain stay byte-identical (one boolean check) until the 🧪 Experiments
+// toggle — or `?audit=1` — calls setAuditEnabled(true). Mirrors the
+// setFederationCapturer / setCrosstabListeners subscriber pattern already used
+// elsewhere in this file.
+//
+// Each record is { seq, t, op, args, result, raw, ms } where `raw` is a string
+// representation of the literal request payload (ADR-001 Decision 2). Vectors in
+// `raw` are head-truncated previews (e.g. `Float32Array(512)[0.12, -0.03, …]`),
+// never full payloads, so the buffer stays small. The compact `args`/`result`
+// summaries drive the at-a-glance list; `raw` is revealed on row-expand.
+const AUDIT_CAP = 200;          // ring-buffer size; oldest events fall off
+const AUDIT_VEC_PREVIEW = 6;    // vector elements kept before truncating
+const _auditLog = [];           // ring buffer, oldest-first
+let _auditSeq = 0;
+let _auditEnabled = false;
+const _auditSubscribers = new Set();
+
+export function setAuditEnabled(on) { _auditEnabled = !!on; return _auditEnabled; }
+export function isAuditEnabled() { return !!_auditEnabled; }
+// subscribeAudit(fn) — fn(record) is called on every event; returns an
+// unsubscribe thunk. Multiple subscribers are allowed (e.g. a panel + a test).
+export function subscribeAudit(fn) {
+  if (typeof fn !== 'function') return () => {};
+  _auditSubscribers.add(fn);
+  return () => { _auditSubscribers.delete(fn); };
+}
+export function getAuditLog() { return _auditLog.map(_cloneAuditRecord); }
+export function clearAuditLog() { _auditLog.length = 0; }
+
+// Vector-aware, head-truncated stringifier. Any TypedArray (Float32Array track /
+// brain vectors, Uint8Array image bytes) or long numeric Array collapses to
+// `Ctor(N)[v0, v1, …]` so a 512-dim request never serialises 512 numbers.
+function _auditStringify(value) {
+  try {
+    return JSON.stringify(value, (_key, val) => {
+      const isTyped = ArrayBuffer.isView(val) && !(val instanceof DataView);
+      const isBigNumArr = Array.isArray(val) && val.length > AUDIT_VEC_PREVIEW && typeof val[0] === 'number';
+      if (isTyped || isBigNumArr) {
+        const head = Array.from(val.slice(0, AUDIT_VEC_PREVIEW))
+          .map((n) => Math.round(n * 1e4) / 1e4);
+        const ctor = (val.constructor && val.constructor.name) || 'Array';
+        return ctor + '(' + val.length + ')[' + head.join(', ') +
+          (val.length > AUDIT_VEC_PREVIEW ? ', …' : '') + ']';
+      }
+      return val;
+    });
+  } catch (e) {
+    return '[unserializable: ' + (e && e.message) + ']';
+  }
+}
+
+// archiveBrain's literal request to ruvector is the *flattened* brain vector
+// (`_brainDB.insert(flatten(brain), …)`), not the NeuralNetwork object. Surface
+// that flattened form so the raw row shows the actual payload (head-truncated by
+// _auditStringify). Only called when audit is on, so the extra flatten is free
+// in the default path.
+function _auditFlattenBrain(brain) {
+  try { return flatten(brain); } catch (_) { return '[unflattenable brain]'; }
+}
+
+function _cloneAuditRecord(rec) {
+  return {
+    seq: rec.seq,
+    t: rec.t,
+    op: rec.op,
+    args: rec.args && typeof rec.args === 'object' ? { ...rec.args } : rec.args,
+    result: rec.result && typeof rec.result === 'object' ? { ...rec.result } : rec.result,
+    raw: rec.raw,
+    ms: rec.ms,
+  };
+}
+
+function _freezeAuditRecord(rec) {
+  if (rec.args && typeof rec.args === 'object') Object.freeze(rec.args);
+  if (rec.result && typeof rec.result === 'object') Object.freeze(rec.result);
+  return Object.freeze(rec);
+}
+
+// Append a record + fan out to subscribers. Only ever reached behind an
+// `if (_auditEnabled)` guard in the wrappers below.
+function _recordAudit(op, args, result, ms, rawValue) {
+  const rec = _freezeAuditRecord({
+    seq: ++_auditSeq,
+    t: Date.now(),
+    op,
+    args: args || null,
+    result: result || null,
+    raw: _auditStringify(rawValue),
+    ms: Math.round((ms || 0) * 100) / 100,
+  });
+  _auditLog.push(rec);
+  if (_auditLog.length > AUDIT_CAP) _auditLog.splice(0, _auditLog.length - AUDIT_CAP);
+  for (const fn of _auditSubscribers) {
+    try { fn(_cloneAuditRecord(rec)); } catch (e) { console.warn('[rv-audit] subscriber threw', e); }
+  }
+}
+
+// Audited public wrappers around the *Impl functions. Instrumenting at this
+// boundary (not at main.js call sites) captures every caller — including the
+// cross-tab _onRemoteBrain re-entry, which routes through archiveBrain() below.
+// Most-recent recommendSeeds result, stashed so display-only callers (the
+// rv-panel) can reuse it instead of re-issuing the identical query every tick.
+// See peekLastRecommendation(). One slot, overwritten per call — negligible.
+let _lastRecommendation = null;
+export function peekLastRecommendation() { return _lastRecommendation; }
+
+export function recommendSeeds(trackVec, k = 5) {
+  const t0 = _auditEnabled ? performance.now() : 0;
+  const out = recommendSeedsImpl(trackVec, k) || [];
+  _lastRecommendation = { trackVec, k: k | 0, out };
+  if (_auditEnabled) {
+    _recordAudit(
+      'search',
+      { k: k | 0, trackDim: trackVec instanceof Float32Array ? trackVec.length : null, returned: out.length },
+      out.length
+        ? { topId: out[0].id, topScore: Math.round((out[0].score || 0) * 1e4) / 1e4, topSimPct: Math.round(50 + 50 * (out[0].trackSim || 0)) }
+        : { topId: null },
+      performance.now() - t0,
+      { fn: 'recommendSeeds', trackVec, k: k | 0 },
+    );
+  }
+  return out;
+}
+
+export function findSimilarCircuits(trackVec, k = 5) {
+  if (!_auditEnabled) return findSimilarCircuitsImpl(trackVec, k);
+  const t0 = performance.now();
+  const out = findSimilarCircuitsImpl(trackVec, k) || [];
+  _recordAudit(
+    'search',
+    { k: k | 0, trackDim: trackVec instanceof Float32Array ? trackVec.length : null, kind: 'circuits', returned: Array.isArray(out) ? out.length : 0 },
+    null,
+    performance.now() - t0,
+    { fn: 'findSimilarCircuits', trackVec, k: k | 0 },
+  );
+  return out;
+}
 
 export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds = [], fastestLap, dynamicsVec) {
+  if (!_auditEnabled) return archiveBrainImpl(brain, fitness, trackVec, generation, parentIds, fastestLap, dynamicsVec);
+  const t0 = performance.now();
+  const id = archiveBrainImpl(brain, fitness, trackVec, generation, parentIds, fastestLap, dynamicsVec);
+  _recordAudit(
+    'store',
+    {
+      fitness: Number(fitness) || 0,
+      generation: generation | 0,
+      parents: Array.isArray(parentIds) ? parentIds.length : 0,
+      hasTrack: trackVec instanceof Float32Array,
+      hasDynamics: dynamicsVec instanceof Float32Array,
+      remote: _crosstabReceiving,
+    },
+    { id },
+    performance.now() - t0,
+    { fn: 'archiveBrain', brain: _auditFlattenBrain(brain), fitness: Number(fitness) || 0, generation: generation | 0, parentIds, fastestLap, trackVec, dynamicsVec },
+  );
+  return id;
+}
+
+export function observe(retrievedIds, outcomeFitness) {
+  if (!_auditEnabled) return observeImpl(retrievedIds, outcomeFitness);
+  const t0 = performance.now();
+  const ret = observeImpl(retrievedIds, outcomeFitness);
+  _recordAudit(
+    'vote',
+    { ids: Array.isArray(retrievedIds) ? retrievedIds.length : 0, outcomeFitness: Number(outcomeFitness) || 0 },
+    null,
+    performance.now() - t0,
+    { fn: 'observe', retrievedIds, outcomeFitness: Number(outcomeFitness) || 0 },
+  );
+  return ret;
+}
+
+// ─── archive / retrieve ──────────────────────────────────────────────────────
+
+function archiveBrainImpl(brain, fitness, trackVec, generation = 0, parentIds = [], fastestLap, dynamicsVec) {
   requireReady();
   // Phase 3A — F7. Advance the observability generation cursor. This is
   // a read-only counter exposed via getIndexStats().timings.lastGen so
@@ -609,7 +787,7 @@ function upsertTrack(trackVec) {
 
 // Returns [{ id, vector, meta, score }, ...] ordered best first.
 // Caller is expected to unflatten vectors into NeuralNetwork instances.
-export function recommendSeeds(trackVec, k = 5) {
+function recommendSeedsImpl(trackVec, k = 5) {
   requireReady();
   if (_brainMirror.size === 0) return [];
 
@@ -1192,9 +1370,24 @@ function _frozenSnapshotRef() {
 // ─── embedding + observation ─────────────────────────────────────────────────
 
 // imageData: Uint8Array of RGB bytes (length = width*height*3, no alpha).
-export function embedTrack(imageData, width, height) {
+function embedTrackImpl(imageData, width, height) {
   requireReady();
   return _cnn.extract(imageData, width, height);
+}
+// Audited wrapper — see the audit-tap section above. No-op overhead when the
+// audit panel is off.
+export function embedTrack(imageData, width, height) {
+  if (!_auditEnabled) return embedTrackImpl(imageData, width, height);
+  const t0 = performance.now();
+  const vec = embedTrackImpl(imageData, width, height);
+  _recordAudit(
+    'embed',
+    { width: width | 0, height: height | 0, bytes: imageData ? imageData.length : 0 },
+    { dim: vec ? vec.length : 0 },
+    performance.now() - t0,
+    { fn: 'embedTrack', width: width | 0, height: height | 0, imageData },
+  );
+  return vec;
 }
 
 export function cosineSimilarity(a, b) {
@@ -1202,7 +1395,7 @@ export function cosineSimilarity(a, b) {
   return _cnn.cosineSimilarity(a, b);
 }
 
-export function observe(retrievedIds, outcomeFitness) {
+function observeImpl(retrievedIds, outcomeFitness) {
   requireReady();
   if (!retrievedIds || retrievedIds.length === 0) return;
   const normOut = Math.tanh((Number(outcomeFitness) || 0) / 100);
@@ -1319,7 +1512,7 @@ export function endPhase4Trajectory(finalFitness) {
   if (_sonaPaused) return null;
   try { return sonaEndTrajectory(finalFitness); } catch (e) { console.warn('[sona] endTrajectory failed', e); return null; }
 }
-export function findSimilarCircuits(trackVec, k = 5) {
+function findSimilarCircuitsImpl(trackVec, k = 5) {
   try { return sonaFindPatterns(trackVec, k); } catch (e) { console.warn('[sona] findPatterns failed', e); return []; }
 }
 
@@ -1883,6 +2076,7 @@ export async function _debugReset() {
   _observations.clear();
   _insertionOrder = [];
   _queryDynamicsVec = null;
+  _lastRecommendation = null; // drop the cached seeds so the panel re-queries
   // Phase 2A — reset federation diagnostic counters. The shadow index is
   // rebuilt by the next hydrate / hydrateFromFixture call, so we don't
   // touch _brainDB_hyperbolic here (matching the pre-2A policy that
