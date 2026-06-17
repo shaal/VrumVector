@@ -269,6 +269,15 @@ if (new URLSearchParams(location.search).get('edit') === '1') {
             window.__rvBridge.beginPhase4Trajectory(window.currentTrackVec || null);
         }
     } catch (e) { console.warn('[sona] beginTrajectory on auto-boot failed', e); }
+
+    // Ensure A/B HUD stays completely hidden on first load (it has dark
+    // backgrounds that were appearing as stray horizontal lines before any
+    // training or explicit A/B activation).
+    const abHudEl = document.getElementById('ab-hud');
+    if (abHudEl) {
+        abHudEl.hidden = true;
+        abHudEl.classList.remove('ab-hud-visible');
+    }
     phase = 3;
     nextPhase(); // → phase 4 (training)
 }
@@ -291,6 +300,51 @@ if (localStorage.getItem("conservativeInit")){
 // archiveBrain can record parent lineage and observe() can credit the seeds.
 var rvDisabled = new URLSearchParams(location.search).get('rv') === '0';
 var currentSeedIds = [];
+
+// Pure local sensors mode (experimental).
+// When enabled (?pure-local=1), the brain receives only the 7 ray readings + speed.
+// The two track-orientation features (lf, lr) are forced to 0.
+// This lets us compare "embodied local signals only" vs the current setup that
+// gives the network a soft "direction to next checkpoint" hint.
+var pureLocalSensors = new URLSearchParams(location.search).get('pure-local') === '1' ||
+                       new URLSearchParams(location.search).get('pureLocal') === '1';
+window.pureLocalSensors = pureLocalSensors;
+
+if (pureLocalSensors) {
+  console.warn('%c[pure-local] Embodied / pure local signals mode active — lf + lr track-orientation features are forced to 0. The brain only receives the 7 raw ray readings + speed.', 'color:#f59e0b;font-weight:600');
+
+  // Persistent indicator (stays visible during training for easy comparison)
+  try {
+    const indicator = document.createElement('div');
+    indicator.id = 'pure-local-indicator';
+    indicator.textContent = '👁️ PURE LOCAL (no lf/lr)';
+    indicator.title = 'Brain receives only raw rays + speed. No "direction to next checkpoint" features. Use for embodied driving comparisons.';
+    indicator.style.cssText = 'position:fixed;top:6px;left:50%;transform:translateX(-50%);background:#431407;color:#fcd34d;padding:2px 14px;font-size:11px;border-radius:3px;z-index:99999;border:1px solid #78350f;white-space:nowrap;';
+    document.body.appendChild(indicator);
+  } catch (_) {}
+
+  // Lightweight metric logging for comparison (especially useful on Triangle)
+  if (!window.__pureLocalMetrics) {
+    window.__pureLocalMetrics = { bestCPSeen: 0, generations: 0 };
+  }
+  // Hook into genEnd for occasional reporting
+  const origHandleGenEnd = window.handleGenEnd;
+  if (origHandleGenEnd) {
+    window.handleGenEnd = function(m) {
+      const res = origHandleGenEnd.apply(this, arguments);
+      try {
+        if (window.pureLocalSensors && m && typeof m.checkPointsCount !== 'undefined') {
+          const cp = m.checkPointsCount | 0;
+          if (cp > window.__pureLocalMetrics.bestCPSeen) {
+            window.__pureLocalMetrics.bestCPSeen = cp;
+            console.log('%c[Pure Local] New best checkpoint reached: ' + cp, 'color:#f59e0b');
+          }
+        }
+      } catch (_) {}
+      return res;
+    };
+  }
+}
 var generation = 0;
 
 // Perf overlay — always on, disable with `?perf=0`. Reported ~6 Hz so the
@@ -375,6 +429,7 @@ function computeSensorStride(){
 
 function perfRender(){
     if (!perfEnabled) return;
+    if (window.__firstStart) return;  // Don't show detailed status/perf on very first load until user clicks Start (keeps the initial view clean)
     var hud = perfEnsureHud();
     var frameDelta = perfAvg(perfBuf.frameDelta);
     var sim = perfAvg(perfBuf.sim);
@@ -1188,7 +1243,8 @@ function performBegin(N){
             type: 'init',
             canvasW: canvas.width,
             canvasH: canvas.height,
-            borders, checkPointList
+            borders, checkPointList,
+            pureLocalSensors: !!window.pureLocalSensors
         });
         workerInited = true;
     }
@@ -1338,6 +1394,14 @@ begin();
 // doesn't start stepping before the user opts in.
 if (window.__firstStart){
     pause = true;
+
+    // First-visit UX polish: keep advanced experimental UI collapsed so the
+    // canvas and the big Start button are the clear focus. The user can open
+    // the 🧪 Experiments panel or click "Customize Track" whenever they want.
+    try {
+        const exp = document.querySelector('details.rv-experiments');
+        if (exp) exp.open = false;
+    } catch (_) {}
 }
 animate();
 
@@ -1736,6 +1800,11 @@ window.__downloadCSV = function(label, rows){
     var abHudB = document.getElementById('ab-hud-b');
     var abHudDelta = document.getElementById('ab-hud-delta');
 
+    // Clean any stale inline styles from previous sessions/toggles
+    if (abHud) {
+        abHud.style.removeProperty('display');
+    }
+
     var abEnabled = false;
     var simWorkerB = null;
     var bState = null;
@@ -1946,7 +2015,10 @@ window.__downloadCSV = function(label, rows){
         if (abEnabled){
             ensureCtxB();
             if (canvasB) canvasB.hidden = false;
-            if (abHud) abHud.hidden = false;
+            if (abHud) {
+                abHud.hidden = false;
+                abHud.classList.add('ab-hud-visible');
+            }
             if (cDiv) cDiv.classList.add('ab-on');
             spawnB();
             // spawnB creates bState but workerReady lags the Worker's internal
@@ -1960,7 +2032,10 @@ window.__downloadCSV = function(label, rows){
         } else {
             teardownB();
             if (canvasB) canvasB.hidden = true;
-            if (abHud) abHud.hidden = true;
+            if (abHud) {
+                abHud.hidden = true;
+                abHud.classList.remove('ab-hud-visible');
+            }
             if (cDiv) cDiv.classList.remove('ab-on');
         }
     }

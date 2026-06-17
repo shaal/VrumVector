@@ -61,7 +61,7 @@
     // Makes the value-prop ("ruvector helps") visible without page reloads.
     '<label class="rv-ab-toggle" title="Side-by-side: this population with ruvector vs a baseline with ruvector disabled">',
     '  <input type="checkbox" data-rv="ab-toggle" />',
-    '  <span class="rv-ab-label">Compare A/B — baseline without ruvector</span>',
+    '  <span class="rv-ab-label">Compare A/B (vs baseline) — baseline without ruvector</span>',
     '</label>',
     // The reranker line, when visible, gets a badge pointing at the EMA chapter.
     // The badge is a sibling of reranker text in the same line.
@@ -625,6 +625,10 @@
   if (el.abToggle) {
     el.abToggle.addEventListener('change', function () {
       const enabled = !!el.abToggle.checked;
+      // clear first-load discoverability tint + set session flag (pure polish, no behavior change)
+      const abLabel = el.abToggle.parentElement;
+      if (abLabel) abLabel.classList.remove('rv-ab-first');
+      try { sessionStorage.setItem('rv-ab-seen', '1'); } catch (_) {}
       try {
         if (typeof window.__abSetEnabled === 'function') {
           window.__abSetEnabled(enabled);
@@ -635,6 +639,14 @@
         el.abToggle.checked = !enabled;
       }
     });
+  }
+
+  // one-time light amber tint on the A/B label for first-time discoverability (clears on interaction or via session flag)
+  if (el.abToggle) {
+    const abLabel = el.abToggle.parentElement;
+    if (abLabel && !sessionStorage.getItem('rv-ab-seen')) {
+      abLabel.classList.add('rv-ab-first');
+    }
   }
 
   // P3.B — mount the lineage viewer once; rendering is driven from tick().
@@ -784,6 +796,8 @@
     lastShift: null, // null until an observe() tick has a baseline to diff
   };
 
+  let firstArchiveHighlight = false; // one-time subtle highlight when archive_recall first >0
+
   function bridgeReadyLocal() {
     if (window.rvDisabled) return false;
     const b = window.__rvBridge;
@@ -828,10 +842,16 @@
     const archive = s.archive_recall | 0;
     const prior = s.localStorage_prior | 0;
     const random = s.random_init | 0;
+    const total = archive + prior + random;
+    const archivePct = total > 0 ? Math.round((archive / total) * 100) : 0;
     el.seedSourcesText.textContent =
-      'gen seed sources: archive ' + archive +
-      ' · prior ' + prior +
+      'ruvector seeded ' + archive + ' (' + archivePct + '%) similar · prior ' + prior +
       ' · random ' + random;
+    if (archive > 0 && !firstArchiveHighlight) {
+      firstArchiveHighlight = true;
+      el.seedSources.classList.add('rv-seed-first');
+      setTimeout(() => { try { el.seedSources.classList.remove('rv-seed-first'); } catch (_) {} }, 2800);
+    }
   }
 
   // Spearman's footrule over the union of ids. Ids present in only one list
@@ -1626,6 +1646,15 @@
     details.innerHTML = [
       '<summary class="rv-experiments-summary">🧪 Experiments <span class="rv-experiments-hint">(RuLake-inspired toggles)</span></summary>',
       '<div class="rv-experiments-body" data-rv="experiments-body">',
+      '  <div class="rv-experiments-row" data-rv="exp-pure-local-row">',
+      '    <label class="rv-experiments-toggle">',
+      '      <input type="checkbox" data-rv="exp-pure-local" />',
+      '      <span class="rv-experiments-emoji">👁️</span>',
+      '      <span class="rv-experiments-label">Pure local sensors (no lf/lr)</span>',
+      '    </label>',
+      '    <span class="rv-experiments-hint-inline">comparison mode — brain sees only rays + speed</span>',
+      '    <span data-eli15="pure-local-experiment" role="button" tabindex="0" aria-label="Learn: the pure local signals experiment"></span>',
+      '  </div>',
       '  <div class="rv-experiments-row" data-rv="exp-observability-row">',
       '    <label class="rv-experiments-toggle">',
       '      <input type="checkbox" data-rv="exp-observability" checked />',
@@ -1681,6 +1710,8 @@
     const expFedRow = details.querySelector('[data-rv="exp-federation-row"]');
     const expConsRow = details.querySelector('[data-rv="exp-consistency-row"]');
     const expObsCb = details.querySelector('[data-rv="exp-observability"]');
+    const expPureLocalRow = details.querySelector('[data-rv="exp-pure-local-row"]');
+    const expPureLocalCb = details.querySelector('[data-rv="exp-pure-local"]');
 
     // Move existing DOM nodes into the disclosure. Listeners attached
     // earlier survive the appendChild move — that's the whole reason we
@@ -1751,12 +1782,82 @@
     // Apply after a tick so the obs panel is mounted by then.
     setTimeout(() => applyObsState(expObsCb.checked), 250);
 
+    // === Pure Local Sensors experiment wiring ===
+    if (expPureLocalCb) {
+      // Initialize from current global (set on page load from URL)
+      expPureLocalCb.checked = !!window.pureLocalSensors;
+
+      expPureLocalCb.addEventListener('change', () => {
+        const on = !!expPureLocalCb.checked;
+        window.pureLocalSensors = on;
+
+        // Update URL so the comparison state is bookmarkable / shareable
+        try {
+          const usp = new URLSearchParams(window.location.search);
+          if (on) {
+            usp.set('pure-local', '1');
+          } else {
+            usp.delete('pure-local');
+            usp.delete('pureLocal');
+          }
+          const newSearch = usp.toString();
+          const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '') + window.location.hash;
+          history.replaceState(null, '', newUrl);
+        } catch (_) {}
+
+        // Gentle hint for clean comparison
+        if (on) {
+          console.info('%c[Pure Local] Enabled. For the cleanest comparison, restart training (or reload with ?rv=0). The brain now receives only the 7 rays + speed.', 'color:#f59e0b');
+        }
+
+        // Show/hide inline restart helper
+        updatePureLocalRestartHelper(on, expPureLocalRow);
+      });
+
+      // Initial state for restart helper
+      if (window.pureLocalSensors) {
+        updatePureLocalRestartHelper(true, expPureLocalRow);
+      }
+    }
+
     // Default-collapsed: leave details closed unless any feature is
     // pre-toggled by a URL flag, in which case open it so the user can
     // see what their share-link enabled.
     if (flag('snapshots') || flag('crosstab') || flag('federation') ||
-        flag('consistency') || flag('archive')) {
+        flag('consistency') || flag('archive') || flag('pure-local') || flag('pureLocal')) {
       details.open = true;
     }
+
+    // Helper for pure-local restart button
+    window.updatePureLocalRestartHelper = function(on, rowEl) {
+      if (!rowEl) return;
+      let helper = rowEl.querySelector('[data-rv="pure-local-restart-helper"]');
+      if (on) {
+        if (!helper) {
+          helper = document.createElement('div');
+          helper.setAttribute('data-rv', 'pure-local-restart-helper');
+          helper.style.cssText = 'margin-top:4px;font-size:11px;';
+          helper.innerHTML = `
+            <button class="controlButton" style="padding:1px 6px;font-size:10px;">↻ Restart training (recommended for clean comparison)</button>
+            <span style="opacity:0.7;font-size:10px;margin-left:4px;">(pure local inputs active)</span>
+          `;
+          const btn = helper.querySelector('button');
+          if (btn) {
+            btn.onclick = () => {
+              if (typeof restartBatch === 'function') {
+                restartBatch();
+              } else if (typeof window.restartBatch === 'function') {
+                window.restartBatch();
+              }
+              // Hide helper after restart
+              helper.remove();
+            };
+          }
+          rowEl.appendChild(helper);
+        }
+      } else if (helper) {
+        helper.remove();
+      }
+    };
   })();
 })();

@@ -34,19 +34,24 @@
       loader: function () { return import('./chapters/what-is-this-project.js'); },
     },
     'sensors': {
-      title: 'The car\'s eyes are five invisible rays',
+      title: 'The car\'s eyes are seven invisible rays',
       oneLiner: 'Ray-cast sensors feed a number per ray into the neural network.',
       loader: function () { return import('./chapters/sensors.js'); },
     },
     'neural-network': {
-      title: 'A brain made of 92 numbers',
-      oneLiner: 'Six sensor inputs → eight hidden neurons → four pedal/steer outputs.',
+      title: 'A brain made of 244 numbers',
+      oneLiner: 'Ten sensor inputs → sixteen hidden neurons → four pedal/steer outputs.',
       loader: function () { return import('./chapters/neural-network.js'); },
     },
     'why-cars-crash': {
       title: 'Why your car keeps driving into walls',
       oneLiner: 'Four reasons: frozen reflexes, random gen-0, elite lock-in, and physics.',
       loader: function () { return import('./chapters/why-cars-crash.js'); },
+    },
+    'pure-local-experiment': {
+      title: 'Pure local signals vs track hints',
+      oneLiner: 'What happens when we remove the "next checkpoint" features and force the brain to drive from raw sensors only?',
+      loader: function () { return import('./chapters/pure-local-experiment.js'); },
     },
     'genetic-algorithm': {
       title: 'Breeding brains instead of training them',

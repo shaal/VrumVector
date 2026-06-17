@@ -124,6 +124,7 @@ function handleInit(m) {
     if (self.road.checkPointList && self.road.checkPointList.length) {
         self.road.cpGrid.addSegments(self.road.checkPointList);
     }
+    self.pureLocalSensors = !!m.pureLocalSensors;
 }
 
 // Build a car polygon at an arbitrary pose without allocating a Car (avoids

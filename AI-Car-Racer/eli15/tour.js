@@ -35,12 +35,12 @@
     {
       id: 'sensors',
       anchor: '#inputCanvas',
-      rationale: 'The five rays feeding the brain — this canvas shows what the car "sees".',
+      rationale: 'The seven rays feeding the brain — this canvas shows what the car "sees".',
     },
     {
       id: 'neural-network',
       anchor: '#inputCanvas',
-      rationale: '92 numbers turning sensor rays into pedal + steer outputs.',
+      rationale: '244 numbers turning sensor rays into pedal + steer outputs.',
     },
     {
       id: 'genetic-algorithm',

@@ -290,12 +290,18 @@ p { line-height: 1.5; margin: 0 0 .6em 0; }
     top: calc(50% - 32px);
     left: 8px;
     z-index: 5;
-    display: flex;
+    display: none;                 /* hidden by default — only shown when A/B comparison is explicitly enabled */
     flex-direction: row;
     gap: 6px;
     pointer-events: none;
     font: 11px/1.35 ui-monospace, Menlo, monospace;
     color: #a8c8ff;
+}
+
+/* When A/B mode is active, the canvasDiv gets .ab-on, and we also toggle
+   .ab-hud-visible on the HUD itself for reliable show/hide. */
+#ab-hud.ab-hud-visible {
+    display: flex;
 }
 #ab-hud-b, #ab-hud-delta {
     background: rgba(12, 14, 18, .88);
@@ -1016,6 +1022,14 @@ label {
     font-variant-numeric: tabular-nums;
 }
 .rv-seed-sources[hidden] { display: none; }
+/* one-time subtle highlight (light amber wash) on first non-zero archive_recall in run */
+.rv-seed-sources.rv-seed-first {
+    background: rgba(245, 158, 11, 0.10);
+    padding-left: 0.2em;
+    padding-right: 0.2em;
+    border-radius: 2px;
+    transition: background-color 2200ms ease-out;
+}
 
 /* Master toggle — custom switch */
 .rv-master-toggle {
@@ -1373,6 +1387,14 @@ label {
     box-shadow: var(--shadow-md);
 }
 .rv-lineage-tooltip[hidden] { display: none; }
+
+/* Discoverability polish for static "Compare A/B" checkbox (first-load only, clears on use) */
+.rv-ab-toggle.rv-ab-first {
+    background: rgba(245, 158, 11, 0.12);
+    padding: 0.05em 0.35em;
+    border-radius: 3px;
+    transition: background-color 1200ms ease-out;
+}
 
 /* A/B toggle strip */
 .rv-abstrip {

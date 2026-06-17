@@ -125,7 +125,14 @@ class Car{
                 // distance cue; see docs/plan/ruvector-proof/arch-a1/PROOF.md.
                 const cpList = checkPointList;
                 let lf = 0, lr = 0;
-                if (cpList && cpList.length){
+
+                // When pureLocalSensors is active, we deliberately give the brain
+                // ZERO information about where the next checkpoint is.
+                // This is the "embodied local signals only" mode for comparison.
+                // Guard works in both main thread (window) and Web Worker (self).
+                const isPureLocal = (typeof window !== 'undefined' && window.pureLocalSensors) ||
+                                    (typeof self !== 'undefined' && self.pureLocalSensors);
+                if (!isPureLocal && cpList && cpList.length){
                     const passed = this.checkPointsPassed;
                     const nextIdx = passed.length === 0
                         ? 0
@@ -139,11 +146,7 @@ class Car{
                         const s = Math.sin(this.angle), c = Math.cos(this.angle);
                         const lfRaw = dx * s + dy * c;
                         const lrRaw = dx * c - dy * s;
-                        // Canvas diagonal as track-invariant scale. `road` is a
-                        // global populated by main.js (or handleInit in the
-                        // worker); both paths set `right` and `bottom` = canvas
-                        // dims. Fallback constant guards the very-early frame
-                        // before handleInit lands.
+                        // Canvas diagonal as track-invariant scale.
                         const W = (typeof road !== 'undefined' && road && road.right) ? (road.right - road.left) : 3200;
                         const H = (typeof road !== 'undefined' && road && road.bottom) ? (road.bottom - road.top) : 1800;
                         const D = Math.hypot(W, H);
