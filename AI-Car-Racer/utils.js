@@ -106,7 +106,7 @@ function phaseToLayout(phase){
             rightPanel.innerHTML = `
             <button class='controlButton' id='pause' onclick='pauseGame()'>Pause</button>
             <button class='controlButton secondary' id='customizeTrackBtn' onclick='customizeTrack()' title='Draw your own track shape, reset checkpoints, retune physics'>✏️ Customize Track</button>
-            <button class='controlButton' id='demoModeBtn' onclick='window.DemoPresentation&&window.DemoPresentation.startDemoMode()' title='Cinematic demo: follow champion, story beats, readable swarm (D)'>🎬 Demo mode</button>
+            <button class='controlButton' id='demoModeBtn' onclick='window.DemoPresentation&&window.DemoPresentation.startDemoMode()' title='Cinematic demo: follow champion, story beats, readable swarm (M)'>🎬 Demo mode</button>
 
             <!-- Live-data region: inputCanvas + graphCanvas get appended here by
                  showInputCanvas/showGraphCanvas so they stay at the top of the
@@ -125,7 +125,7 @@ function phaseToLayout(phase){
                 <button class='controlButton' style='flex:1;min-width:0;' onclick="applyTrainingPreset('grind')" title="Farm gens + archive: N=600, 20×, 15s, variance 0.18">🏎️ Grind</button>
                 <button class='controlButton' style='flex:1;min-width:0;' onclick="applyTrainingPreset('polish')" title="Refine lap times: N=800, 2×, 25s, variance 0.05">✨ Polish</button>
             </div>
-            <details id="trainingTuning" class="more-actions" open>
+            <details id="trainingTuning" class="more-actions">
                 <summary>Training tuning (sliders)</summary>
                 <div id="inputsContainer">
                     <input min="0" max="2000" id="batchSizeInput" step="50" onkeydown="return false;" type="range" onchange='setN(this.value)' oninput="document.getElementById('batchSizeOutput').value = 'Batch Size: ' + this.value" >
@@ -150,7 +150,7 @@ function phaseToLayout(phase){
                     </label>
                 </div>
             </details>
-            <details id='brainShareSection' class='more-actions' open>
+            <details id='brainShareSection' class='more-actions'>
                 <summary>Import / Export Brain</summary>
                 <div class='more-actions-body'>
                     <div id="brainShare" class='brain-share'>
@@ -163,7 +163,7 @@ function phaseToLayout(phase){
                     </div>
                 </div>
             </details>
-            <details id='moreActions' class='more-actions' open>
+            <details id='moreActions' class='more-actions'>
                 <summary>More actions</summary>
                 <div class='more-actions-body'>
                     <button class='controlButton' onclick='destroyBrain(); nextBatch();'>Reset Brain</button>
@@ -173,7 +173,7 @@ function phaseToLayout(phase){
                     <button class='controlButton' onclick='restoreOldBrain();'>Restore Old Brain</button>
                 </div>
             </details>
-            <details id='brainSaves' class='brain-saves' open>
+            <details id='brainSaves' class='brain-saves'>
                 <summary>🧠 Brain saves <span class='brain-saves-hint'>(named slots)</span></summary>
                 <div class='brain-saves-body'>
                     <div class='brain-saves-row'>
@@ -198,11 +198,13 @@ function phaseToLayout(phase){
             bottomText.innerHTML = `
                 <h1>Train your model!</h1>
             `;
-            // Soft story for first-time visitors (cinema HUD also narrates).
+            // Soft story while waiting for an explicit Start click.
             try {
-                if (window.__firstStart && window.DemoPresentation && window.DemoPresentation.setStory){
+                if (window.__awaitingStart && window.DemoPresentation && window.DemoPresentation.setStory){
                     window.DemoPresentation.setStory(
-                        'Press ▶ Start Training — or 🎬 Demo mode for a guided cinematic run.',
+                        window.__firstStart
+                            ? 'Press ▶ Start Training — or 🎬 Demo mode for a guided cinematic run.'
+                            : 'Sim is paused. Press ▶ Start Training when you are ready.',
                         8000
                     );
                 }
@@ -257,24 +259,18 @@ function phaseToLayout(phase){
             showGraphCanvas();
             graphProgress();
             begin();
-            // First-visit UX: begin() sets pause=false, but on a brand-new
-            // visitor we keep the sim paused so the user presses an explicit
-            // "▶ Start Training" CTA. After the first click, the button
-            // reverts to the normal Pause/Play cycle.
-            if (window.__firstStart){
+            // Page-load gate: begin() keeps pause=true while __awaitingStart.
+            // Label the primary button as an explicit Start CTA. After the
+            // first click, pauseGame() graduates it to Pause/Play.
+            if (window.__awaitingStart){
                 pause = true;
-                // Worker setPause deferred to pauseGame() / workerReady — at
-                // phase-4 first entry from main.js init the `const simWorker`
-                // binding is still in TDZ (declared later in main.js), so
-                // `typeof simWorker` would throw. Just flip the UI; begin()
-                // posts pause state with its own message when it actually
-                // engages the worker.
                 const pb = document.getElementById('pause');
                 if (pb){
                     pb.textContent = '▶ Start Training';
                     pb.classList.add('start-cta');
                 }
             }
+            try { if (typeof syncStartOverlay === 'function') syncStartOverlay(); } catch (_) {}
             break;
 
     }

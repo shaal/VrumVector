@@ -284,7 +284,12 @@ p { line-height: 1.5; margin: 0 0 .6em 0; }
 }
 /* Sits at the midline between the stacked A and B canvases (top:50%) and
    anchored to the left so it doesn't collide with the primary "metrics"
-   HUD which is fixed at top-center of the viewport. */
+   HUD which is fixed at top-center of the viewport.
+
+   IMPORTANT: `display: flex` would otherwise override the HTML `hidden`
+   attribute (UA [hidden]{display:none} loses to an author #id rule), which
+   left empty #ab-hud-b / #ab-hud-delta chips floating on the track when A/B
+   mode was off. Always pair the flex rule with an explicit [hidden] kill. */
 #ab-hud {
     position: absolute;
     top: calc(50% - 32px);
@@ -296,6 +301,9 @@ p { line-height: 1.5; margin: 0 0 .6em 0; }
     pointer-events: none;
     font: 11px/1.35 ui-monospace, Menlo, monospace;
     color: #a8c8ff;
+}
+#ab-hud[hidden] {
+    display: none !important;
 }
 #ab-hud-b, #ab-hud-delta {
     background: rgba(12, 14, 18, .88);
@@ -566,7 +574,7 @@ p { line-height: 1.5; margin: 0 0 .6em 0; }
 }
 
 /* ---------- Start-training CTA ----------------------------------
-   On first visit the Pause button is repurposed as an explicit Start
+   On page load the Pause button is repurposed as an explicit Start
    Training call-to-action. Filled amber, larger type, centered icon. */
 .controlButton.start-cta {
     color: #fff;
@@ -595,6 +603,78 @@ p { line-height: 1.5; margin: 0 0 .6em 0; }
 }
 @media (prefers-reduced-motion: reduce) {
     .controlButton.start-cta { animation: none; }
+}
+
+/* Canvas-centered Start overlay — reachable when the right panel is
+   collapsed. Mirrors the panel Start CTA so the main action is never
+   buried behind a hidden sidebar. */
+#startOverlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse 55% 45% at 50% 50%,
+            rgba(12, 14, 18, 0.55),
+            rgba(12, 14, 18, 0.12) 70%,
+            transparent 100%);
+}
+#startOverlay[hidden] { display: none !important; }
+.start-overlay-btn {
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: min(72vw, 280px);
+    padding: 1.15em 1.6em 1em;
+    border: 1.5px solid var(--amber-600);
+    border-radius: var(--r-xl);
+    background: linear-gradient(180deg, var(--amber-600), var(--amber-700));
+    color: #fff;
+    font-family: var(--font-body);
+    box-shadow: var(--shadow-lg), 0 0 0 0 rgba(211, 139, 75, 0.4);
+    cursor: pointer;
+    animation: start-cta-pulse 2200ms var(--ease-in-out) infinite;
+    transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.start-overlay-btn:hover {
+    transform: translateY(-2px) scale(1.02);
+    background: linear-gradient(180deg, var(--amber-500), var(--amber-700));
+}
+.start-overlay-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--ring), var(--shadow-lg);
+}
+.start-overlay-icon {
+    font-size: 1.6rem;
+    line-height: 1;
+}
+.start-overlay-label {
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: 0.03em;
+}
+.start-overlay-hint {
+    font-size: 0.72rem;
+    font-weight: 500;
+    opacity: 0.85;
+    letter-spacing: 0.01em;
+}
+.start-overlay-btn.is-starting {
+    opacity: 0.9;
+    cursor: progress;
+    animation: none;
+    transform: none;
+}
+.start-overlay-btn:disabled {
+    cursor: progress;
+}
+@media (prefers-reduced-motion: reduce) {
+    .start-overlay-btn { animation: none; }
 }
 
 /* Secondary control button tint — used for Customize Track so it reads as
@@ -682,7 +762,9 @@ p { line-height: 1.5; margin: 0 0 .6em 0; }
    scene behind it stays legible. */
 #bottomText {
     position: absolute;
-    left: 50%;
+    /* Slightly left of center so the cinema control chips (bottom-right)
+       never sit on top of the phase banner. */
+    left: 42%;
     bottom: var(--sp-3);
     transform: translateX(-50%);
     padding: var(--sp-2) var(--sp-5);
@@ -694,7 +776,7 @@ p { line-height: 1.5; margin: 0 0 .6em 0; }
     box-shadow: var(--shadow-sm);
     color: var(--ink-900);
     text-align: center;
-    max-width: min(80%, 620px);
+    max-width: min(48%, 320px);
     pointer-events: none;
     z-index: 5;
 }
@@ -2302,10 +2384,12 @@ label {
    ============================================================= */
 #cinema-hud {
     position: absolute;
-    top: 10px;
-    left: 10px;
+    /* Sit below the fixed help stack (Explain / Tour / GitHub) which lives
+       at viewport top-left over the canvas. Stack ≈ sp-4 + 3×(pill+gap). */
+    top: calc(var(--sp-4) + 3 * (36px + var(--sp-2)) + var(--sp-2));
+    left: 12px;
     z-index: 8;
-    max-width: min(92%, 560px);
+    max-width: min(72%, 420px);
     padding: 8px 12px;
     border-radius: 12px;
     background: rgba(12, 14, 18, 0.72);
@@ -2355,17 +2439,18 @@ label {
     /* Bottom-right of the track cell so we don't collide with the
        bottom-left perf HUD or the centered #bottomText banner. */
     position: absolute;
-    bottom: 12px;
-    right: 12px;
+    bottom: 14px;
+    right: 14px;
     left: auto;
-    z-index: 8;
+    z-index: 9;
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 6px;
-    max-width: min(70%, 480px);
+    max-width: min(56%, 420px);
     pointer-events: auto;
 }
+
 #cinema-controls button {
     appearance: none;
     border: 1px solid rgba(255, 255, 255, 0.14);
@@ -2414,16 +2499,28 @@ label {
     #cinema-hud {
         font-size: 11px;
         padding: 6px 9px;
-        top: 6px;
-        left: 6px;
+        /* On mobile the help FABs move to bottom-right, so reclaim top-left. */
+        top: 8px;
+        left: 8px;
+        max-width: min(92%, 360px);
     }
     #cinema-controls {
         bottom: 8px;
         right: 8px;
+        max-width: min(88%, 360px);
     }
     #cinema-controls button {
         padding: 4px 9px;
         font-size: 10px;
+    }
+    #bottomText {
+        left: 50%;
+        max-width: min(70%, 280px);
+        bottom: calc(var(--sp-3) + 36px); /* clear cinema chips */
+    }
+    .start-overlay-btn {
+        min-width: min(84vw, 260px);
+        padding: 1em 1.2em 0.85em;
     }
 }
 

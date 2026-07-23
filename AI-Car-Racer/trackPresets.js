@@ -11,11 +11,11 @@
 // orientation consistent across presets, which helps the ruvector cross-
 // track seed recall.
 //
-// Checkpoint order (4 gates per preset): bottom-right → top-right →
-// top-mid → left-mid → back to bottom-right (CW in canvas). The 4-gate
-// layout gives a 33% denser fitness gradient than the old 3-gate one,
-// helping partial survivors get ranked before any full laps. See
-// sim-worker.js:295 for the fitness formula consuming checkPointsCount.
+// Checkpoint order (CW in canvas, spawn bottom-right): typically
+// bottom-right → top-right → top-mid → left-mid [→ bottom-mid] → lap.
+// Most presets use 4 gates; Rectangle uses 5 (extra bottom-mid) for a
+// denser fitness gradient. See sim-worker.js for fitness = checkPointsCount
+// + laps * gateCount.
 //
 // Data format matches roadEditor.js:
 //   points:               inner wall, array of {x, y} — saved under `trackInner`
@@ -31,26 +31,30 @@
 window.TRACK_PRESETS = [
   {
     name: 'Rectangle',
-    description: '4-corner rectangular loop. Widest corridor, easiest to learn.',
+    description: '4-corner rectangular loop. Widest corridor, easiest to learn. 5 gates with diagonal right-lobe spawn.',
     points: [
       { x: 650,  y: 700  },
       { x: 2450, y: 700  },
       { x: 2450, y: 1100 },
       { x: 650,  y: 1100 }
     ],
-    // Outer right pushed to x=3100 so the start (2880,900) has ~220px
-    // buffer instead of the old ~70px squeeze against x=2950.
+    // Outer right pushed to x=3100 so the start has corridor buffer.
     points2: [
       { x: 250,  y: 300  },
       { x: 3100, y: 300  },
       { x: 3100, y: 1500 },
       { x: 250,  y: 1500 }
     ],
+    // Hand-tuned gates (outer→inner). Right lobe uses diagonals so spawn
+    // sits in the lower-right corridor with heading toward the upper-right
+    // gate; top/left stay axis-aligned; bottom-mid closes the loop for a
+    // denser fitness gradient than the old 4-gate layout.
     checkPointListEditor: [
-      [{ x: 3100, y: 1200 }, { x: 2450, y: 1200 }],  // 1: right-low (spawn)
-      [{ x: 3100, y: 600  }, { x: 2450, y: 600  }],  // 2: right-top (above cp[0] → heading up)
+      [{ x: 3128, y: 1316 }, { x: 2418, y: 1068 }],  // 1: lower-right diagonal (spawn)
+      [{ x: 3135, y: 376  }, { x: 2414, y: 725  }],  // 2: upper-right diagonal (heading up)
       [{ x: 1600, y: 300  }, { x: 1600, y: 700  }],  // 3: top-mid
-      [{ x: 250,  y: 900  }, { x: 650,  y: 900  }]   // 4: left-mid
+      [{ x: 250,  y: 900  }, { x: 650,  y: 900  }],  // 4: left-mid
+      [{ x: 1600, y: 1060 }, { x: 1600, y: 1565 }]   // 5: bottom-mid
     ]
   },
   {

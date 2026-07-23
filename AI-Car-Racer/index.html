@@ -44,7 +44,7 @@
 </head>
 
 <body>
-    <div id="fullDisplay">
+    <div id="fullDisplay" class="panel-collapsed">
         <div id="canvasDiv">
             <canvas id="myCanvas"></canvas>
             <!-- P3.E A/B comparison canvas. Hidden by default; toggled on via
@@ -63,6 +63,17 @@
             <div id="bottomText">
                 <h1>Train Your Model</h1>
             </div>
+            <!-- Start CTA is in the HTML so it paints on first frame — before
+                 main.js / wasm / the 500-car worker build finish. A tiny
+                 inline script (below the heavy scripts? no — right here)
+                 records early clicks as __pendingStart so boot can honor them. -->
+            <div id="startOverlay" role="dialog" aria-modal="true" aria-label="Start training">
+                <button type="button" class="start-overlay-btn" id="startOverlayBtn">
+                    <span class="start-overlay-icon" aria-hidden="true">▶</span>
+                    <span class="start-overlay-label">Start Training</span>
+                    <span class="start-overlay-hint">or press the Start button in the panel</span>
+                </button>
+            </div>
         </div>
         <div id="rightPanel">
             <div id="verticalButtons"></div>
@@ -75,7 +86,7 @@
     </div>
     <!-- Edge toggle: collapses the right panel so the track can use the
          whole viewport width. State persisted in localStorage (main.js). -->
-    <button id="panelToggle" type="button" aria-label="Collapse control panel" aria-expanded="true" title="Collapse panel (press P)">
+    <button id="panelToggle" type="button" aria-label="Expand control panel" aria-expanded="false" title="Expand panel (press P)">
         <span aria-hidden="true">›</span>
     </button>
 
@@ -99,6 +110,31 @@
         <button id="track-preset-load" type="button" style="background:#3a7bd5; color:#fff; border:none; border-radius:3px; padding:3px 10px; cursor:pointer;">Load</button>
     </div>
 
+    <!-- Interactive-as-soon-as-possible gate. Sets flags before any heavy
+         classic script runs, and records Start clicks that happen while the
+         rest of the app is still downloading/parsing. -->
+    <script>
+      window.__awaitingStart = true;
+      window.__pendingStart = false;
+      (function () {
+        var btn = document.getElementById('startOverlayBtn');
+        if (!btn || btn.dataset.earlyBound === '1') return;
+        btn.dataset.earlyBound = '1';
+        btn.addEventListener('click', function () {
+          window.__pendingStart = true;
+          btn.classList.add('is-starting');
+          btn.disabled = true;
+          var label = btn.querySelector('.start-overlay-label');
+          if (label) label.textContent = 'Starting\u2026';
+          // If the full app already booted, start immediately. Otherwise
+          // main.js will drain __pendingStart at the end of its boot.
+          if (typeof pauseGame === 'function' && typeof begin === 'function') {
+            window.__pendingStart = false;
+            try { pauseGame(); } catch (e) {}
+          }
+        });
+      })();
+    </script>
     <script src="inputVisual.js"></script>
     <script src="grapher.js"></script>
     <script src="roadEditor.js"></script>
@@ -187,10 +223,15 @@
           toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
           toggle.setAttribute('aria-label', collapsed ? 'Expand control panel' : 'Collapse control panel');
         };
-        // Restore — default to expanded. localStorage read is wrapped because
-        // Safari private mode throws synchronously on access.
-        let saved = false;
-        try { saved = localStorage.getItem(KEY) === '1'; } catch (_) {}
+        // Restore preference. Default to collapsed so the track claims the
+        // viewport; the canvas Start overlay stays reachable either way.
+        // localStorage read is wrapped because Safari private mode throws.
+        let saved = true; // default collapsed
+        try {
+          const v = localStorage.getItem(KEY);
+          if (v === '0') saved = false;
+          else if (v === '1') saved = true;
+        } catch (_) {}
         apply(saved);
         toggle.addEventListener('click', () => {
           const nowCollapsed = !display.classList.contains('panel-collapsed');
