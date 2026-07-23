@@ -98,25 +98,46 @@ window.TRACK_PRESETS = [
   },
   {
     name: 'Triangle',
-    description: 'Apex points left; spawn sits in the spacious right lobe.',
-    // Apex-left triangle. cp[0] sits low on the right edge and cp[1] sits
-    // high on the same edge (directly above), so the car spawns facing
-    // screen-up and drives up the right edge before cornering toward the apex.
+    description: 'Clean apex-left triangle, symmetric about y=900. Spacious right lobe; full-loop gates with apex approach/exit.',
+    // Apex-left isosceles triangle, mirror-symmetric about the horizontal
+    // midline (y=900). Blunted inner tip keeps the sharp left turn learnable;
+    // outer/inner bases share x so the right lobe is a clean rectangle.
+    //
+    // Corridor ~200–280px on the long edges, ~580px on the right lobe.
+    // Gates are outer→inner (or right-lobe horizontal) along the driving line:
+    //   1 spawn → 2 right-upper → 3 top-right mouth → 4 top-mid
+    //   → 5 top near-apex → 6 apex → 7 bottom near-apex
+    //   → 8 bottom-mid → 9 bottom-right mouth → (1 for lap)
     points: [
-      { x: 500,  y: 900  }, // left apex (inner)
-      { x: 2400, y: 500  }, // top-right
-      { x: 2400, y: 1300 }  // bottom-right
+      { x: 780,  y: 900  }, // left apex (inner, blunted)
+      { x: 2420, y: 480  }, // top-right
+      { x: 2420, y: 1320 }  // bottom-right
     ],
     points2: [
-      { x: 150,  y: 900  }, // left apex (outer)
-      { x: 3100, y: 250  }, // top-right
-      { x: 3100, y: 1550 }  // bottom-right
+      { x: 180,  y: 900  }, // left apex (outer)
+      { x: 3000, y: 80   }, // top-right
+      { x: 3000, y: 1720 }  // bottom-right
     ],
     checkPointListEditor: [
-      [{ x: 3100, y: 1200 }, { x: 2400, y: 1200 }], // 1: right-low (spawn)
-      [{ x: 3100, y: 600  }, { x: 2400, y: 600  }], // 2: right-top (above cp[0] → heading up)
-      [{ x: 1500, y: 550  }, { x: 1500, y: 720  }], // 3: top edge
-      [{ x: 150,  y: 900  }, { x: 500,  y: 900  }]  // 4: left apex
+      // 1: right-low spawn / start-finish — horizontal across the right lobe
+      [{ x: 3000, y: 1220 }, { x: 2420, y: 1220 }],
+      // 2: right-upper — directly above #1 so spawn heading = screen-up
+      [{ x: 3000, y: 700  }, { x: 2420, y: 700  }],
+      // 3: top-right mouth — angled outer→inner at the top base corner
+      //    (shortened 22% from outer so it sits in the driving line)
+      [{ x: 2872, y: 168  }, { x: 2420, y: 480  }],
+      // 4: top-mid — outer/inner top edges @ t=0.42 from apex
+      [{ x: 1364, y: 556  }, { x: 1469, y: 724  }],
+      // 5: top near-apex approach (hand-tuned — short, tight to tip)
+      [{ x: 695,  y: 707  }, { x: 778,  y: 898  }],
+      // 6: apex — from mid-corridor into the inner tip
+      [{ x: 461,  y: 902  }, { x: 780,  y: 900  }],
+      // 7: bottom near-apex exit (hand-tuned mirror of #5)
+      [{ x: 674,  y: 1071 }, { x: 778,  y: 909  }],
+      // 8: bottom-mid — mirror of #4
+      [{ x: 1364, y: 1244 }, { x: 1469, y: 1076 }],
+      // 9: bottom-right mouth — mirror of #3
+      [{ x: 2872, y: 1632 }, { x: 2420, y: 1320 }]
     ]
   },
   {
@@ -520,6 +541,11 @@ window.loadTrackPreset = function(nameOrIdx) {
   localStorage.removeItem('progress');
   localStorage.removeItem('rvAnnotations');
   try { if (typeof resetTrainCount === 'function') resetTrainCount(); } catch (_) {}
+  try {
+    if (window.DemoPresentation && window.DemoPresentation.invalidateRoad) {
+      window.DemoPresentation.invalidateRoad();
+    }
+  } catch (_) {}
 
   // Swap the in-memory editor state if the game has booted.
   if (typeof road !== 'undefined' && road.roadEditor) {

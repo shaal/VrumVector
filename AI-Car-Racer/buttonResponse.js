@@ -424,22 +424,16 @@ function setConservativeInit(value){
     conservativeInit = Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
     try { localStorage.setItem("conservativeInit", String(conservativeInit)); } catch (_) {}
 }
-// Training-phase presets. Each entry sets the four knobs that dominate
-// training feel: N (population size), simSpeed (stride schedule kicks in
-// above 2×), seconds (per-generation evaluation window), mutateValue
-// (GA variance). Values are step-aligned to the slider granularity so
-// the DOM reflects them exactly.
-//   fresh  — random brains: small population, honest 2× (stride=1), high
-//            variance, short gens. Cheapest path from garbage to "turns".
-//   grind  — elite drives laps consistently: grind raw generation count
-//            via high simSpeed. Fitness noise from stride=3 is tolerated
-//            because elite always survives.
-//   polish — refine a competent brain: wider population, low variance,
-//            longer gens for multi-lap evaluation, honest 2×.
+// Training-phase presets. Each entry sets the knobs that dominate training
+// feel: N, simSpeed, seconds, mutateValue, conservativeInit. Values are
+// step-aligned to the slider granularity so the DOM reflects them exactly.
+//   fresh  — cold / early: honest 2×, conservative wall-reflex bias, explore
+//   grind  — elite exists: farm generations + grow the ruvector archive
+//   polish — refine lap times: wider pop, low variance, longer gens
 const TRAINING_PRESETS = {
-    fresh:  { N: 500,  simSpeed: 2,  seconds: 10, mutate: 0.30 },
-    grind:  { N: 500,  simSpeed: 20, seconds: 15, mutate: 0.20 },
-    polish: { N: 1000, simSpeed: 2,  seconds: 25, mutate: 0.05 }
+    fresh:  { N: 500,  simSpeed: 2,  seconds: 15, mutate: 0.25, conservativeInit: 0.70 },
+    grind:  { N: 600,  simSpeed: 20, seconds: 15, mutate: 0.18, conservativeInit: 0.50 },
+    polish: { N: 800,  simSpeed: 2,  seconds: 25, mutate: 0.05, conservativeInit: 0.30 }
 };
 
 function applyTrainingPreset(name){
@@ -452,6 +446,9 @@ function applyTrainingPreset(name){
     setSeconds(p.seconds);
     setMutateValue(p.mutate);
     setSimSpeed(p.simSpeed);
+    if (typeof p.conservativeInit === 'number' && typeof setConservativeInit === 'function') {
+        setConservativeInit(p.conservativeInit);
+    }
     // Reflect values in the DOM so the user can see what changed.
     const bs = document.getElementById('batchSizeInput');
     if (bs){ bs.value = p.N; document.getElementById('batchSizeOutput').value = 'Batch Size: ' + p.N; }
@@ -459,6 +456,12 @@ function applyTrainingPreset(name){
     if (se){ se.value = p.seconds; document.getElementById('secondsOutput').value = 'Round Length: ' + p.seconds; }
     const mv = document.getElementById('mutateValueInput');
     if (mv){ mv.value = p.mutate; document.getElementById('mutateValueOutput').value = 'Variance: ' + p.mutate; }
+    const ci = document.getElementById('conservativeInitInput');
+    if (ci && typeof p.conservativeInit === 'number'){
+        ci.value = p.conservativeInit;
+        const co = document.getElementById('conservativeInitOutput');
+        if (co) co.value = 'Conservative Init: ' + p.conservativeInit;
+    }
     const ss = document.getElementById('simSpeedInput');
     if (ss){ ss.value = String(p.simSpeed); }
 }

@@ -154,7 +154,7 @@
     '    <span class="rv-ablabel">dynamics key</span>',
     '    <div class="rv-abseg" role="radiogroup" aria-label="Dynamics key" data-rv="ab-dynamics">',
     '      <button type="button" class="rv-abbtn" data-rv="ab-dynamics-opt" data-value="off" role="radio" aria-checked="false">off</button>',
-    '      <button type="button" class="rv-abbtn" data-rv="ab-dynamics-opt" data-value="on" role="radio" aria-checked="false">on</button>',
+    '      <button type="button" class="rv-abbtn" data-rv="ab-dynamics-opt" data-value="on" role="radio" aria-checked="true">on</button>',
     '    </div>',
     '    <span data-eli15="dynamics-embedding" role="button" tabindex="0" aria-label="Learn: dynamics embedding"></span>',
     '  </div>',
@@ -211,15 +211,15 @@
     '  </span>',
     '  <span data-eli15="cross-tab-federation" role="button" tabindex="0" aria-label="Learn: cross-tab live training"></span>',
     '</div>',
-    // Dynamics trajectory toggle (P1.C). Off by default — the plan keeps
-    // this opt-in because it changes retrieval ordering. The count next to
-    // the label shows how many archived brains have a dynamics vector
-    // attached; pre-P1.C archives show 0 until a new generation is archived.
+    // Dynamics trajectory toggle (P1.C). Default ON — empty archive is a
+    // no-op; once trajectories exist, retrieval can prefer similar drive style.
+    // The count next to the label shows how many archived brains have a
+    // dynamics vector attached.
     '<div class="rv-dynamics" data-rv="dynamics">',
     '  <label class="rv-dynamics-label">',
-    '    <input type="checkbox" data-rv="dynamics-toggle" />',
+    '    <input type="checkbox" data-rv="dynamics-toggle" checked />',
     '    dynamics key:',
-    '    <span class="rv-dynamics-status" data-rv="dynamics-status">off</span>',
+    '    <span class="rv-dynamics-status" data-rv="dynamics-status">on</span>',
     '  </label>',
     '  <span data-eli15="dynamics-embedding" role="button" tabindex="0" aria-label="Learn: dynamics trajectory embedding"></span>',
     '</div>',
@@ -1657,6 +1657,16 @@
       '  </div>',
       '  <div class="rv-experiments-row" data-rv="exp-federation-row"></div>',
       '  <div class="rv-experiments-row" data-rv="exp-consistency-row"></div>',
+      '  <div class="rv-experiments-row" data-rv="exp-adapt-gates-row">',
+      '    <label class="rv-experiments-toggle">',
+      '      <input type="checkbox" data-rv="exp-adapt-gates" />',
+      '      <span class="rv-experiments-emoji">📗</span>',
+      '      <span class="rv-experiments-label">Adaptive green gates</span>',
+      '    </label>',
+      '    <span class="rv-experiments-hint-inline">nudge/add/remove CPs + crash-map HNSW recall; remember good layouts</span>',
+      '    <button type="button" class="controlButton rv-experiments-reset-gates" data-rv="exp-adapt-gates-reset" title="Restore gate layout from when adaptive mode was first enabled">Reset gates</button>',
+      '    <div class="rv-experiments-status" data-rv="exp-adapt-gates-status">off</div>',
+      '  </div>',
       '  <div class="rv-experiments-row rv-experiments-row-disabled" data-rv="exp-quantization-row" title="Library-only — not wired into archiveBrain yet. See the chapter for details.">',
       '    <label class="rv-experiments-toggle rv-experiments-toggle-disabled">',
       '      <input type="checkbox" disabled />',
@@ -1751,11 +1761,63 @@
     // Apply after a tick so the obs panel is mounted by then.
     setTimeout(() => applyObsState(expObsCb.checked), 250);
 
+    // Adaptive green gates — curriculum nudge of bottleneck checkpoints.
+    const expAdaptCb = details.querySelector('[data-rv="exp-adapt-gates"]');
+    const expAdaptReset = details.querySelector('[data-rv="exp-adapt-gates-reset"]');
+    const expAdaptStatus = details.querySelector('[data-rv="exp-adapt-gates-status"]');
+    function refreshAdaptStatus() {
+      if (!expAdaptStatus) return;
+      try {
+        const AG = window.AdaptiveGates;
+        if (!AG || typeof AG.getStatus !== 'function') {
+          expAdaptStatus.textContent = 'module not loaded';
+          return;
+        }
+        const s = AG.getStatus();
+        expAdaptStatus.textContent = s.status || (s.enabled ? 'on' : 'off');
+      } catch (_) {
+        expAdaptStatus.textContent = '—';
+      }
+    }
+    function applyAdaptGatesState(on) {
+      try {
+        const AG = window.AdaptiveGates;
+        if (AG && typeof AG.setEnabled === 'function') AG.setEnabled(!!on);
+      } catch (e) { console.warn('[rv-experiments] AdaptiveGates.setEnabled failed', e); }
+      refreshAdaptStatus();
+    }
+    if (expAdaptCb) {
+      expAdaptCb.addEventListener('change', function () {
+        applyAdaptGatesState(expAdaptCb.checked);
+      });
+      // URL preset + late-load: AdaptiveGates may already be enabled.
+      try {
+        if (flagEq('adaptGates', '1') ||
+            (window.AdaptiveGates && window.AdaptiveGates.isEnabled && window.AdaptiveGates.isEnabled())) {
+          expAdaptCb.checked = true;
+          details.open = true;
+          setTimeout(function () { applyAdaptGatesState(true); }, 80);
+        }
+      } catch (_) {}
+    }
+    if (expAdaptReset) {
+      expAdaptReset.addEventListener('click', function () {
+        try {
+          if (window.AdaptiveGates && window.AdaptiveGates.resetToBaseline) {
+            window.AdaptiveGates.resetToBaseline();
+          }
+        } catch (e) { console.warn('[rv-experiments] reset gates failed', e); }
+        refreshAdaptStatus();
+      });
+    }
+    // Poll status so bottleneck text updates after each gen without a full panel rebuild.
+    setInterval(refreshAdaptStatus, 1500);
+
     // Default-collapsed: leave details closed unless any feature is
     // pre-toggled by a URL flag, in which case open it so the user can
     // see what their share-link enabled.
     if (flag('snapshots') || flag('crosstab') || flag('federation') ||
-        flag('consistency') || flag('archive')) {
+        flag('consistency') || flag('archive') || flagEq('adaptGates', '1')) {
       details.open = true;
     }
   })();

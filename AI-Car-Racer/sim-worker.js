@@ -322,6 +322,9 @@ function stepOnce() {
             if (!prevDamaged && cc.damaged) {
                 cc.deathFrame = self.frameCount;
                 cc.slideAtDeath = prevSlide;
+                // Crash locus for adaptive-gates / heat analysis on main.
+                cc.deathX = cc.x;
+                cc.deathY = cc.y;
             }
         }
         // O(N) bestCar scan — mirror of main.js's pre-worker logic.
@@ -504,6 +507,9 @@ function endGen() {
     // 2=slide-out, 3=stalled, 4=alive. Mutually exclusive — sum across buckets
     // equals N. Classification is O(N) at endGen (no per-frame cost).
     const popDeathCauses = new Int8Array(N);
+    // Crash positions (x,y per car). Alive / never-damaged → NaN so consumers
+    // can skip. Used by AdaptiveGates crash-heat curriculum on main.
+    const popDeathXY = new Float32Array(N * 2);
     let wallBumps = 0, stillAlive = 0;
     for (let i = 0; i < N; i++) {
         const c = cars[i];
@@ -511,6 +517,8 @@ function endGen() {
         if (c.damaged) {
             wallBumps++;
             popDeathFrames[i] = (c.deathFrame != null ? c.deathFrame : self.frameCount) | 0;
+            popDeathXY[i * 2]     = (c.deathX != null ? c.deathX : c.x);
+            popDeathXY[i * 2 + 1] = (c.deathY != null ? c.deathY : c.y);
             // Forward speed magnitude — `c.speed` is scalar along the car's
             // heading axis; |speed|/maxSpeed > 0.7 means the car was driving
             // hard into the wall rather than scraping it laterally.
@@ -530,6 +538,8 @@ function endGen() {
             stillAlive++;
             popDeathFrames[i] = -1;
             popDeathCauses[i] = (c.checkPointsCount | 0) >= 1 ? 4 : 3;
+            popDeathXY[i * 2] = NaN;
+            popDeathXY[i * 2 + 1] = NaN;
         }
     }
 
@@ -543,7 +553,13 @@ function endGen() {
         if (lev0 && lev0.outputs) bestHiddenActivations = new Float32Array(lev0.outputs);
     } catch (_) {}
 
-    const transfer = [flat.buffer, popCheckpoints.buffer, popDeathFrames.buffer, popDeathCauses.buffer];
+    const transfer = [
+        flat.buffer,
+        popCheckpoints.buffer,
+        popDeathFrames.buffer,
+        popDeathCauses.buffer,
+        popDeathXY.buffer,
+    ];
     if (bestHiddenActivations) transfer.push(bestHiddenActivations.buffer);
 
     self.postMessage({
@@ -557,7 +573,7 @@ function endGen() {
         popN: N,
         popWallBumps: wallBumps,
         popStillAlive: stillAlive,
-        popCheckpoints, popDeathFrames, popDeathCauses,
+        popCheckpoints, popDeathFrames, popDeathCauses, popDeathXY,
         bestHiddenActivations,
         genSeconds: seconds
     }, transfer);

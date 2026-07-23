@@ -91,14 +91,38 @@ class roadEditor{
         // this.ctx=document.getElementById("myCanvas").getContext("2d");
         if (this.points.length > 0) {
             this.ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if(this.editMode){
-                this.drawCircles();
-            }
-            this.drawLines();
+            this.paintTo(this.ctx);
+        } else {
+            this.drawStartPos(this.startInfo, this.ctx);
         }
-       this.drawStartPos(this.startInfo, this.ctx);
+        // Track edits invalidate the presentation road cache (if present).
+        try {
+            if (window.DemoPresentation && window.DemoPresentation.invalidateRoad) {
+                window.DemoPresentation.invalidateRoad();
+            }
+        } catch (_) {}
     }
+
+    // Paint walls / checkpoints / start flag to any 2d context. Used by the
+    // live redraw path and by DemoPresentation's offscreen road cache so
+    // training frames can blit a static road instead of re-stroking geometry.
+    paintTo(c) {
+        if (!c) c = this.ctx;
+        if (this.editMode) {
+            // drawCircles uses this.ctx — temporarily rebind.
+            const prev = this.ctx;
+            this.ctx = c;
+            try { this.drawCircles(); } finally { this.ctx = prev; }
+        }
+        this.drawLinesOn(c);
+        this.drawStartPos(this.startInfo, c);
+    }
+
     drawLines() {
+        this.drawLinesOn(this.ctx);
+    }
+
+    drawLinesOn(c) {
         // Canvas is 3200x1800 but the layout downscales it ~3x in CSS pixels,
         // so sub-3px strokes vanish after downsample. Use 10–12 canvas px
         // during gameplay (editMode=false) so walls remain legible to the eye.
@@ -106,46 +130,46 @@ class roadEditor{
         const closeW = this.editMode ? .75 : 12;
         const checkW = this.editMode ? 2 : 8;
 
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.points[0].x, this.points[0].y);
-        this.ctx.strokeStyle = "white";
-        this.ctx.lineWidth = wallW;
+        c.beginPath();
+        c.moveTo(this.points[0].x, this.points[0].y);
+        c.strokeStyle = "white";
+        c.lineWidth = wallW;
         this.points.forEach((p) => {
-            this.ctx.lineTo(p.x, p.y);
+            c.lineTo(p.x, p.y);
         })
-        this.ctx.stroke();
-        this.ctx.lineWidth = closeW;
-        this.ctx.globalAlpha = this.editMode?.2:1;
-        this.ctx.lineTo(this.points[0].x,this.points[0].y);
-        this.ctx.stroke();
-        this.ctx.globalAlpha = 1;
+        c.stroke();
+        c.lineWidth = closeW;
+        c.globalAlpha = this.editMode?.2:1;
+        c.lineTo(this.points[0].x,this.points[0].y);
+        c.stroke();
+        c.globalAlpha = 1;
 
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.points2[0].x, this.points2[0].y);
-        this.ctx.strokeStyle = "white";
-        this.ctx.lineWidth = wallW;
+        c.beginPath();
+        c.moveTo(this.points2[0].x, this.points2[0].y);
+        c.strokeStyle = "white";
+        c.lineWidth = wallW;
         this.points2.forEach((p) => {
-            this.ctx.lineTo(p.x, p.y);
+            c.lineTo(p.x, p.y);
         })
-        this.ctx.stroke();
-        this.ctx.lineWidth = closeW;
-        this.ctx.globalAlpha = this.editMode?.2:1;
-        this.ctx.lineTo(this.points2[0].x,this.points2[0].y);
-        this.ctx.stroke();
-        this.ctx.globalAlpha = 1;
+        c.stroke();
+        c.lineWidth = closeW;
+        c.globalAlpha = this.editMode?.2:1;
+        c.lineTo(this.points2[0].x,this.points2[0].y);
+        c.stroke();
+        c.globalAlpha = 1;
 
         // Checkpoints: named-"green" (#008000) reads only 3.2:1 on the
         // near-black scene (#15161a) and collapses toward muddy olive under
         // deuteranopia. #58E05D lime jumps to ~7:1, stays clearly green to
         // trichromats, and stays distinct from the yellow sensor rays by
         // luminance even under red-green CVD.
-        this.ctx.strokeStyle = "#58E05D";
-        this.ctx.lineWidth = checkW;
+        c.strokeStyle = "#58E05D";
+        c.lineWidth = checkW;
         this.checkPointListEditor.forEach((p)=>{
-            this.ctx.beginPath();
-            this.ctx.moveTo(p[0].x,p[0].y);
-            this.ctx.lineTo(p[1].x,p[1].y);
-            this.ctx.stroke();
+            c.beginPath();
+            c.moveTo(p[0].x,p[0].y);
+            c.lineTo(p[1].x,p[1].y);
+            c.stroke();
         })
 
         // 1-based index labels: the order (cp[0]→cp[1]→…) determines lap
@@ -155,10 +179,10 @@ class roadEditor{
         // Labels are tangent-offset so they sit just off the gate line rather
         // than clipping on top of it.
         const labelPx = this.editMode ? 40 : 60;
-        this.ctx.font = `bold ${labelPx}px Tahoma, sans-serif`;
-        this.ctx.textAlign = 'center';
-        this.ctx.textBaseline = 'middle';
-        this.ctx.lineWidth = 4;
+        c.font = `bold ${labelPx}px Tahoma, sans-serif`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.lineWidth = 4;
         this.checkPointListEditor.forEach((p, i) => {
             const mx = (p[0].x + p[1].x) / 2;
             const my = (p[0].y + p[1].y) / 2;
@@ -172,10 +196,10 @@ class roadEditor{
             const lx = mx + nx * off;
             const ly = my + ny * off;
             const label = String(i + 1);
-            this.ctx.strokeStyle = "#15161a";  // dark outline matches scene bg
-            this.ctx.strokeText(label, lx, ly);
-            this.ctx.fillStyle = "#58E05D";
-            this.ctx.fillText(label, lx, ly);
+            c.strokeStyle = "#15161a";  // dark outline matches scene bg
+            c.strokeText(label, lx, ly);
+            c.fillStyle = "#58E05D";
+            c.fillText(label, lx, ly);
         });
     }
     deleteLast(){

@@ -2217,6 +2217,18 @@ label {
     font-weight: 600;
     letter-spacing: 0.02em;
 }
+.rv-experiments-status {
+    flex: 1 1 100%;
+    margin-top: 2px;
+    font: 11px/1.35 var(--font-mono);
+    color: rgba(168, 200, 255, 0.9);
+    opacity: 0.92;
+}
+.rv-experiments-reset-gates {
+    margin-left: auto;
+    padding: 2px 8px !important;
+    font-size: 0.78em !important;
+}
 
 /* === Phase A — Brain saves (named-slot persistence) === */
 /* Mounted directly below the legacy Save Best + Restart actions, so the
@@ -2282,3 +2294,139 @@ label {
     color: #f0d6b6 !important;
 }
 .brain-saves-fresh:hover { background: rgba(180, 110, 60, 0.32) !important; }
+
+/* =============================================================
+   Cinematic presentation layer (demoPresentation.js)
+   Overlay HUD + view toggles on #canvasDiv. Pointer-events none
+   on the HUD; controls are clickable chips.
+   ============================================================= */
+#cinema-hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 8;
+    max-width: min(92%, 560px);
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: rgba(12, 14, 18, 0.72);
+    -webkit-backdrop-filter: blur(10px) saturate(130%);
+    backdrop-filter: blur(10px) saturate(130%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    color: #f3efe6;
+    font-family: var(--font-body);
+    font-size: 12px;
+    line-height: 1.35;
+    pointer-events: none;
+}
+.cinema-hud-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    align-items: baseline;
+}
+.cinema-stat {
+    color: rgba(243, 239, 230, 0.78);
+    letter-spacing: 0.01em;
+}
+.cinema-stat b {
+    color: #ffe566;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 12.5px;
+}
+.cinema-muted {
+    opacity: 0.55;
+    font-size: 0.92em;
+}
+.cinema-story {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 236, 180, 0.92);
+    font-size: 12px;
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+.cinema-story[hidden] { display: none; }
+
+#cinema-controls {
+    /* Bottom-right of the track cell so we don't collide with the
+       bottom-left perf HUD or the centered #bottomText banner. */
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    left: auto;
+    z-index: 8;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    max-width: min(70%, 480px);
+    pointer-events: auto;
+}
+#cinema-controls button {
+    appearance: none;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(12, 14, 18, 0.72);
+    color: rgba(243, 239, 230, 0.88);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    border-radius: 999px;
+    padding: 5px 11px;
+    font: 600 11px/1.2 var(--font-body);
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease, transform 120ms ease;
+}
+#cinema-controls button:hover {
+    background: rgba(28, 30, 38, 0.88);
+    border-color: rgba(255, 229, 102, 0.35);
+    color: #fff;
+}
+#cinema-controls button:focus-visible {
+    outline: 2px solid var(--amber-500);
+    outline-offset: 2px;
+}
+#cinema-controls button.is-on {
+    background: rgba(211, 139, 75, 0.28);
+    border-color: rgba(255, 229, 102, 0.55);
+    color: #ffe566;
+}
+#cinema-controls button.cinema-demo.is-on {
+    background: rgba(122, 101, 204, 0.35);
+    border-color: rgba(190, 175, 255, 0.55);
+    color: #e4dcff;
+}
+
+/* Keep overlays clear of the A/B dual stack */
+#canvasDiv.ab-on #cinema-hud {
+    max-width: min(48%, 360px);
+}
+#canvasDiv.ab-on #cinema-controls {
+    bottom: auto;
+    top: calc(50% + 8px);
+    right: 8px;
+}
+
+@media (max-width: 720px) {
+    #cinema-hud {
+        font-size: 11px;
+        padding: 6px 9px;
+        top: 6px;
+        left: 6px;
+    }
+    #cinema-controls {
+        bottom: 8px;
+        right: 8px;
+    }
+    #cinema-controls button {
+        padding: 4px 9px;
+        font-size: 10px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #cinema-controls button { transition: none; }
+}

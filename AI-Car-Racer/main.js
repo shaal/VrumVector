@@ -68,16 +68,23 @@ computeStartInfoInPlace(currentCheckpointList());
 // Applied to AI cars only (not elite at i=0, not player cars).
 window.__poseJitter = window.__poseJitter || { radiusPx: 0, angleDeg: 0, maxAttempts: 8 };
 
-var batchSize = 10;
-var nextSeconds = 15;
-var seconds;
-var mutateValue = .3;
+// Default training knobs — tuned for visible ruvector warm-start + higher
+// early survival (not micro-bench cold starts). Presets (Fresh/Grind/Polish)
+// still override these when clicked.
+//   N=500     — enough lottery tickets for gen-0 survivors without thrashing
+//   20s gens  — less noisy fitness for archive quality
+//   mutate 0.22 — explore without shredding a decent elite every gen
+//   consInit 0.65 — bias random brains toward "ease off near walls"
+var batchSize = 500;
+var nextSeconds = 20;
+var seconds = 20;
+var mutateValue = 0.22;
 // P2.C Conservative Init: biases gen-0 random brains toward
 // "reverse when a ray reads short" (close wall). 0 = pure random (no-op,
 // bit-identical to pre-P2.C baseline). 1 = maximum bias. Persisted to
 // localStorage via setConservativeInit(). Only applied on cold-random-init
 // paths (fillRandom callers); ruvector-seeded brains are left untouched.
-var conservativeInit = 0;
+var conservativeInit = 0.65;
 var playerCar;
 var playerCar2;
 // AI population lives entirely inside sim-worker.js. bestCar on main is a
@@ -232,7 +239,9 @@ try { localStorage.removeItem('fastLap'); } catch (_) {}
 // parallel accumulator for the 2 player cars only. They drift slightly under
 // load, but the UX impact is nil — AI training is what the user watches at
 // 100×; player cars are only driven during phase-3 physics tuning at 1×.
-var simSpeed = 1;
+// Default 2×: last "honest" speed before sensor stride > 1 (cleaner fitness
+// for the archive + still visibly faster than realtime).
+var simSpeed = 2;
 var _simStepAccum = 0;             // retained name so setSimSpeed stays stable
 var _lastTickWall = performance.now();
 
@@ -896,6 +905,45 @@ function handleGenEnd(m){
         bestCar.lapTimes = m.lapTimes && m.lapTimes.length ? m.lapTimes : '--';
         bestCar.checkPointsCount = m.checkPointsCount;
     }
+    try {
+        if (window.DemoPresentation && typeof window.DemoPresentation.onGenEnd === 'function'){
+            window.DemoPresentation.onGenEnd(m);
+        }
+    } catch (_) {}
+    // Adaptive green gates (opt-in): nudge bottleneck CPs before the next
+    // begin() so the worker reinits with the updated layout. Must run before
+    // performNextBatch → begin.
+    try {
+        if (window.AdaptiveGates && typeof window.AdaptiveGates.onGenEnd === 'function'){
+            window.AdaptiveGates.onGenEnd(m);
+        }
+    } catch (e) { console.warn('[adaptiveGates] hook failed', e); }
+    // Always feed the crash-map HNSW when adaptive is off too, so the index
+    // accumulates "similar crash problem" memories for later retrieval.
+    try {
+        if ((!window.AdaptiveGates || !window.AdaptiveGates.isEnabled || !window.AdaptiveGates.isEnabled()) &&
+            !window.rvDisabled && window.__rvBridge &&
+            typeof window.__rvBridge.encodeCrashMap === 'function' &&
+            typeof window.__rvBridge.archiveCrashMap === 'function' &&
+            m.popDeathXY && m.popN) {
+            const vec = window.__rvBridge.encodeCrashMap(m.popDeathXY, m.popN);
+            if (vec) {
+                const cps = (road && road.checkPointList) ? road.checkPointList : null;
+                let nDeaths = 0;
+                for (let i = 0; i < m.popN; i++) {
+                    if (Number.isFinite(m.popDeathXY[i * 2])) nDeaths++;
+                }
+                window.__rvBridge.archiveCrashMap(vec, {
+                    survival: m.popN ? (m.popStillAlive | 0) / m.popN : 0,
+                    fitness: m.fitness || 0,
+                    generation: generation | 0,
+                    nDeaths: nDeaths,
+                    nGates: cps ? cps.length : 0,
+                    cps: cps,
+                });
+            }
+        }
+    } catch (e) { console.warn('[crash-map] passive archive failed', e); }
     // Feed one SONA trajectory step per generation — elite's last-tick hidden
     // activations as the embedding, generation fitness as the reward scalar.
     // Lazy-open the trajectory on the first genEnd after SONA becomes ready,
@@ -1193,6 +1241,13 @@ function performBegin(N){
         workerInited = true;
     }
     const brains = buildBrainsBuffer(N);
+    // Keep worker speed/pause aligned with main defaults. setSimSpeed() only
+    // posts when the user moves the dropdown — without this, a default
+    // simSpeed≠1 never reaches the worker until the first manual change.
+    try {
+        simWorker.postMessage({ type: 'setSimSpeed', v: simSpeed });
+        simWorker.postMessage({ type: 'setPause', pause: !!pause });
+    } catch (_) {}
     simWorker.postMessage({
         type: 'begin',
         N, seconds, maxSpeed, traction,
@@ -1236,6 +1291,11 @@ window.__switchTrackInMemory = function(name){
     try { road.getTrack(); } catch (_) {}
     computeStartInfoInPlace(currentCheckpointList());
     invalidateWorkerInit();
+    try {
+        if (window.DemoPresentation && window.DemoPresentation.invalidateRoad){
+            window.DemoPresentation.invalidateRoad();
+        }
+    } catch (_) {}
     // Re-embed track vector for the new track so SONA patterns key correctly.
     try { if (typeof embedCurrentTrack === 'function') embedCurrentTrack(); } catch (_) {}
     return true;
@@ -1358,7 +1418,16 @@ function animate(){
     }
     var _perfDraw = 0;
     var _perfT0 = perfEnabled ? performance.now() : 0;
-    road.draw(ctx);
+    const DP = window.DemoPresentation;
+    // Presentation layer (road cache / follow-cam / 3D) owns the phase-4
+    // frame setup. Outside training, fall back to the classic full redraw.
+    let _pres = null;
+    if (phase === 4 && DP && typeof DP.beginFrame === 'function'){
+        _pres = DP.beginFrame(ctx, bestCar, latestSnapshot);
+    }
+    if (!_pres || !_pres.drewRoad){
+        road.draw(ctx);
+    }
     if (perfEnabled) _perfDraw += performance.now() - _perfT0;
 
     if(phase==3){
@@ -1375,31 +1444,35 @@ function animate(){
     }
     if(phase==4){
         const timer = document.getElementById("timer");
-        const simSecs = (frameCount/60).toFixed(2);
-        const wallSecs = ((performance.now() - wallStart)/1000).toFixed(2);
-        timer.innerHTML = "<p>Sim Time: " + simSecs + "s " +
-            "<span style='opacity:.65;font-size:.85em'>(wall " + wallSecs + "s &middot; " + simSpeed + "&times;)</span></p>";
-        // Phase A: track-aware fast-lap render. Three lines:
-        //   • Fast Lap: 12.34s (this track)
-        //   • Last:     14.10s
-        //   • all-time best: 9.10s
-        // The "(this track)" tag is load-bearing — without it a returning
-        // user could assume the displayed value is global. allTimeBest is
-        // hidden when only one track has ever been raced (best === current).
-        const _fastStr = (typeof fastLap === 'number' ? fastLap.toFixed(2) + 's' : fastLap);
-        const _lastStr = (typeof lastLap === 'number' ? lastLap.toFixed(2) + 's' : '—');
-        timer.innerHTML += "<p>Fast Lap: " + _fastStr +
-            " <span style='opacity:.55;font-size:.85em'>(this track)</span></p>";
-        timer.innerHTML += "<p style='opacity:.85'>Last: " + _lastStr + "</p>";
-        if (typeof allTimeBest === 'number' &&
-            (typeof fastLap !== 'number' || allTimeBest < fastLap)) {
-            // Only show the subscript when a different track holds the
-            // record — saves a row of noise for single-track users.
-            timer.innerHTML += "<p style='opacity:.55;font-size:.82em;margin-top:-4px'>" +
-                "all-time best: " + allTimeBest.toFixed(2) + "s</p>";
+        if (timer){
+            const simSecs = (frameCount/60).toFixed(2);
+            const wallSecs = ((performance.now() - wallStart)/1000).toFixed(2);
+            timer.innerHTML = "<p>Sim Time: " + simSecs + "s " +
+                "<span style='opacity:.65;font-size:.85em'>(wall " + wallSecs + "s &middot; " + simSpeed + "&times;)</span></p>";
+            // Phase A: track-aware fast-lap render. Three lines:
+            //   • Fast Lap: 12.34s (this track)
+            //   • Last:     14.10s
+            //   • all-time best: 9.10s
+            // The "(this track)" tag is load-bearing — without it a returning
+            // user could assume the displayed value is global. allTimeBest is
+            // hidden when only one track has ever been raced (best === current).
+            const _fastStr = (typeof fastLap === 'number' ? fastLap.toFixed(2) + 's' : fastLap);
+            const _lastStr = (typeof lastLap === 'number' ? lastLap.toFixed(2) + 's' : '—');
+            timer.innerHTML += "<p>Fast Lap: " + _fastStr +
+                " <span style='opacity:.55;font-size:.85em'>(this track)</span></p>";
+            timer.innerHTML += "<p style='opacity:.85'>Last: " + _lastStr + "</p>";
+            if (typeof allTimeBest === 'number' &&
+                (typeof fastLap !== 'number' || allTimeBest < fastLap)) {
+                // Only show the subscript when a different track holds the
+                // record — saves a row of noise for single-track users.
+                timer.innerHTML += "<p style='opacity:.55;font-size:.82em;margin-top:-4px'>" +
+                    "all-time best: " + allTimeBest.toFixed(2) + "s</p>";
+            }
         }
-        ctx.save();
 
+        // Still render the last snapshot while paused so the track isn't empty
+        // after the user hits Pause / before first Start.
+        const shouldDrawCars = !pause || !!latestSnapshot;
         if(!pause){
             // Local player-car accumulator. Runs in parallel with the worker's;
             // exact lockstep isn't needed because player cars only matter when
@@ -1417,10 +1490,14 @@ function animate(){
                 playerCar.update(road.borders, road.checkPointList);
                 playerCar2.update(road.borders, road.checkPointList);
             }
+        }
 
+        if (shouldDrawCars){
             const _perfDrawT0 = perfEnabled ? performance.now() : 0;
+            const usePresSwarm = _pres && _pres.usePresentationSwarm && DP && typeof DP.drawSwarm === 'function';
             if (latestSnapshot){
-                drawFromSnapshot(latestSnapshot);
+                if (usePresSwarm) DP.drawSwarm(ctx, latestSnapshot);
+                else drawFromSnapshot(latestSnapshot);
             }
             if (bestCar){
                 // Pass the whole bestCar proxy — inputVisual still reads
@@ -1428,13 +1505,31 @@ function animate(){
                 // reads .brainInputs / .brainOutputActivations (Task 2.D) to
                 // render the NN decision bars.
                 inputVisual(bestCar);
-                drawBestCar(bestCar);
+                if (DP && typeof DP.drawChampion === 'function') DP.drawChampion(ctx, bestCar);
+                else drawBestCar(bestCar);
             }
-            playerCar.draw(ctx,"#E6194B",true);
-            playerCar2.draw(ctx,"#4FC3F7",true);
+            // Player cars are 2D-world quads — skip in pure 3D projection so
+            // they don't ghost in flat screen space over the perspective scene.
+            const skipPlayers = DP && DP.state && DP.state.view3d;
+            if (!skipPlayers){
+                if (playerCar) playerCar.draw(ctx,"#E6194B",true);
+                if (playerCar2) playerCar2.draw(ctx,"#4FC3F7",true);
+            }
             if (perfEnabled) _perfDraw += performance.now() - _perfDrawT0;
         }
-        ctx.restore();
+        if (_pres && DP && typeof DP.endFrame === 'function'){
+            DP.endFrame(ctx, _pres.camApplied);
+        }
+        if (DP && typeof DP.tickHud === 'function'){
+            DP.tickHud({
+                generation: generation,
+                bestCar: bestCar,
+                snap: latestSnapshot,
+                pause: pause,
+                simSpeed: simSpeed,
+                frameCount: frameCount,
+            });
+        }
     }
     if (perfEnabled){
         try {
