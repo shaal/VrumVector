@@ -604,6 +604,13 @@ window.loadTrackPreset = function(nameOrIdx) {
     // Force the AI-worker to re-init with the new borders/checkpoints on the
     // next begin() — otherwise AI cars would also race against stale walls.
     try { if (typeof invalidateWorkerInit === 'function') invalidateWorkerInit(); } catch (_) {}
+    // Adaptive gates keep a per-track baseline; without this, Reset / HNSW
+    // / bad-streak restore would re-paint Triangle green lines on Rectangle.
+    try {
+      if (window.AdaptiveGates && typeof window.AdaptiveGates.onTrackChange === 'function') {
+        window.AdaptiveGates.onTrackChange();
+      }
+    } catch (_) {}
     try { road.roadEditor.redraw(); } catch (_) { /* redraw only works in phase 1/2 */ }
   }
 

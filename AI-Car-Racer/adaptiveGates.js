@@ -144,27 +144,57 @@
     return Math.max(MIN_GATES, baseN + MAX_EXTRA);
   }
 
-  function trackKey() {
-    try {
-      const v = window.currentTrackVec;
-      if (v && v.length) {
-        let h = 2166136261;
-        const step = Math.max(1, (v.length / 32) | 0);
-        for (let i = 0; i < v.length; i += step) {
-          h ^= Math.floor((v[i] + 2) * 1e6);
-          h = Math.imul(h, 16777619);
-        }
-        return MEMORY_PREFIX + (h >>> 0).toString(16);
-      }
-    } catch (_) {}
+  /**
+   * Stable id for the *walls* (not the adaptive gate list). Used so Triangle
+   * memory never re-applies onto Rectangle after a preset switch.
+   */
+  function geometrySignature() {
     try {
       const re = road.roadEditor;
-      const n = (re.points && re.points.length) + 'x' +
-        (re.points2 && re.points2.length) + 'x' +
-        (re.checkPointListEditor && re.checkPointListEditor.length);
-      return MEMORY_PREFIX + 'geo_' + n;
+      if (!re) return 'g0';
+      const parts = [];
+      const pushPts = function (arr) {
+        if (!arr) return;
+        for (let i = 0; i < arr.length; i++) {
+          parts.push(Math.round(arr[i].x) + ',' + Math.round(arr[i].y));
+        }
+      };
+      pushPts(re.points);
+      parts.push('|');
+      pushPts(re.points2);
+      // Include *baseline* gate count when known; avoid live adaptive gate
+      // count so adds/removes don't thrash the track key every gen.
+      if (state.baseline && state.baseline.length) {
+        parts.push('|b' + state.baseline.length);
+      }
+      let h = 2166136261;
+      const s = parts.join(';');
+      for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return 'g' + (h >>> 0).toString(16);
     } catch (_) {
-      return MEMORY_PREFIX + 'default';
+      return 'g0';
+    }
+  }
+
+  function trackKey() {
+    return MEMORY_PREFIX + geometrySignature();
+  }
+
+  /** True when adaptive state still refers to a different wall geometry. */
+  function trackStale() {
+    if (!state.trackKey) return true;
+    // Compare without the baseline-length suffix drift: recompute from walls only.
+    try {
+      const re = road.roadEditor;
+      if (!re || !re.points || !re.points2) return true;
+      // If baseline exists, check first wall point still matches baseline context
+      // by seeing whether live walls match what we hashed into trackKey.
+      return state.trackKey !== trackKey();
+    } catch (_) {
+      return true;
     }
   }
 
@@ -184,6 +214,7 @@
     const cps = currentCps();
     if (!cps || !cps.length) return false;
     state.baseline = cloneCps(cps);
+    // Hash walls *after* baseline length is known so trackKey is stable.
     state.trackKey = trackKey();
     state.nudgeCount = 0;
     state.addCount = 0;
@@ -191,8 +222,44 @@
     state.badStreak = 0;
     state.lastBottleneck = -1;
     state.lastSurvival = null;
+    state.lastCrashCentroid = null;
+    state.lastCrashHit = null;
     state.topoCooldown = 0;
+    state.genSinceAdapt = 0;
     return true;
+  }
+
+  /**
+   * Called when the user loads a different preset / redraws the track.
+   * Drops Triangle baselines so Reset / HNSW / bad-streak restore cannot
+   * paint the old green gates onto the new walls.
+   */
+  function onTrackChange() {
+    // Drop stale adaptive state first so trackKey() doesn't include the old
+    // baseline gate count in the geometry signature.
+    state.baseline = null;
+    state.trackKey = null;
+    state.nudgeCount = 0;
+    state.addCount = 0;
+    state.removeCount = 0;
+    state.badStreak = 0;
+    state.lastBottleneck = -1;
+    state.lastSurvival = null;
+    state.lastCrashCentroid = null;
+    state.lastCrashHit = null;
+    state.topoCooldown = 0;
+    state.genSinceAdapt = 0;
+    state._hnswNote = null;
+
+    const ok = captureBaseline();
+    // Do NOT restoreBestIfAny() here — that re-applies an adapted layout and
+    // is the wrong move right after an explicit preset load (preset CPs win).
+    state.lastStatus = state.enabled
+      ? (ok
+        ? ('on · track changed · baseline = ' + state.baseline.length + ' gates (preset)')
+        : 'on · track changed · no gates yet')
+      : (ok ? 'off · track changed · baseline recaptured' : 'off');
+    return ok;
   }
 
   function applyCps(cps) {
@@ -431,11 +498,16 @@
     state.hnswHits++;
     state.lastCrashHit = hits[0];
 
-    // Prefer highest survival among sufficiently similar maps.
+    // Prefer highest survival among sufficiently similar maps on *this* wall geometry.
+    const geo = geometrySignature();
     let best = null;
     for (let i = 0; i < hits.length; i++) {
       const h = hits[i];
       if (!h.cps || !h.cps.length) continue;
+      // Reject layouts archived on a different track (Triangle ≠ Rectangle).
+      // Require geometrySig: older untagged maps are never auto-applied
+      // (avoids painting Triangle gates onto Rectangle after a preset switch).
+      if (!h.geometrySig || h.geometrySig !== geo) continue;
       if ((h.similarity || 0) < CRASH_SIM_MIN) continue;
       if ((h.survival || 0) < survival + CRASH_SURV_LIFT) continue;
       if (!best || h.survival > best.survival ||
@@ -476,6 +548,7 @@
         cps: cloneCps(cps),
         causes: causesOf(genData),
         bottleneck: bottleneck,
+        geometrySig: geometrySignature(),
       });
     } catch (e) {
       console.warn('[adaptiveGates] archiveCrashMap failed', e);
@@ -488,7 +561,10 @@
       state.lastStatus = 'on · need ≥2 gates';
       return false;
     }
-    if (!state.baseline) captureBaseline();
+    // Track switch while adaptive is on: recapture baseline before any nudge/HNSW.
+    if (!state.baseline || trackStale()) {
+      onTrackChange();
+    }
 
     const N = genData.popN | 0;
     const popCp = genData.popCheckpoints;
@@ -621,6 +697,7 @@
       fitness: +(+fitness || 0).toFixed(3),
       cps: cloneCps(cps),
       nGates: cps.length,
+      geometrySig: geometrySignature(),
       crash: crash ? { x: +crash.x.toFixed(1), y: +crash.y.toFixed(1), n: crash.n | 0 } : null,
       t: Date.now(),
     };
@@ -639,10 +716,11 @@
     const key = trackKey();
     const mem = loadMemory(key);
     if (!mem || !mem.best || !mem.best.cps || !mem.best.cps.length) return false;
-    // Allow different gate counts vs current (topology memory).
+    // Memory is geometry-keyed; still reject if wall sig diverged.
+    if (mem.best.geometrySig && mem.best.geometrySig !== geometrySignature()) return false;
     if (applyCps(mem.best.cps)) {
       state.lastStatus =
-        'on · restored best layout (' +
+        'on · restored best layout for this track (' +
         mem.best.cps.length + ' gates, survival ' +
         (mem.best.survival * 100).toFixed(0) + '%)';
       return true;
@@ -656,19 +734,29 @@
       state.lastStatus = 'off';
       return state.enabled;
     }
-    if (!state.baseline) captureBaseline();
-    state.trackKey = trackKey();
+    // Always align baseline with the *current* walls when enabling.
+    if (!state.baseline || trackStale()) {
+      onTrackChange();
+    }
+    // Optional: restore a *same-track* remembered layout (not another preset).
     if (!restoreBestIfAny()) {
-      state.lastStatus = 'on · watching pass rates (nudge + add/remove)';
+      state.lastStatus = 'on · watching pass rates + crash HNSW (baseline ' +
+        ((state.baseline && state.baseline.length) || 0) + ' gates)';
     }
     return state.enabled;
   }
 
   function resetToBaseline() {
-    if (!state.baseline) {
-      captureBaseline();
-      state.lastStatus = state.enabled ? 'on · baseline captured' : 'off';
-      return false;
+    // If the user switched tracks, baseline may still be the old triangle —
+    // refuse to paint it; recapture from whatever gates the preset installed.
+    if (!state.baseline || trackStale()) {
+      const ok = onTrackChange();
+      state.lastStatus = state.enabled
+        ? (ok
+          ? ('on · baseline recaptured for current track (' + state.baseline.length + ' gates)')
+          : 'on · cannot reset (no gates)')
+        : 'off · baseline recaptured';
+      return ok;
     }
     const ok = applyCps(state.baseline);
     state.nudgeCount = 0;
@@ -685,6 +773,8 @@
 
   function onGenEnd(genData) {
     if (!state.enabled) return;
+    // Detect track switches that happened without onTrackChange (defensive).
+    if (trackStale()) onTrackChange();
     state.genSinceAdapt++;
     if (state.genSinceAdapt < MIN_GENS_BETWEEN) return;
     state.genSinceAdapt = 0;
@@ -726,9 +816,11 @@
     setEnabled: setEnabled,
     isEnabled: function () { return !!state.enabled; },
     onGenEnd: onGenEnd,
+    onTrackChange: onTrackChange,
     resetToBaseline: resetToBaseline,
     captureBaseline: captureBaseline,
     getStatus: getStatus,
+    geometrySignature: geometrySignature,
     _state: state,
   };
 

@@ -933,6 +933,9 @@ function handleGenEnd(m){
                 for (let i = 0; i < m.popN; i++) {
                     if (Number.isFinite(m.popDeathXY[i * 2])) nDeaths++;
                 }
+                const geoSig = (window.AdaptiveGates && window.AdaptiveGates.geometrySignature)
+                    ? window.AdaptiveGates.geometrySignature()
+                    : null;
                 window.__rvBridge.archiveCrashMap(vec, {
                     survival: m.popN ? (m.popStillAlive | 0) / m.popN : 0,
                     fitness: m.fitness || 0,
@@ -940,6 +943,7 @@ function handleGenEnd(m){
                     nDeaths: nDeaths,
                     nGates: cps ? cps.length : 0,
                     cps: cps,
+                    geometrySig: geoSig,
                 });
             }
         }
@@ -1294,6 +1298,13 @@ window.__switchTrackInMemory = function(name){
     try {
         if (window.DemoPresentation && window.DemoPresentation.invalidateRoad){
             window.DemoPresentation.invalidateRoad();
+        }
+    } catch (_) {}
+    // loadTrackPreset already calls AdaptiveGates.onTrackChange; call again
+    // after getTrack() so baseline matches fully rebuilt checkpoints.
+    try {
+        if (window.AdaptiveGates && typeof window.AdaptiveGates.onTrackChange === 'function') {
+            window.AdaptiveGates.onTrackChange();
         }
     } catch (_) {}
     // Re-embed track vector for the new track so SONA patterns key correctly.

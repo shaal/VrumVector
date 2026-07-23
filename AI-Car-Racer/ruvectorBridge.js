@@ -574,6 +574,9 @@ export function archiveCrashMap(crashVec, meta = {}) {
   if (meta.causes && typeof meta.causes === 'object') m.causes = meta.causes;
   if (meta.trackId) m.trackId = meta.trackId;
   if (meta.bottleneck != null) m.bottleneck = meta.bottleneck | 0;
+  // Wall-geometry signature — adaptive gates refuse to apply a layout whose
+  // sig doesn't match the live track (stops Triangle gates on Rectangle).
+  if (meta.geometrySig) m.geometrySig = String(meta.geometrySig);
   try {
     const id = _crashDB.insert(crashVec, null, m);
     _crashMirror.set(id, { vector: crashVec.slice(), meta: m });
@@ -627,6 +630,7 @@ export function recommendCrashLayouts(crashVec, k = 5) {
       cps: Array.isArray(meta.cps) ? meta.cps : null,
       causes: meta.causes || null,
       bottleneck: meta.bottleneck != null ? (meta.bottleneck | 0) : null,
+      geometrySig: meta.geometrySig || null,
       timestamp: meta.timestamp || 0,
     });
   }
