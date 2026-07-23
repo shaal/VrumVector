@@ -107,16 +107,24 @@ const IDB_NAME = 'rv_car_learning';
 // so old archives continue to hydrate unchanged — they just don't have
 // dynamicsId set on any brain meta (backwards-compat: missing → skip the
 // dynamics term in recommendSeeds).
-const IDB_VERSION = 3;
+// Bumped to 4 for crash-map HNSW store (adaptive-gates curriculum memory).
+const IDB_VERSION = 4;
 const BRAINS_STORE = `brains_${TOPOLOGY.join('_')}`; // topology-scoped per PRD risk #6
 const TRACKS_STORE = 'tracks';
 const OBS_STORE = 'observations';
 const LORA_STORE = 'lora_track';
 const LORA_KEY = 'singleton'; // single-row store; this is the only id ever used
 const DYNAMICS_STORE = 'dynamics';
+const CRASH_STORE = 'crash_maps';
 
 const TRACK_DIM = 512;
 const DYNAMICS_DIM = 64; // matches dynamicsEmbedder.DYNAMICS_DIM
+// Crash heat maps: 16×9 log1p-count grid over the canvas, L2-normalised.
+// Same layout as crashMapCodec.js (classic) — keep in sync.
+const CRASH_GW = 16;
+const CRASH_GH = 9;
+const CRASH_DIM = CRASH_GW * CRASH_GH; // 144
+export { CRASH_DIM, CRASH_GW, CRASH_GH };
 // VectorDB returns cosine DISTANCE (1 - similarity), range [0, 2]. Dedup when
 // distance is tiny, i.e. the two track vectors are essentially identical.
 const TRACK_DEDUPE_MAX_DIST = 0.005; // ≈ 0.9975 cosine similarity
@@ -221,7 +229,15 @@ let _brainDB = null;
 let _brainDB_hyperbolic = null;
 let _trackDB = null;
 let _dynamicsDB = null;
+let _crashDB = null;
+let _crashMirror = new Map(); // id -> { vector, meta }
 let _cnn = null;
+// Crash-map retrieval toggle (default on). Adaptive gates can still call
+// archive/search when disabled for diagnostics; recommendCrashLayouts returns
+// [] when off so the curriculum path no-ops cleanly.
+let _useCrashMaps = true;
+export function setUseCrashMaps(on) { _useCrashMaps = !!on; return _useCrashMaps; }
+export function isUsingCrashMaps() { return !!_useCrashMaps; }
 
 // Phase 2A — F2. Off by default → recommendSeeds is byte-identical to the
 // pre-2A single-index path. Flipped via setFederationEnabled({on}).
@@ -282,11 +298,12 @@ export function setIndexKind(kind) {
   return true;
 }
 function rebuildIndicesFromMirror() {
-  if (!_brainDB || !_trackDB || !_dynamicsDB) return;
+  if (!_brainDB || !_trackDB || !_dynamicsDB || !_crashDB) return;
   const IndexClass = pickIndexClass(_indexKind);
   _brainDB = new IndexClass(FLAT_LENGTH, 'cosine');
   _trackDB = new IndexClass(TRACK_DIM, 'cosine');
   _dynamicsDB = new IndexClass(DYNAMICS_DIM, 'cosine');
+  _crashDB = new IndexClass(CRASH_DIM, 'cosine');
   // Phase 2A — rebuild the shadow hyperbolic brain index too when
   // available. We don't shadow the track / dynamics DBs — federation only
   // fans out over the brain index (track / dynamics are joins, not
@@ -301,6 +318,9 @@ function rebuildIndicesFromMirror() {
   }
   for (const [id, { vector, meta }] of _dynamicsMirror) {
     _dynamicsDB.insert(vector, id, meta || {});
+  }
+  for (const [id, { vector, meta }] of _crashMirror) {
+    _crashDB.insert(vector, id, meta || {});
   }
   // F3 — rebuild preserves the original insertion order from _insertionOrder
   // when available; falls back to mirror iteration order otherwise. We do
@@ -319,11 +339,12 @@ function rebuildIndicesFromMirror() {
   }
 }
 
-// Dynamics retrieval toggle. Default off per P1.C plan: adding the extra
-// similarity term shifts seeding behaviour, so we keep it opt-in and let the
-// panel checkbox drive it. `_queryDynamicsVec` is set by callers (main.js /
-// uiPanels) before recommendSeeds so the bridge stays pure-read.
-let _useDynamics = false;
+// Dynamics retrieval toggle. Default ON for product UX: once trajectories
+// exist, seeding can prefer brains that *drive like* successful ones on this
+// track (not only track-shape neighbors). Empty dynamics archive is a no-op
+// (term skipped). UI checkbox / A/B strip stay authoritative after first paint.
+// `_queryDynamicsVec` is set by callers (main.js / uiPanels) before recommendSeeds.
+let _useDynamics = true;
 let _queryDynamicsVec = null;
 // Weight of the dynamics-sim term in the final score product. Small enough
 // that dynamics can tie-break but won't drown out fitness × track-similarity.
@@ -417,6 +438,7 @@ export function ready() {
     _brainDB = new IndexClass(FLAT_LENGTH, 'cosine');
     _trackDB = new IndexClass(TRACK_DIM, 'cosine');
     _dynamicsDB = new IndexClass(DYNAMICS_DIM, 'cosine');
+    _crashDB = new IndexClass(CRASH_DIM, 'cosine');
     // Phase 2A — F2. Stand up the hyperbolic shadow brain index so federated
     // search has something to fan out to, regardless of whether _indexKind is
     // currently hyperbolic. When the wasm didn't load this stays null and
@@ -475,8 +497,9 @@ export function ready() {
       tracks: _trackMirror.size,
       obs: _observations.size,
       dynamics: _dynamicsMirror.size,
+      crashMaps: _crashMirror.size,
     };
-    console.log(`[ruvector] ready — brains=${_brainMirror.size} tracks=${_trackMirror.size} obs=${_observations.size}`);
+    console.log(`[ruvector] ready — brains=${_brainMirror.size} tracks=${_trackMirror.size} obs=${_observations.size} crashMaps=${_crashMirror.size}`);
     // One compact line so the full breakdown survives console truncation and
     // can be copy-pasted back for diagnosis.
     console.log('[boot-timings] ' + JSON.stringify(_bootTimings));
@@ -485,9 +508,139 @@ export function ready() {
 }
 
 function requireReady() {
-  if (!_brainDB || !_trackDB || !_dynamicsDB || !_cnn) {
+  if (!_brainDB || !_trackDB || !_dynamicsDB || !_crashDB || !_cnn) {
     throw new Error('ruvectorBridge: call await ready() before using the bridge');
   }
+}
+
+// ─── crash-map HNSW (adaptive-gates curriculum memory) ───────────────────────
+
+/**
+ * Encode death positions into a CRASH_DIM L2-normalised heat vector.
+ * Mirrors window.CrashMapCodec.encodeDeathMap when that classic script loaded.
+ */
+export function encodeCrashMap(popDeathXY, N, canvasW, canvasH) {
+  try {
+    if (typeof window !== 'undefined' && window.CrashMapCodec &&
+        typeof window.CrashMapCodec.encodeDeathMap === 'function') {
+      return window.CrashMapCodec.encodeDeathMap(popDeathXY, N, canvasW, canvasH);
+    }
+  } catch (_) {}
+  // Inline fallback (same algorithm as crashMapCodec.js)
+  if (!popDeathXY || !N) return null;
+  const W = canvasW || 3200, H = canvasH || 1800;
+  const grid = new Float32Array(CRASH_DIM);
+  let deaths = 0;
+  for (let i = 0; i < N; i++) {
+    const x = popDeathXY[i * 2], y = popDeathXY[i * 2 + 1];
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    let gx = Math.floor((x / W) * CRASH_GW);
+    let gy = Math.floor((y / H) * CRASH_GH);
+    if (gx < 0) gx = 0; else if (gx >= CRASH_GW) gx = CRASH_GW - 1;
+    if (gy < 0) gy = 0; else if (gy >= CRASH_GH) gy = CRASH_GH - 1;
+    grid[gy * CRASH_GW + gx] += 1;
+    deaths++;
+  }
+  if (deaths < 3) return null;
+  let sumSq = 0;
+  for (let i = 0; i < CRASH_DIM; i++) {
+    const v = Math.log1p(grid[i]);
+    grid[i] = v;
+    sumSq += v * v;
+  }
+  const norm = Math.sqrt(sumSq);
+  if (norm < 1e-9) return null;
+  const inv = 1 / norm;
+  for (let i = 0; i < CRASH_DIM; i++) grid[i] *= inv;
+  return grid;
+}
+
+/**
+ * Archive a crash heat map + optional gate layout / survival meta.
+ * @returns {string|null} id
+ */
+export function archiveCrashMap(crashVec, meta = {}) {
+  if (!_crashDB) return null;
+  if (!(crashVec instanceof Float32Array) || crashVec.length !== CRASH_DIM) return null;
+  const m = {
+    survival: Number(meta.survival) || 0,
+    fitness: Number(meta.fitness) || 0,
+    generation: (meta.generation | 0),
+    nDeaths: (meta.nDeaths | 0),
+    nGates: (meta.nGates | 0),
+    timestamp: Date.now(),
+  };
+  if (Array.isArray(meta.cps)) m.cps = meta.cps;
+  if (meta.causes && typeof meta.causes === 'object') m.causes = meta.causes;
+  if (meta.trackId) m.trackId = meta.trackId;
+  if (meta.bottleneck != null) m.bottleneck = meta.bottleneck | 0;
+  // Wall-geometry signature — adaptive gates refuse to apply a layout whose
+  // sig doesn't match the live track (stops Triangle gates on Rectangle).
+  if (meta.geometrySig) m.geometrySig = String(meta.geometrySig);
+  try {
+    const id = _crashDB.insert(crashVec, null, m);
+    _crashMirror.set(id, { vector: crashVec.slice(), meta: m });
+    schedulePersist();
+    return id;
+  } catch (e) {
+    console.warn('[crash-map] insert failed', e);
+    return null;
+  }
+}
+
+/**
+ * Nearest crash maps in HNSW. Returns [] when disabled / empty / not ready.
+ * Score is cosine similarity in [0,1] (converted from VectorDB distance).
+ */
+export function recommendCrashLayouts(crashVec, k = 5) {
+  if (!_useCrashMaps || !_crashDB || _crashMirror.size === 0) return [];
+  if (!(crashVec instanceof Float32Array) || crashVec.length !== CRASH_DIM) return [];
+  const kk = Math.max(1, Math.min(k | 0, _crashMirror.size));
+  let hits;
+  try {
+    hits = _crashDB.search(crashVec, kk);
+  } catch (e) {
+    console.warn('[crash-map] search failed', e);
+    return [];
+  }
+  if (!hits || !hits.length) return [];
+  const out = [];
+  for (let i = 0; i < hits.length; i++) {
+    const h = hits[i];
+    const id = h.id;
+    const entry = _crashMirror.get(id);
+    // VectorDB cosine distance ∈ [0, 2]; sim = 1 - dist/2 roughly, or 1-dist for unit vectors.
+    // Our vectors are L2-normalised; cosine distance ≈ 1 - cos_sim for some builds.
+    // Prefer metadata from mirror; fall back to hit.metadata.
+    const meta = (entry && entry.meta) || h.metadata || {};
+    // VectorDB cosine DISTANCE: 0 = identical, 2 = opposite (same as tracks).
+    const dist = Number(h.score);
+    const sim = Number.isFinite(dist)
+      ? Math.max(0, Math.min(1, 1 - dist / 2))
+      : 0;
+    out.push({
+      id,
+      similarity: sim,
+      distance: dist,
+      survival: Number(meta.survival) || 0,
+      fitness: Number(meta.fitness) || 0,
+      generation: meta.generation | 0,
+      nGates: meta.nGates | 0,
+      nDeaths: meta.nDeaths | 0,
+      cps: Array.isArray(meta.cps) ? meta.cps : null,
+      causes: meta.causes || null,
+      bottleneck: meta.bottleneck != null ? (meta.bottleneck | 0) : null,
+      geometrySig: meta.geometrySig || null,
+      timestamp: meta.timestamp || 0,
+    });
+  }
+  // Prefer high similarity, then high survival
+  out.sort((a, b) => (b.similarity - a.similarity) || (b.survival - a.survival));
+  return out;
+}
+
+export function crashMapCount() {
+  return _crashMirror.size;
 }
 
 // P1.C — dynamics retrieval controls. UI owns the toggle; `setUseDynamics`
@@ -1265,6 +1418,12 @@ export function info() {
       count: _dynamicsMirror.size,
       hasQuery: !!_queryDynamicsVec,
     },
+    // Crash-map HNSW — heat-grid curriculum memory for adaptive gates.
+    crashMaps: {
+      enabled: !!_useCrashMaps,
+      count: _crashMirror.size,
+      dim: CRASH_DIM,
+    },
     // P3.B — lineage DAG stats. `lineageDag.ready` is the canonical flag for
     // the viewer's "is the graph live?" check. `nodeCount` / `edgeCount` come
     // straight from the wasm side; `droppedEdges` is >0 only if malformed
@@ -1413,6 +1572,8 @@ function openDB() {
       // dynamics vector, keyed by the _dynamicsDB-assigned id — mirrors the
       // brains/tracks store shape.
       if (!db.objectStoreNames.contains(DYNAMICS_STORE)) db.createObjectStore(DYNAMICS_STORE, { keyPath: 'id' });
+      // CRASH_STORE added in IDB v4 — gen-end death heat maps + gate layouts.
+      if (!db.objectStoreNames.contains(CRASH_STORE)) db.createObjectStore(CRASH_STORE, { keyPath: 'id' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -1440,8 +1601,10 @@ export async function hydrate() {
     // readAll is safe. Still, wrap in try/catch to be defensive against
     // partial upgrades from a crashed earlier session.
     let dynamicsRows = [];
+    let crashRows = [];
     const _tIdb = _tStart();
     try { dynamicsRows = await readAll(db, DYNAMICS_STORE); } catch (_) { dynamicsRows = []; }
+    try { crashRows = await readAll(db, CRASH_STORE); } catch (_) { crashRows = []; }
     const [brainRows, trackRows, obsRows] = await Promise.all([
       readAll(db, BRAINS_STORE),
       readAll(db, TRACKS_STORE),
@@ -1453,6 +1616,7 @@ export async function hydrate() {
       tracks: trackRows.length,
       obs: obsRows.length,
       dynamics: dynamicsRows.length,
+      crashMaps: crashRows.length,
     };
     // Tracks first, so upsertTrack-dedup can reference them (not strictly needed
     // since we load by id, but keeps mirror/DB consistent).
@@ -1476,6 +1640,16 @@ export async function hydrate() {
       _dynamicsMirror.set(row.id, { vector: vec, meta: row.meta || {} });
     }
     _tEnd('3c_insert_dynamics', _tDyn);
+    const _tCrash = _tStart();
+    for (const row of crashRows) {
+      const vec = toFloat32(row.vec);
+      if (vec.length !== CRASH_DIM) continue;
+      try {
+        _crashDB.insert(vec, row.id, row.meta || {});
+        _crashMirror.set(row.id, { vector: vec, meta: row.meta || {} });
+      } catch (e) { console.warn('[crash-map] hydrate insert failed', e); }
+    }
+    _tEnd('3c2_insert_crashMaps', _tCrash);
     const _tBrains = _tStart();
     for (const row of brainRows) {
       const vec = toFloat32(row.vec);
@@ -1571,12 +1745,15 @@ export async function persist() {
   _persistInFlight = (async () => {
     const db = await openDB();
     try {
-      const tx = db.transaction([BRAINS_STORE, TRACKS_STORE, OBS_STORE, LORA_STORE, DYNAMICS_STORE], 'readwrite');
+      const storeNames = [BRAINS_STORE, TRACKS_STORE, OBS_STORE, LORA_STORE, DYNAMICS_STORE];
+      if (db.objectStoreNames.contains(CRASH_STORE)) storeNames.push(CRASH_STORE);
+      const tx = db.transaction(storeNames, 'readwrite');
       const brains = tx.objectStore(BRAINS_STORE);
       const tracks = tx.objectStore(TRACKS_STORE);
       const obs = tx.objectStore(OBS_STORE);
       const lora = tx.objectStore(LORA_STORE);
       const dynamics = tx.objectStore(DYNAMICS_STORE);
+      const crashes = db.objectStoreNames.contains(CRASH_STORE) ? tx.objectStore(CRASH_STORE) : null;
       // Full rewrite keeps the logic simple; archive size stays small (hundreds
       // of entries, <100KB serialized) so the write cost is negligible.
       brains.clear();
@@ -1584,6 +1761,7 @@ export async function persist() {
       obs.clear();
       lora.clear();
       dynamics.clear();
+      if (crashes) crashes.clear();
       for (const [id, { vector, meta }] of _brainMirror) {
         brains.put({ id, vec: Array.from(vector), meta });
       }
@@ -1592,6 +1770,11 @@ export async function persist() {
       }
       for (const [id, { vector, meta }] of _dynamicsMirror) {
         dynamics.put({ id, vec: Array.from(vector), meta });
+      }
+      if (crashes) {
+        for (const [id, { vector, meta }] of _crashMirror) {
+          crashes.put({ id, vec: Array.from(vector), meta });
+        }
       }
       for (const [id, { weight, count }] of _observations) {
         obs.put({ id, weight, count });
@@ -1880,6 +2063,7 @@ export async function _debugReset() {
   _brainMirror.clear();
   _trackMirror.clear();
   _dynamicsMirror.clear();
+  _crashMirror.clear();
   _observations.clear();
   _insertionOrder = [];
   _queryDynamicsVec = null;

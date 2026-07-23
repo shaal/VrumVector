@@ -106,6 +106,7 @@ function phaseToLayout(phase){
             rightPanel.innerHTML = `
             <button class='controlButton' id='pause' onclick='pauseGame()'>Pause</button>
             <button class='controlButton secondary' id='customizeTrackBtn' onclick='customizeTrack()' title='Draw your own track shape, reset checkpoints, retune physics'>✏️ Customize Track</button>
+            <button class='controlButton' id='demoModeBtn' onclick='window.DemoPresentation&&window.DemoPresentation.startDemoMode()' title='Cinematic demo: follow champion, story beats, readable swarm (D)'>🎬 Demo mode</button>
 
             <!-- Live-data region: inputCanvas + graphCanvas get appended here by
                  showInputCanvas/showGraphCanvas so they stay at the top of the
@@ -120,9 +121,9 @@ function phaseToLayout(phase){
             </div>
 
             <div id="trainingPresets" style="display:flex; gap:.35em; margin:.35em 0; flex-wrap:wrap;">
-                <button class='controlButton' style='flex:1;min-width:0;' onclick="applyTrainingPreset('fresh')" title="Random brains: N=500, 2×, 10s, variance 0.30">🌱 Fresh</button>
-                <button class='controlButton' style='flex:1;min-width:0;' onclick="applyTrainingPreset('grind')" title="Elite drives laps: N=500, 20×, 15s, variance 0.20">🏎️ Grind</button>
-                <button class='controlButton' style='flex:1;min-width:0;' onclick="applyTrainingPreset('polish')" title="Refine competent brain: N=1000, 2×, 25s, variance 0.05">✨ Polish</button>
+                <button class='controlButton' style='flex:1;min-width:0;' onclick="applyTrainingPreset('fresh')" title="Cold start: N=500, 2×, 15s, variance 0.25, cons-init 0.70">🌱 Fresh</button>
+                <button class='controlButton' style='flex:1;min-width:0;' onclick="applyTrainingPreset('grind')" title="Farm gens + archive: N=600, 20×, 15s, variance 0.18">🏎️ Grind</button>
+                <button class='controlButton' style='flex:1;min-width:0;' onclick="applyTrainingPreset('polish')" title="Refine lap times: N=800, 2×, 25s, variance 0.05">✨ Polish</button>
             </div>
             <details id="trainingTuning" class="more-actions" open>
                 <summary>Training tuning (sliders)</summary>
@@ -140,8 +141,8 @@ function phaseToLayout(phase){
                         <span>Sim Speed:</span>
                         <select id="simSpeedInput" onchange="setSimSpeed(this.value)" style="flex:1;">
                             <option value="0.5">0.5&times; (slow)</option>
-                            <option value="1" selected>1&times; (real)</option>
-                            <option value="2">2&times;</option>
+                            <option value="1">1&times; (real)</option>
+                            <option value="2" selected>2&times;</option>
                             <option value="5">5&times;</option>
                             <option value="20">20&times;</option>
                             <option value="100">100&times; (max)</option>
@@ -197,12 +198,37 @@ function phaseToLayout(phase){
             bottomText.innerHTML = `
                 <h1>Train your model!</h1>
             `;
+            // Soft story for first-time visitors (cinema HUD also narrates).
+            try {
+                if (window.__firstStart && window.DemoPresentation && window.DemoPresentation.setStory){
+                    window.DemoPresentation.setStory(
+                        'Press ▶ Start Training — or 🎬 Demo mode for a guided cinematic run.',
+                        8000
+                    );
+                }
+            } catch (_) {}
+            // Reflect live globals. Round-length slider is bound to `seconds`
+            // but the setter writes `nextSeconds` — keep both in sync for the
+            // initial paint (begin() also copies nextSeconds → seconds).
+            if (typeof nextSeconds === 'number' && (typeof seconds !== 'number' || !Number.isFinite(seconds))) {
+                seconds = nextSeconds;
+            }
             const idArray = ["batchSize", "seconds", "mutateValue", "conservativeInit"];
             for (let i = 0; i<idArray.length; i++){
-                document.getElementById(idArray[i]+"Input").value = window[idArray[i]];
-                document.getElementById(idArray[i]+"Output").value = document.getElementById(idArray[i]+"Output").name + ": " +  window[idArray[i]];
-                document.getElementById(idArray[i]+"Input").setAttribute("value", window[idArray[i]]);
+                const key = idArray[i];
+                const val = (key === 'seconds')
+                    ? (typeof nextSeconds === 'number' ? nextSeconds : window.seconds)
+                    : window[key];
+                const input = document.getElementById(key+"Input");
+                const output = document.getElementById(key+"Output");
+                if (!input || !output) continue;
+                input.value = val;
+                output.value = output.name + ": " + val;
+                input.setAttribute("value", val);
             }
+            // Sim-speed <select> — match current simSpeed (default 2×).
+            const ssEl = document.getElementById('simSpeedInput');
+            if (ssEl && typeof simSpeed !== 'undefined') ssEl.value = String(simSpeed);
             // Move "Import / Export Brain" and "More actions" panels to sit
             // below #rv-panel (Vector Memory) so they live at the bottom of
             // the right column instead of above it. Order placed:
