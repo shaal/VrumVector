@@ -126,7 +126,10 @@
     const host = document.getElementById('canvasDiv') || document.body;
     const el = document.createElement('div');
     el.id = 'cinema-controls';
+    // On narrow screens the view chips start collapsed behind "Views" so
+    // they don't cover the track (see style.css @media max-width 480px).
     el.innerHTML =
+      '<button type="button" class="cinema-views-toggle" aria-expanded="false" title="Show view options">Views</button>' +
       '<button type="button" data-act="follow" title="Follow best car (F)">Follow</button>' +
       '<button type="button" data-act="view3d" title="3D perspective (3)">3D</button>' +
       '<button type="button" data-act="trails" title="Motion trails (T)">Trails</button>' +
@@ -134,6 +137,14 @@
       '<button type="button" data-act="rays" title="Champion sensor rays (R)">Rays</button>' +
       '<button type="button" data-act="demo" title="Cinematic demo (M) — W/A/S/D reserved for driving" class="cinema-demo">Demo</button>';
     el.addEventListener('click', (ev) => {
+      const toggle = ev.target.closest('.cinema-views-toggle');
+      if (toggle) {
+        const open = !el.classList.contains('is-expanded');
+        el.classList.toggle('is-expanded', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        toggle.textContent = open ? 'Hide' : 'Views';
+        return;
+      }
       const btn = ev.target.closest('[data-act]');
       if (!btn) return;
       const act = btn.getAttribute('data-act');

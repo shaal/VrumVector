@@ -2524,6 +2524,151 @@ label {
     }
 }
 
+/* ---------- Phone / very narrow (≈320–480px) -------------------------------
+   Track was buried under stacked HUDs: metrics (fixed center), cinema stats,
+   story line, phase banner, view chips, and help FABs. On narrow screens we
+   hide redundant chrome, collapse view chips behind "Views", and park FABs
+   in a top-right stack so the canvas keeps the middle of the screen. */
+.cinema-views-toggle {
+    display: none; /* desktop: unused — all chips stay visible */
+}
+@media (max-width: 480px) {
+    /* Redundant with #cinema-hud — was stacked on top of Gen/Alive at z 99998. */
+    #metrics-hud {
+        display: none !important;
+    }
+
+    #cinema-hud {
+        top: 6px;
+        left: 6px;
+        right: auto;
+        /* Leave a column for the top-right FAB stack. */
+        max-width: calc(100% - 52px);
+        padding: 4px 8px;
+        font-size: 10px;
+        line-height: 1.3;
+        z-index: 10;
+    }
+    #cinema-hud .cinema-hud-row {
+        gap: 4px 8px;
+    }
+    /* Story wraps into a multi-line block that covers the track. */
+    #cinema-hud .cinema-story {
+        display: none !important;
+    }
+    /* Keep the densest three stats; drop the rest on phone. */
+    #cinema-hud [data-c="laps"],
+    #cinema-hud [data-c="speed"] {
+        display: none;
+    }
+
+    #bottomText {
+        display: none !important;
+    }
+
+    /* View chips collapsed by default — only the Views toggle shows. */
+    .cinema-views-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        appearance: none;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        background: rgba(12, 14, 18, 0.82);
+        color: rgba(243, 239, 230, 0.95);
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+        border-radius: 999px;
+        padding: 6px 12px;
+        font: 600 11px/1.2 var(--font-body);
+        letter-spacing: 0.02em;
+        cursor: pointer;
+    }
+    #cinema-controls {
+        bottom: 8px;
+        left: 8px;
+        right: auto;
+        max-width: calc(100% - 56px); /* clear panelToggle / FAB column */
+        justify-content: flex-start;
+        gap: 4px;
+    }
+    #cinema-controls:not(.is-expanded) > [data-act] {
+        display: none !important;
+    }
+    #cinema-controls.is-expanded {
+        max-width: calc(100% - 16px);
+        flex-wrap: wrap;
+    }
+    #cinema-controls.is-expanded > [data-act] {
+        display: inline-flex;
+    }
+    #cinema-controls button {
+        padding: 5px 8px;
+        font-size: 10px;
+    }
+
+    /* Help FABs: top-right stack, smaller — free the bottom track edge. */
+    .eli15-fab {
+        top: 6px !important;
+        right: 6px !important;
+        bottom: auto !important;
+        left: auto !important;
+        width: 36px !important;
+        height: 36px !important;
+        font-size: 16px !important;
+    }
+    .eli15-tour-fab {
+        top: 46px !important;
+        right: 6px !important;
+        bottom: auto !important;
+        left: auto !important;
+        width: 36px !important;
+        height: 36px !important;
+        font-size: 16px !important;
+        padding: 0 !important;
+    }
+    .github-fab {
+        top: 86px !important;
+        right: 6px !important;
+        bottom: auto !important;
+        left: auto !important;
+        width: 36px !important;
+        height: 36px !important;
+    }
+    .github-fab-icon { font-size: 16px !important; }
+
+    /* Panel edge pill sits bottom-right without covering Views. */
+    #panelToggle {
+        bottom: 8px;
+        right: 6px;
+        width: 36px;
+        height: 28px;
+    }
+
+    #fullDisplay {
+        padding: 4px;
+        gap: 4px;
+    }
+    /* Pin the 16:9 track to the top of the cell so HUDs sit on the frame
+       instead of floating in a large empty band above a vertically-centered
+       canvas (read as "data covering the track" on phones). */
+    #canvasDiv {
+        align-items: flex-start;
+        justify-content: center;
+    }
+    #cinema-hud {
+        /* Sit just inside the track frame once canvas is top-aligned. */
+        top: 8px;
+        left: 8px;
+    }
+    .start-overlay-btn {
+        min-width: min(88vw, 240px);
+        padding: 0.85em 1em 0.75em;
+    }
+    .start-overlay-hint {
+        font-size: 0.65rem;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     #cinema-controls button { transition: none; }
 }
