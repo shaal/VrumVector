@@ -253,10 +253,21 @@ let pause=true;
 var phase = 0; //0 welcome, 1 track, 2 checkpoints, 3 physics, 4 training
 var maxSpeed = 15;
 // Default entry flow: land straight on phase 4 (training) with a preloaded
-// rectangle track so visitors see cars racing immediately behind a prominent
-// Start button. The old draw-a-track-from-scratch flow is still one click
-// away via "Customize Track" (see customizeTrack() in buttonResponse.js) and
-// can also be forced with `?edit=1` on the URL for dev use.
+// rectangle track. The sim stays paused until the user hits Start — no
+// auto-run on page load. The old draw-a-track-from-scratch flow is still one
+// click away via "Customize Track" (buttonResponse.js) and can also be forced
+// with `?edit=1` on the URL for dev use.
+//
+// __awaitingStart — session gate: every fresh page load waits for an explicit
+//   Start / Demo click before the worker steps. Cleared by pauseGame().
+//   Inline script in index.html sets this true for first paint; do NOT force
+//   it back to true here if an early Start click already cleared the gate
+//   while the rest of main.js was still evaluating.
+// __firstStart — first-ever visitor (no trainCount yet); drives CTA copy and
+//   the stronger amber Start button styling.
+if (window.__awaitingStart !== false) {
+    window.__awaitingStart = true;
+}
 window.__firstStart = !localStorage.getItem('trainCount');
 if (new URLSearchParams(location.search).get('edit') === '1') {
     nextPhase(); // → phase 1 (track draw)
@@ -742,7 +753,13 @@ simWorker.onmessage = (ev) => {
     switch (m.type){
         case 'ready':
             workerReady = true;
-            if (pendingBegin){ const pb = pendingBegin; pendingBegin = null; performBegin(pb.N); }
+            // Never auto-start a pending begin while the Start CTA is still
+            // waiting — boot used to race performBegin here and freeze input.
+            if (pendingBegin && !window.__awaitingStart){
+                const pb = pendingBegin; pendingBegin = null; performBegin(pb.N);
+            } else if (window.__awaitingStart){
+                pendingBegin = null;
+            }
             break;
         case 'snapshot':
             handleSnapshot(m);
@@ -1207,6 +1224,30 @@ function buildBrainsBuffer(N){
 // -----------------------------------------------------------------------------
 function begin(){
     seconds = nextSeconds;
+    // Page-load gate: while awaiting an explicit Start click, do NOT build
+    // the 500-car population or touch the worker. That work used to run on
+    // boot and blocked the main thread / delayed a responsive Start CTA for
+    // multiple seconds. pauseGame() clears __awaitingStart then calls begin()
+    // again to actually engage the worker.
+    if (window.__awaitingStart) {
+        pause = true;
+        computeStartInfoInPlace(currentCheckpointList());
+        // Lightweight placeholders so phase-3 tooling still has objects if the
+        // user hops into Customize Track before starting. AI swarm is deferred.
+        try {
+            playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
+            playerCar2 = new Car(startInfo.x, startInfo.y, 30, 50, "WASD", maxSpeed, startInfo.heading);
+        } catch (_) {}
+        frameCount = 0;
+        wallStart = performance.now();
+        _simStepAccum = 1;
+        _lastTickWall = performance.now();
+        bestCar = null;
+        _bestProxyEpoch = -1;
+        latestSnapshot = null;
+        pendingBegin = null;
+        return;
+    }
     pause = false;
     computeStartInfoInPlace(currentCheckpointList());
     playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
@@ -1245,12 +1286,11 @@ function performBegin(N){
         workerInited = true;
     }
     const brains = buildBrainsBuffer(N);
-    // Keep worker speed/pause aligned with main defaults. setSimSpeed() only
-    // posts when the user moves the dropdown — without this, a default
-    // simSpeed≠1 never reaches the worker until the first manual change.
+    // Keep worker speed aligned with main defaults. setSimSpeed() only posts
+    // when the user moves the dropdown — without this, a default simSpeed≠1
+    // never reaches the worker until the first manual change.
     try {
         simWorker.postMessage({ type: 'setSimSpeed', v: simSpeed });
-        simWorker.postMessage({ type: 'setPause', pause: !!pause });
     } catch (_) {}
     simWorker.postMessage({
         type: 'begin',
@@ -1259,6 +1299,12 @@ function performBegin(N){
         poseJitter: Object.assign({ radiusPx: 0, angleDeg: 0, maxAttempts: 8 }, window.__poseJitter || {}),
         brains
     }, [brains.buffer]);
+    // Worker handleBegin always sets pause=false and starts the step loop.
+    // Re-assert the intended pause state AFTER begin so a pre-start page
+    // load keeps the swarm frozen until the user opts in.
+    try {
+        simWorker.postMessage({ type: 'setPause', pause: !!pause });
+    } catch (_) {}
     // Co-start the A/B baseline worker so both canvases begin each generation
     // on the same wall-clock tick. Without this, B auto-restarts on its own
     // genEnd (no archive/observe/seed delay) and drifts ahead of A.
@@ -1403,12 +1449,17 @@ function performNextBatch(genData){
 }
 
 begin();
-// First-visit: keep the sim paused so the user clicks the "▶ Start Training"
-// CTA. begin() flips pause=false, so we re-pause here AFTER it runs. Phase-4
-// layout already relabels the pause button; this just makes sure the sim
-// doesn't start stepping before the user opts in.
-if (window.__firstStart){
+// Page-load gate: keep the sim paused until the user clicks Start / Demo.
+// Population build is deferred (see begin() early-return on __awaitingStart).
+if (window.__awaitingStart){
     pause = true;
+}
+// Honor Start clicks that arrived while classic scripts were still loading.
+if (window.__pendingStart){
+    window.__pendingStart = false;
+    try { pauseGame(); } catch (_) {}
+} else {
+    try { if (typeof syncStartOverlay === 'function') syncStartOverlay(); } catch (_) {}
 }
 animate();
 
@@ -1623,7 +1674,11 @@ function drawCarQuad(x, y, angle){
 function drawBestCar(bc){
     ctx.fillStyle = bc.damaged ? "gray" : "rgb(227, 138, 15)";
     drawCarQuad(bc.x, bc.y, bc.angle);
-    if (bc.sensor && bc.sensor.rays && bc.sensor.rays.length){
+    // Honor DemoPresentation rays toggle when the presentation layer is
+    // present but fell through to this legacy draw path.
+    const raysOn = !(window.DemoPresentation && window.DemoPresentation.state
+        && window.DemoPresentation.state.rays === false);
+    if (raysOn && bc.sensor && bc.sensor.rays && bc.sensor.rays.length){
         for (let i = 0; i < bc.sensor.rays.length; i++){
             const ray = bc.sensor.rays[i];
             const reading = bc.sensor.readings[i];

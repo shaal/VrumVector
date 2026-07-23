@@ -12,8 +12,9 @@
 //   • Optional 3D perspective view of the same 2D world
 //   • Demo mode: auto-start, follow, story beats
 //
-// URL flags: ?demo=1  ?follow=1  ?view=3d  ?trails=0  ?heatmap=0
-// Keyboard:  F follow · 3 3D · T trails · H heatmap · D demo · 0 reset cam
+// URL flags: ?demo=1  ?follow=1  ?view=3d  ?trails=0  ?heatmap=0  ?rays=0
+// Keyboard:  F follow · 3 3D · T trails · H heatmap · R rays · M demo · 0 reset cam
+// Note: W/A/S/D are reserved for driving and never bind presentation toggles.
 
 (function (global) {
   'use strict';
@@ -33,6 +34,7 @@
     view3d: params.get('view') === '3d',
     trails: flag('trails', true),
     heatmap: flag('heatmap', true),
+    rays: flag('rays', true),
     rankColors: true,
     // camera
     camScale: 1,
@@ -96,7 +98,7 @@
     syncControlButtons();
     setStory(state.demoMode
       ? 'Demo mode — watch a swarm learn to drive.'
-      : 'Train a neural net to race. Press D for demo mode.', 6000);
+      : 'Train a neural net to race. Press M for demo mode (W/A/S/D drive).', 6000);
   }
 
   function ensureHud() {
@@ -129,7 +131,8 @@
       '<button type="button" data-act="view3d" title="3D perspective (3)">3D</button>' +
       '<button type="button" data-act="trails" title="Motion trails (T)">Trails</button>' +
       '<button type="button" data-act="heatmap" title="Crash heatmap (H)">Heat</button>' +
-      '<button type="button" data-act="demo" title="Cinematic demo (D)" class="cinema-demo">Demo</button>';
+      '<button type="button" data-act="rays" title="Champion sensor rays (R)">Rays</button>' +
+      '<button type="button" data-act="demo" title="Cinematic demo (M) — W/A/S/D reserved for driving" class="cinema-demo">Demo</button>';
     el.addEventListener('click', (ev) => {
       const btn = ev.target.closest('[data-act]');
       if (!btn) return;
@@ -138,6 +141,7 @@
       else if (act === 'view3d') setView3d(!state.view3d);
       else if (act === 'trails') { state.trails = !state.trails; if (!state.trails) state.trail.length = 0; }
       else if (act === 'heatmap') state.heatmap = !state.heatmap;
+      else if (act === 'rays') setRays(!state.rays);
       else if (act === 'demo') startDemoMode();
       syncControlButtons();
     });
@@ -152,6 +156,7 @@
       view3d: state.view3d,
       trails: state.trails,
       heatmap: state.heatmap,
+      rays: state.rays,
       demo: state.demoMode,
     };
     state.controlsEl.querySelectorAll('[data-act]').forEach((btn) => {
@@ -167,13 +172,30 @@
       const t = e.target;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
       const k = e.key;
+      // Never steal driving keys. WASD controls the player car (phase 3) and
+      // must not toggle Demo / Follow / other presentation chrome. Demo used
+      // to bind D, which flipped Follow on every right-turn press.
+      if (k === 'w' || k === 'a' || k === 's' || k === 'd' ||
+          k === 'W' || k === 'A' || k === 'S' || k === 'D') {
+        return;
+      }
+      // While the user is actively driving (physics-tune phase), ignore all
+      // presentation hotkeys so arrow keys and free driving stay clean.
+      try {
+        if (typeof phase !== 'undefined' && phase === 3) return;
+      } catch (_) {}
       if (k === 'f' || k === 'F') { setFollow(!state.followBest); syncControlButtons(); }
       else if (k === '3') { setView3d(!state.view3d); syncControlButtons(); }
       else if (k === 't' || k === 'T') { state.trails = !state.trails; if (!state.trails) state.trail.length = 0; syncControlButtons(); }
       else if (k === 'h' || k === 'H') { state.heatmap = !state.heatmap; syncControlButtons(); }
-      else if (k === 'd' || k === 'D') { startDemoMode(); syncControlButtons(); }
+      else if (k === 'r' || k === 'R') { setRays(!state.rays); syncControlButtons(); }
+      else if (k === 'm' || k === 'M') { startDemoMode(); syncControlButtons(); }
       else if (k === '0') { resetCamera(); }
     });
+  }
+
+  function setRays(on) {
+    state.rays = !!on;
   }
 
   // --------------------------------------------------------------- road cache
@@ -785,8 +807,8 @@
     const x = best.x, y = best.y, ang = best.angle;
     if (state.view3d) {
       drawProjectedCar(ctx, x, y, ang, CHAMPION, 1, state.carHeight * 1.15);
-      // Sensor rays
-      if (best.sensor && best.sensor.rays && best.sensor.rays.length) {
+      // Sensor rays (toggle via Rays chip / R)
+      if (state.rays && best.sensor && best.sensor.rays && best.sensor.rays.length) {
         for (let i = 0; i < best.sensor.rays.length; i++) {
           const ray = best.sensor.rays[i];
           const reading = best.sensor.readings[i];
@@ -832,7 +854,7 @@
     ctx.stroke();
     ctx.restore();
 
-    if (best.sensor && best.sensor.rays && best.sensor.rays.length) {
+    if (state.rays && best.sensor && best.sensor.rays && best.sensor.rays.length) {
       for (let i = 0; i < best.sensor.rays.length; i++) {
         const ray = best.sensor.rays[i];
         const reading = best.sensor.readings[i];
@@ -1006,12 +1028,18 @@
       if (ss) ss.value = '5';
     } catch (_) {}
 
-    // Unpause if waiting on first start.
+    // Unpause / first-start: pauseGame() clears __awaitingStart and calls
+    // begin() to build the swarm. A second begin() is only needed when the
+    // sim was already past the Start gate (restart with demo knobs).
     try {
-      if (typeof pause !== 'undefined' && pause && typeof pauseGame === 'function') {
+      if (window.__awaitingStart && typeof pauseGame === 'function') {
         pauseGame();
+      } else if (typeof pause !== 'undefined' && pause && typeof pauseGame === 'function') {
+        pauseGame();
+        if (typeof begin === 'function') begin();
+      } else if (typeof begin === 'function') {
+        begin();
       }
-      if (typeof begin === 'function') begin();
     } catch (_) {}
 
     state.demoStarted = true;
@@ -1066,6 +1094,7 @@
     onGenEnd,
     setFollow,
     setView3d,
+    setRays,
     resetCamera,
     startDemoMode,
     setStory,

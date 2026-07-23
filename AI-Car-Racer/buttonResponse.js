@@ -1,20 +1,109 @@
 function pauseGame(){
-    pause=!pause;
+    // App not booted yet (classic scripts still loading). Queue the intent;
+    // main.js drains __pendingStart after begin/animate are defined.
+    if (typeof pause === 'undefined' || typeof phase === 'undefined'){
+        window.__pendingStart = true;
+        markStartOverlayStarting();
+        return;
+    }
+
+    // First Start click: leave the page-load gate and build+run the swarm.
+    // (Population build is deferred until this moment so the Start CTA is
+    // clickable as soon as the overlay paints — not after a multi-second
+    // worker/brain setup.)
+    if (window.__awaitingStart){
+        window.__awaitingStart = false;
+        window.__firstStart = false;
+        window.__pendingStart = false;
+        pause = false;
+        const btn = document.getElementById("pause");
+        if (btn){
+            btn.textContent = "Pause";
+            btn.classList.remove('start-cta');
+        }
+        markStartOverlayStarting();
+        try { if (typeof syncStartOverlay === 'function') syncStartOverlay(); } catch (_) {}
+        if (typeof begin === 'function'){
+            begin();
+        } else {
+            // main.js still evaluating — re-queue so the boot footer can start.
+            window.__pendingStart = true;
+        }
+        return;
+    }
+
+    // Normal Pause / Play toggle after training has started.
+    pause = !pause;
     const btn = document.getElementById("pause");
     if (btn){
-        btn.textContent = pause?"Play":"Pause";
-        // First-press of the Start CTA graduates the button to the normal
-        // Pause/Play cycle.
+        btn.textContent = pause ? "Play" : "Pause";
         btn.classList.remove('start-cta');
     }
-    window.__firstStart = false;
     // Halt / resume the worker's AI step loop too. Without this, sim-worker
     // would keep burning CPU while the user has paused — and on resume the
     // accumulator would stampede a huge backlog of physics steps at once.
     if (typeof simWorker !== 'undefined' && simWorker){
         simWorker.postMessage({ type: 'setPause', pause });
     }
+    try { if (typeof syncStartOverlay === 'function') syncStartOverlay(); } catch (_) {}
 }
+
+function markStartOverlayStarting(){
+    const ob = document.getElementById('startOverlayBtn');
+    if (!ob) return;
+    ob.classList.add('is-starting');
+    ob.disabled = true;
+    const label = ob.querySelector('.start-overlay-label');
+    if (label) label.textContent = 'Starting\u2026';
+}
+
+// Canvas-centered Start overlay — present in index.html for first paint,
+// kept in sync here once the app boots. Mirrors the panel's ▶ Start CTA.
+function syncStartOverlay(){
+    let el = document.getElementById('startOverlay');
+    // Show while awaiting Start on the training screen. Before main.js sets
+    // `phase`, treat as showable so the static HTML overlay stays visible
+    // during script load (that was the multi-second "can't click yet" gap).
+    const show = !!window.__awaitingStart &&
+        (typeof phase === 'undefined' || phase === 4);
+    if (!show){
+        if (el) el.hidden = true;
+        return;
+    }
+    if (!el){
+        el = document.createElement('div');
+        el.id = 'startOverlay';
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-modal', 'true');
+        el.setAttribute('aria-label', 'Start training');
+        el.innerHTML =
+            '<button type="button" class="start-overlay-btn" id="startOverlayBtn">' +
+                '<span class="start-overlay-icon" aria-hidden="true">▶</span>' +
+                '<span class="start-overlay-label">Start Training</span>' +
+                '<span class="start-overlay-hint">or press the Start button in the panel</span>' +
+            '</button>';
+        const host = document.getElementById('canvasDiv') || document.body;
+        host.appendChild(el);
+    }
+    const btn = el.querySelector('#startOverlayBtn');
+    if (btn && btn.dataset.earlyBound !== '1' && btn.dataset.bound !== '1'){
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+            if (typeof pauseGame === 'function') pauseGame();
+            else window.__pendingStart = true;
+        });
+    }
+    // Reset busy state when re-showing (e.g. Customize Track → back to train).
+    if (btn && window.__awaitingStart){
+        btn.disabled = false;
+        btn.classList.remove('is-starting');
+        const label = btn.querySelector('.start-overlay-label');
+        if (label) label.textContent = 'Start Training';
+    }
+    el.hidden = false;
+}
+window.syncStartOverlay = syncStartOverlay;
+window.markStartOverlayStarting = markStartOverlayStarting;
 
 // Route a phase-4 user back into the track editor. Mirrors backPhase()'s
 // cleanup (pause the worker, close any SONA trajectory) but sets phase=0

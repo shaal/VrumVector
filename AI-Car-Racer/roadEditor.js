@@ -4,11 +4,10 @@ class roadEditor{
         this.checkPointMode=false;
         this.editMode = true;
         // Fresh visitors land with the Rectangle preset exactly (same walls
-        // AND same 4-gate bottom-right-spawn checkpoint layout as clicking
-        // "Load preset: Rectangle" from the dropdown). If TRACK_PRESETS is
-        // loaded by the time we boot (it's a sibling script), mirror it;
-        // otherwise fall back to the hardcoded values that match the preset
-        // at the time of this file's authoring. localStorage always wins.
+        // AND same checkpoint layout as clicking "Load preset: Rectangle").
+        // If TRACK_PRESETS is loaded by the time we boot, mirror it;
+        // otherwise fall back to the hardcoded values that match the preset.
+        // localStorage always wins over both.
         const rectPreset = (typeof window !== 'undefined' && window.TRACK_PRESETS && window.TRACK_PRESETS[0]) || null;
         if(localStorage.getItem("trackInner") && localStorage.getItem("trackOuter")){
             this.points=JSON.parse(localStorage.getItem("trackInner"));
@@ -32,13 +31,14 @@ class roadEditor{
             ]);
         }
         else{
-            // Fallback mirroring Rectangle preset's 4-gate layout: bottom-right
-            // spawn, right-top, top-mid, left-mid.
+            // Fallback mirroring Rectangle preset's 5-gate layout: diagonal
+            // lower/upper-right spawn pair, top-mid, left-mid, bottom-mid.
             this.checkPointListEditor = [
-                [{x:3100,y:1200},{x:2450,y:1200}],
-                [{x:3100,y:600 },{x:2450,y:600 }],
+                [{x:3128,y:1316},{x:2418,y:1068}],
+                [{x:3135,y:376 },{x:2414,y:725 }],
                 [{x:1600,y:300 },{x:1600,y:700 }],
-                [{x:250, y:900 },{x:650, y:900 }]
+                [{x:250, y:900 },{x:650, y:900 }],
+                [{x:1600,y:1060},{x:1600,y:1565}]
             ];
         }
         this.drag_point = -1;

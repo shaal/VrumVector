@@ -44,21 +44,39 @@ let seconds = 15;
 let startInfo = null;
 let _accum = 1;
 let _lastTickWall = 0;
-const MAX_STEPS = 60;
-let _loopHandle = null;
+// Soft per-tick step safety (overridden by maxStepsForSpeed at runtime).
+const MAX_STEPS = 60; // legacy name; runtime uses maxAccumForSpeed / maxStepsPerTick
 let bestEpoch = 0;
 
-// Per-tick wall-time budget. A single tick runs steps until it's been
-// stepping for ~TICK_BUDGET_MS, then yields + posts a snapshot. Two regimes:
-//   - Heavy sim (N=10k, perStep≈10ms): budget hits after ~2 steps →
-//     snapshots flow at ~50Hz, visuals stay smooth. Sim throughput is
-//     whatever the CPU permits; worker just doesn't hog it.
-//   - Light sim (N<500, perStep<1ms): hundreds of steps fit in one budget →
-//     full simSpeed reached without being throttled by setTimeout(0)'s
-//     ~4ms clamp. Critical for the N≈100, simSpeed=100× "fast training"
-//     use case that the old main-thread loop could hit but a naive
-//     "few steps per tick" worker cannot.
+// Per-tick wall-time budget base. Scaled up with simSpeed so 100× can burn
+// real CPU instead of yielding every 20ms after only a handful of steps.
+// Heavy N still self-limits via the budget; light/mid N at high speed needs
+// a larger slice to approach the requested multiplier.
 const TICK_BUDGET_MS = 20;
+
+// Max sim-frame backlog kept across ticks. Old hard cap of 60 dropped almost
+// all of a 100× accumulator every tick (100× × 16ms × 60fps ≈ 96 steps
+// requested, 60 kept, rest discarded) — effective rate collapsed to ~1–2×.
+function maxAccumForSpeed(ss) {
+    // Keep up to ~1s of sim-time debt so temporary main-thread stalls can
+    // catch up, without letting the queue grow without bound.
+    const s = (Number.isFinite(ss) && ss > 0) ? ss : 1;
+    return Math.max(60, Math.ceil(s * 60));
+}
+function tickBudgetForSpeed(ss) {
+    const s = (Number.isFinite(ss) && ss > 0) ? ss : 1;
+    if (s <= 2) return 16;
+    if (s <= 5) return 24;
+    if (s <= 20) return 40;
+    if (s <= 50) return 60;
+    return 100; // 100× — burn hard; main thread paints from latest snapshot only
+}
+function maxStepsPerTick(ss) {
+    // Don't artificially stop early when budget remains; allow a full
+    // second of sim per tick at high speed (budget will cut first if heavy).
+    const s = (Number.isFinite(ss) && ss > 0) ? ss : 1;
+    return Math.max(60, Math.ceil(s * 60));
+}
 
 // Flat-brain layout — see brainCodec.js on the main side. Hard-coded here so
 // the worker doesn't have to importScripts a module (importScripts only loads
@@ -75,7 +93,11 @@ self.onmessage = (ev) => {
     switch (m.type) {
         case 'init':        handleInit(m);        break;
         case 'begin':       handleBegin(m);       break;
-        case 'setSimSpeed': simSpeed = m.v;       break;
+        case 'setSimSpeed':
+            simSpeed = (Number.isFinite(m.v) && m.v > 0) ? m.v : 1;
+            // Avoid a huge catch-up step right after a speed jump.
+            _lastTickWall = performance.now();
+            break;
         case 'setPause':    handlePause(m.pause); break;
         case 'setTraction': self.traction = m.v;  break;
         case 'setMaxSpeed': self.maxSpeed = m.v;  break;
@@ -215,13 +237,25 @@ function handleBegin(m) {
     _lastTickWall = performance.now();
     pause = false;
     startLoop();
-
     self.postMessage({
         type: 'debug',
         event: 'beginBuilt',
         N,
         ms: performance.now() - _t0
     });
+    // Publish one pose snapshot immediately so the main thread can paint the
+    // parked swarm even when page-load re-pauses before the first step ticks.
+    // steps=0 keeps the HUD honest ("not stepping yet"). Must run after
+    // beginBuilt so a postSnapshot throw doesn't hide the build timing.
+    try {
+        postSnapshot(0, 0);
+    } catch (e) {
+        self.postMessage({
+            type: 'debug',
+            event: 'previewSnapFail',
+            err: (e && e.message) || String(e)
+        });
+    }
 }
 
 function handlePause(p) {
@@ -255,55 +289,70 @@ function flattenBrain(brain) {
 }
 
 // --- main loop ---------------------------------------------------------------
+// MessageChannel scheduling avoids the browser's setTimeout(0) ~4ms clamp,
+// which capped throughput at ~250 ticks/s and made high simSpeed starve.
+
+const _tickChannel = new MessageChannel();
+let _loopScheduled = false;
+_tickChannel.port1.onmessage = () => {
+    _loopScheduled = false;
+    if (pause) return;
+    stepOnce();
+    // Re-arm immediately while running so the worker stays hot at high speed.
+    if (!pause) scheduleTick();
+};
+
+function scheduleTick() {
+    if (_loopScheduled) return;
+    _loopScheduled = true;
+    _tickChannel.port2.postMessage(null);
+}
 
 function startLoop() {
-    if (_loopHandle != null) return;
-    const tick = () => {
-        _loopHandle = setTimeout(tick, 0);
-        if (pause) return;
-        stepOnce();
-    };
-    _loopHandle = setTimeout(tick, 0);
+    scheduleTick();
 }
 
 function computeStride(ss) {
+    // Heavier LOD at high speed: non-champion AI reuse last controls more often.
     if (ss <= 2) return 1;
     if (ss <= 5) return 2;
-    if (ss <= 20) return 3;
-    return 4;
+    if (ss <= 20) return 4;
+    if (ss <= 50) return 8;
+    return 16;
 }
 
 let _prevTickEnd = 0;
 const WORKER_HITCH_MS = 60;
+// At high speed, snapshot less often so postMessage packing doesn't dominate.
+let _stepsSinceSnap = 0;
 
 function stepOnce() {
     const now = performance.now();
-    // Gap between end of the previous tick and start of this one. Normally
-    // ~4-10ms (setTimeout(0) clamp). Large values here indicate the worker
-    // thread was paused — usually GC, sometimes OS scheduling.
+    // Gap between end of the previous tick and start of this one.
     const tickGap = _prevTickEnd > 0 ? now - _prevTickEnd : 0;
     let dt = (now - _lastTickWall) / 1000;
     _lastTickWall = now;
-    if (dt > 0.25) dt = 0.25;
+    // Slightly larger clamp at high speed so a single long tick after archive
+    // work still converts into useful catch-up instead of being truncated to
+    // 0.25s of wall (which dropped most of a 100× burst under the old cap).
+    const dtCap = simSpeed >= 50 ? 0.5 : 0.25;
+    if (dt > dtCap) dt = dtCap;
     _accum += simSpeed * dt * 60;
-    // Cap accumulator against runaway catch-up after a stall. MAX_STEPS
-    // bounds the worst-case backlog we'll try to absorb; anything beyond
-    // that is dropped so sim-time falls behind wall-time gracefully.
-    if (_accum > MAX_STEPS) _accum = MAX_STEPS;
-    // Drain up to floor(_accum) steps, but break as soon as we've burned
-    // TICK_BUDGET_MS of wall time. Remaining steps go back into the
-    // accumulator and drain on subsequent ticks. This keeps snapshots
-    // flowing at ~50Hz under heavy load while still letting a light sim
-    // rip through hundreds of steps per tick for high simSpeed.
-    let steps = Math.floor(_accum);
-    _accum -= steps;
+    const accumCap = maxAccumForSpeed(simSpeed);
+    if (_accum > accumCap) _accum = accumCap;
+
+    const budgetMs = tickBudgetForSpeed(simSpeed);
+    const stepCap = maxStepsPerTick(simSpeed);
     self.SENSOR_STRIDE = computeStride(simSpeed);
 
+    // Drain until empty, step cap, or wall budget — leftover stays in _accum
+    // for the next tick (no pre-debit of the whole queue).
     const simStart = performance.now();
     const cpLen = self.road.checkPointList.length;
     let stepsRun = 0;
     let maxStepMs = 0;
-    for (let s = 0; s < steps; s++) {
+    while (_accum >= 1 && stepsRun < stepCap) {
+        if (performance.now() - simStart > budgetMs) break;
         const stepStart = performance.now();
         if (self.frameCount >= 60 * seconds) {
             postSnapshot(performance.now() - simStart, stepsRun);
@@ -311,6 +360,7 @@ function stepOnce() {
             return;
         }
         self.frameCount++;
+        _accum -= 1;
         for (let i = 0; i < cars.length; i++) {
             const cc = cars[i];
             const prevDamaged = cc.damaged;
@@ -327,38 +377,54 @@ function stepOnce() {
                 cc.deathY = cc.y;
             }
         }
-        // O(N) bestCar scan — mirror of main.js's pre-worker logic.
-        let bestFit = -Infinity, bestC = null;
-        for (let i = 0; i < cars.length; i++) {
-            const c = cars[i];
-            const f = c.checkPointsCount + c.laps * cpLen;
-            if (f > bestFit) { bestFit = f; bestC = c; }
-        }
-        if (bestC) {
-            const currentFit = self.bestCar
-                ? (self.bestCar.checkPointsCount + self.bestCar.laps * cpLen)
-                : -Infinity;
-            if (self.bestCar !== bestC && bestFit > currentFit) {
+        // O(N) live-champion scan (prefer alive). At high simSpeed scan every
+        // other step — a 1-frame lag on the yellow highlight is invisible and
+        // saves a full population walk. Always scan if the current champion
+        // just died so rays hop immediately.
+        const needBestScan = simSpeed < 50
+            || (self.frameCount & 1) === 0
+            || (self.bestCar && self.bestCar.damaged);
+        if (needBestScan) {
+            let bestFitAlive = -Infinity, bestAlive = null;
+            let bestFitAll = -Infinity, bestAll = null;
+            for (let i = 0; i < cars.length; i++) {
+                const c = cars[i];
+                const f = c.checkPointsCount + c.laps * cpLen;
+                if (f > bestFitAll) { bestFitAll = f; bestAll = c; }
+                if (!c.damaged && f > bestFitAlive) { bestFitAlive = f; bestAlive = c; }
+            }
+            const bestC = bestAlive || bestAll;
+            if (bestC && self.bestCar !== bestC) {
                 self.bestCar = bestC;
                 bestEpoch++;
+                // New champion wasn't privileged this step (LOD may have skipped
+                // its perception). Refresh rays immediately so the same-tick
+                // snapshot shows sensors on the new leader, not a blank/stale set.
+                if (!bestC.damaged && bestC.sensor) {
+                    try { bestC.sensor.update(self.road.borders); } catch (_) {}
+                }
             }
         }
         stepsRun++;
         const stepMs = performance.now() - stepStart;
         if (stepMs > maxStepMs) maxStepMs = stepMs;
-        if (performance.now() - simStart > TICK_BUDGET_MS) {
-            // Budget tripped — hand remaining steps back to the accumulator
-            // so next tick catches up.
-            _accum += (steps - stepsRun);
-            break;
-        }
     }
     const simMs = performance.now() - simStart;
 
-    // Always snapshot at the end of a tick. Main rAF pulls at 60Hz and
-    // keeps only the latest — overshoot is dropped for free.
+    // Snapshot cadence: every tick at low speed; every ~2–3 ticks at 100× so
+    // packing N poses doesn't eat the budget we just freed for stepping.
+    _stepsSinceSnap += stepsRun;
+    const snapEvery = simSpeed >= 50 ? 3 : (simSpeed >= 20 ? 2 : 1);
+    const wantSnap = stepsRun > 0 && (
+        _stepsSinceSnap >= snapEvery ||
+        // Always snap if we did a meaningful chunk this tick.
+        stepsRun >= 30
+    );
     const postStart = performance.now();
-    if (stepsRun > 0) postSnapshot(simMs, stepsRun);
+    if (wantSnap) {
+        postSnapshot(simMs, stepsRun);
+        _stepsSinceSnap = 0;
+    }
     const postMs = performance.now() - postStart;
 
     const tickEnd = performance.now();
@@ -492,10 +558,20 @@ function postSnapshot(simMs, steps) {
 }
 
 function endGen() {
-    if (!self.bestCar) return;
-    const bc = self.bestCar;
-    const flat = flattenBrain(bc.brain);
+    // Re-pick the fitness elite across the whole population — including
+    // damaged cars. Live bestCar prefers survivors for the ray overlay; the
+    // brain we archive/seed from should still be whoever got furthest.
     const cpLen = self.road.checkPointList.length || 0;
+    let elite = null, eliteFit = -Infinity;
+    for (let i = 0; i < cars.length; i++) {
+        const c = cars[i];
+        const f = c.checkPointsCount + c.laps * cpLen;
+        if (f > eliteFit) { eliteFit = f; elite = c; }
+    }
+    if (!elite) return;
+    self.bestCar = elite;
+    const bc = elite;
+    const flat = flattenBrain(bc.brain);
 
     // Population-wide stats: per-car checkpoint counts + death frames. Main
     // thread derives median / p90 / survival@T percentiles from these arrays,
