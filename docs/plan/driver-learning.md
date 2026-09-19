@@ -35,6 +35,8 @@ The best evaluated networks are kept in a bounded 20-entry local startup cache, 
 
 SONA buffers are bounded to 128 steps. Zero-checkpoint fitness has zero quality; it is not treated as a successful example. Periodic consolidation means patterns can form during a long unattended session instead of waiting until the user leaves the track.
 
+A bounded journal retains up to 32 successful circuit embeddings in the existing IndexedDB adapter snapshot. On reload they are replayed through SONA to relearn patterns. It validates dimensions, finite values, and minimum quality; duplicate circuits retain their best quality. The panel reports saved and replayed examples. This is example replay, not an exact restoration of the agent's optimizer or EWC state, and it does not reapply MicroLoRA rewards.
+
 The A/B baseline now uses a real genetic loop with the same profile, initialization, mutation policy, and elite preservation, without vector retrieval. Previously it generated a completely random population every generation. A single visual comparison is still not statistical proof of a universal learning improvement.
 
 ## Verification

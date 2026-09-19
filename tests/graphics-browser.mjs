@@ -185,7 +185,7 @@ async function exercise(backend){
     report.push({requested:backend,selected,result:'pass',checks:'rendered pixels, day, worker, chase, WASD player, opt-in audio signal/mute, vision, night, reflections, replay, independent training, classic, mobile, editor'});
   }catch(error){
     await page.screenshot({path:`${out}/${backend}-failure.png`,timeout:10000}).catch(()=>{});
-    const state=await page.evaluate(()=>{const s=window.CircuitStudio;return {active:s?.active,failed:s?.failed,lastError:s?.lastError,backend:s?.backend,frame:s?.info?.snapshot?.frameCount,rays:s?.info?.snapshot?.bestRays?.length,sensors:s?.sensors?.count};}).catch(()=>null);
+    const state=await page.evaluate(()=>{const s=window.CircuitStudio,recording=window.__testLastGenEnd?.presentationRun;return {active:s?.active,ready:s?.ready,enabled:s?.enabled,failed:s?.failed,lastError:s?.lastError,backend:s?.backend,frame:s?.info?.snapshot?.frameCount,rays:s?.info?.snapshot?.bestRays?.length,sensors:s?.sensors?.count,archiveRuns:s?.archive?.runs?.length,recordingSamples:recording?.samples?.length,recordingFinite:recording?.samples?.every(Number.isFinite),generation,runSerial:presentationRunSerial,resultSerial:window.__testLastGenEnd?.runSerial};}).catch(()=>null);
     await writeFile(`${out}/${backend}-errors.txt`,JSON.stringify({stage,error:String(error),errors,warnings,state,body:await page.locator('body').innerText().catch(()=>'' )},null,2));
     throw error;
   }finally{clearTimeout(watchdog);await browser.close();}

@@ -34,12 +34,14 @@ class DriverLearning {
   save(){try{localStorage.setItem('vv.driverLearning',JSON.stringify({profile:this.profile,adaptive:this.adaptive}));}catch{}}
   resetMemories(){
     this.coach.reset();this.coach.key='';this.seeds=[];this.forceSaved=false;
+    this.batch=null;this.lastPlan=null;
     try{localStorage.removeItem('vv.driverChampions');}catch{}
     this.render();
   }
   setProfile(id){
     const profile=DriverProfiles.get(id);if(profile.id===this.profile)return;
     this.consolidate();this.profile=profile.id;this.save();this.coach.key='';this.coach.reset();
+    this.batch=null;this.seeds=[];this.lastPlan=null;
     window.PlayerAssist?.release();window.restartDriverLearning?.();this.render();
   }
   prepare({road,maxSpeed,traction,seconds}){
@@ -72,6 +74,7 @@ class DriverLearning {
       if(!bridge.info().sona?.trajectorySteps)return false;
       bridge.endPhase4Trajectory(this.coach.incumbent?.fitness||0);
       bridge.beginPhase4Trajectory(window.currentTrackVec||null);this.consolidations++;
+      bridge.persist?.().catch(error=>console.warn('[learning] saving reviewed memories failed',error));
       this.render();return true;
     }catch(error){console.warn('[learning] consolidation failed',error);return false;}
   }
@@ -83,8 +86,8 @@ class DriverLearning {
     this.root.querySelector('[data-profile-description]').textContent=p.description;
     this.root.querySelector('#adaptive-learning').checked=this.adaptive;
     const labels={manual:'Fixed exploration',steady:'Exploring and preserving the best driver',refine:'Progress found · refining the best driver',explore:'Progress stalled · trying more variation',breakthrough:'Plateau · introducing more fresh drivers'};
-    this.root.querySelector('[data-learning-status]').textContent=last?(labels[plan?.stage]||labels.steady):'Start training to build a learning history.';
-    this.root.querySelector('[data-learning-best]').textContent=last?String(this.coach.incumbent.fitness):'—';
+    this.root.querySelector('[data-learning-status]').textContent=last?(labels[plan?.stage]||labels.steady):this.coach.incumbent?'Saved champion ready. Start training to keep improving.':'Start training to build a learning history.';
+    this.root.querySelector('[data-learning-best]').textContent=this.coach.incumbent?String(this.coach.incumbent.fitness):'—';
     this.root.querySelector('[data-learning-survival]').textContent=last?`${Math.round(last.survival*100)}%`:'—';
     this.root.querySelector('[data-learning-mutation]').textContent=plan?`${Math.round(plan.mutation*100)}%`:'—';
     const source=this.batch?.counts;
@@ -95,8 +98,9 @@ class DriverLearning {
     chart.setAttribute('aria-label',history.length?`Checkpoint progress over ${history.length} generations. Latest ${last.fitness}, best ${this.coach.incumbent.fitness}.`:'No completed generations yet');
     const memories=this.root.querySelector('[data-learning-memories]');memories.replaceChildren();
     for(const seed of (this.seeds||[]).slice(0,3)){const item=document.createElement('li');item.textContent=`${seed.matchLabel||'Saved driver'} · ${Number(seed.meta?.fitness||0).toFixed(0)} gates`;memories.append(item);}
-    const count=window.__rvBridge?.info?.().sona?.patterns;
-    this.root.querySelector('[data-learning-consolidation]').textContent=this.consolidations?`${this.consolidations} memory reviews · ${count??0} learned patterns`:'Memories are reviewed every 8 generations.';
+    const sona=window.__rvBridge?.info?.().sona;
+    const review=this.consolidations?`${this.consolidations} memory reviews · ${sona?.patterns??0} learned patterns.`:'Memories are reviewed every 8 generations.';
+    this.root.querySelector('[data-learning-consolidation]').textContent=review+(sona?.savedExamples?` ${sona.savedExamples} successful circuit examples saved${sona.replayedExamples?`; ${sona.replayedExamples} relearned after reload`:''}.`:'');
   }
 }
 export const learning=window.DriverLearning=new DriverLearning();

@@ -113,7 +113,9 @@ try{
   assert.deepEqual(slider,{min:'1',step:'1',max:'2000'});
   stage='3D remote car and mobile layout';console.log(stage);
   await a.evaluate(()=>{window.CircuitStudio.setQuality('low');window.CircuitStudio.forceWebGL=true;});
-  await a.locator('#graphics-toggle').click();
+  // CPU shader compilation can continue inside the first click. Give that
+  // action the same startup budget as the renderer-ready assertion below.
+  await a.locator('#graphics-toggle').click({timeout:90000});
   await a.waitForFunction(()=>window.CircuitStudio.active&&window.CircuitStudio.liveCars.size===1,{},{timeout:90000});
   await a.locator('#ai-drive-toggle').click();
   await a.waitForFunction(()=>playerCar2.aiDriving);

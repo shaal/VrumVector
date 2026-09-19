@@ -13,7 +13,8 @@
     "test:multiplayer:browser": "node tests/multiplayer-browser.mjs",
     "dev:multiplayer": "wrangler dev --config multiplayer/wrangler.jsonc --var ALLOW_LOCAL:true --port 8878",
     "test:learning": "node --test tests/learning.test.mjs",
-    "test:learning:browser": "node tests/learning-browser.mjs"
+    "test:learning:browser": "node tests/learning-browser.mjs",
+    "benchmark:learning": "node scripts/benchmark-learning.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

@@ -497,10 +497,8 @@ export function ready() {
       // Hydrate adapter B-matrices after the wasm engines are live. Done
       // here (not inside hydrate) because hydrate() runs before the engine
       // promise resolves on slow loads, and we need the wasm to exist
-      // before set_b. The SONA agent keeps no persisted state — pattern
-      // clusters are session-scoped, consistent with the plan's
-      // "trajectories, ReasoningBank clusters, EWC++ anti-forgetting" being
-      // driven by *this session's* training.
+      // before set_b. A bounded circuit journal is replayed into SONA on
+      // reload; this relearns examples and does not restore exact EWC state.
       await hydrateLoraSnapshot();
     } catch (_) { /* already logged inside loadSonaEngine */ }
     _tEnd('7_sona+loraSnapshot', _tSona);

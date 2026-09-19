@@ -34,6 +34,7 @@
 
 import initSona, { WasmEphemeralAgent } from '../../vendor/ruvector/sona/ruvector_sona.js';
 import {qualityFromFitness} from '../learning/policy.js';
+import {CircuitJournal} from './journal.js';
 import {
   loadAdapter as loadLora,
   isReady as loraReady,
@@ -83,6 +84,8 @@ let _agentId = 'car-racer';
 let _microUpdates = 0;      // synthesised: one per endTrajectory/step flush
 let _patternCount = 0;      // cached from last stats() call for UI stickiness
 let _traj = null;           // in-flight JS-side trajectory buffer
+const _journal = new CircuitJournal();
+let _replayedExamples = 0;
 
 export function loadEngine() {
   if (_ready) return _ready;
@@ -122,14 +125,32 @@ export const adapt        = loraAdapt;
 export const reward       = loraReward;
 export const driftL2      = loraDrift;
 export const recentDrift  = loraRecentDrift;
-export const serialize    = loraSerialize;
-export const deserialize  = loraDeserialize;
+export function serialize() {
+  const snapshot=loraSerialize();
+  return snapshot?{...snapshot,sonaJournal:_journal.serialize()}:null;
+}
+export function deserialize(snapshot) {
+  if(!loraDeserialize(snapshot))return false;
+  _journal.restore(snapshot.sonaJournal);_replayedExamples=0;
+  if(_agent){
+    try{
+      _agent.clear();_traj=null;_microUpdates=0;
+      for(const example of _journal.examples){
+        _agent.processTask(new Float32Array(example.vector),example.quality);_replayedExamples++;
+      }
+      if(_replayedExamples)_agent.forceLearn();
+      _patternCount=readPatternCount(_agent);
+    }catch(error){console.warn('[sona] circuit example replay failed',error);}
+  }
+  return true;
+}
 
 export function _debugReset() {
   loraDebugReset();
   _traj = null;
   _microUpdates = 0;
   _patternCount = 0;
+  _journal.clear();_replayedExamples=0;
   // We don't reconstruct the SONA agent here — the wasm engines are cheap to
   // keep around, and tests that need a clean agent state can drop the
   // module's _agent reference manually. In the game we never hit debugReset
@@ -191,6 +212,7 @@ export function endTrajectory(finalFitness) {
       _microUpdates += 1;
     }
     agent.processTask(tj.trackVec, normFinal);
+    _journal.remember(tj.trackVec,normFinal);
     _microUpdates += 1;
     // force_learn returns a string ("Forced learning: N trajectories -> M patterns…");
     // we discard it but the side-effect is the point.
@@ -276,6 +298,8 @@ export function info() {
       ewcLambda: SONA_CONFIG.ewc_lambda,
       trajectoryOpen: !!_traj,
       trajectorySteps: _traj ? _traj.steps.length : 0,
+      savedExamples: _journal.examples.length,
+      replayedExamples: _replayedExamples,
     };
   } else {
     sona = {
@@ -286,6 +310,8 @@ export function info() {
       ewcLambda: SONA_CONFIG.ewc_lambda,
       trajectoryOpen: false,
       trajectorySteps: 0,
+      savedExamples: _journal.examples.length,
+      replayedExamples: 0,
     };
   }
   return { lora, sona };

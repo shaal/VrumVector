@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import {LearningCoach,buildPopulation,cleanContext,contextKey,matchContext,selectDiverse,offspringFeedback,qualityFromFitness} from '../AI-Car-Racer/learning/policy.js';
 import {seededRandom} from '../AI-Car-Racer/graphics/state.js';
 import {Simulation} from './helpers/simulation.mjs';
+import {CircuitJournal} from '../AI-Car-Racer/sona/journal.js';
 
 const fixture=vm.createContext({});
 vm.runInContext(await readFile(new URL('../AI-Car-Racer/driver/profiles.js',import.meta.url),'utf8'),fixture);
@@ -59,6 +60,9 @@ test('one- and two-car populations still explore instead of cloning forever',()=
     if(N>1)assert.deepEqual(batch.flat.slice(0,244),incumbent.vector);
     else assert.notDeepEqual(batch.flat,incumbent.vector);
   }
+  const recalled={vector:brain(.8),fitness:1,id:'older-memory'};
+  const pair=buildPopulation({N:2,seeds:[recalled],incumbent,plan:{mutation:.2,novel:.1,round:2},random:seededRandom('pair')});
+  assert.equal(pair.parents[1],'seed','The only challenger refines the champion even when other memories are recalled');
 });
 test('adaptive exploration escalates on a plateau, recovers on progress, and can be disabled',()=>{
   const coach=new LearningCoach();coach.setContext(context);
@@ -91,6 +95,19 @@ test('offspring feedback is based on each parent’s actual descendants and perm
 test('zero progress is never marked as successful SONA learning',()=>{
   assert.equal(qualityFromFitness(0),0);assert.equal(qualityFromFitness(-5),0);assert.equal(qualityFromFitness(NaN),0);
   assert.ok(qualityFromFitness(10)>qualityFromFitness(2));assert.ok(qualityFromFitness(100)<1);
+});
+test('circuit replay journal is bounded, validates data, and preserves successful examples',()=>{
+  const journal=new CircuitJournal(2,3);
+  assert.equal(journal.remember([1,0,0],0),false);
+  assert.equal(journal.remember([0,0,0],.5),false);
+  assert.equal(journal.remember([NaN,0,0],.5),false);
+  journal.remember([1,0,0],.7);journal.remember([1,0,0],.2);
+  assert.equal(journal.examples.length,1);assert.equal(journal.examples[0].quality,.7);
+  journal.remember([0,1,0],.4);journal.remember([0,0,1],.5);
+  assert.equal(journal.examples.length,2);
+  const restored=new CircuitJournal(2,3);restored.restore(journal.serialize());
+  assert.deepEqual(restored.examples,journal.examples);
+  restored.restore({version:1,examples:[{vector:[1,2],quality:1}]});assert.equal(restored.examples.length,0);
 });
 test('styles change actual driving with the same neural network and unchanged physics',()=>{
   const constant=brain(0);constant.set([-1,1,1,1],176);

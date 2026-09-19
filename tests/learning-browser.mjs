@@ -65,8 +65,15 @@ try{
   const cached=await page.evaluate(()=>JSON.parse(localStorage.getItem('vv.driverChampions')));
   assert.ok(cached.some(c=>c.meta.learningContext.profile==='careful'));
   assert.ok(cached.some(c=>c.meta.learningContext.profile==='wild'));
-  await page.evaluate(()=>window.__rvBridge.persist());
+  mark('successful SONA circuit examples survive reload');
+  await page.evaluate(async()=>{
+    const b=window.__rvBridge,vector=new Float32Array(512);vector[0]=1;
+    b.beginPhase4Trajectory(vector);b.addPhase4Step(vector,null,20);b.endPhase4Trajectory(20);
+    if(!b.info().sona.savedExamples)throw Error('Circuit example was not saved');
+    await b.persist();
+  });
   await page.reload();await ready();
+  await page.waitForFunction(()=>window.__rvBridge.info().sona.replayedExamples>=1);
   assert.equal(await page.evaluate(()=>window.DriverLearning.profile),'wild');
   assert.equal(await page.evaluate(()=>window.DriverLearning.adaptive),false);
   assert.equal(await page.evaluate(()=>window.PlayerAssist.enabled||window.CircuitStudio.enabled),false);
@@ -110,14 +117,14 @@ try{
   assert.ok(retrieval.metas.every(m=>m?.track==='fixture-track'));
   mark('learning controls in 3D');
   await page.evaluate(()=>{window.CircuitStudio.setQuality('low');window.CircuitStudio.forceWebGL=true;});
-  await page.locator('#graphics-toggle').click();await page.waitForFunction(()=>window.CircuitStudio.active,{},{timeout:90000});
+  await page.locator('#graphics-toggle').click({timeout:90000});await page.waitForFunction(()=>window.CircuitStudio.active,{},{timeout:90000});
   await page.locator('#driver-learning summary').click();
   await page.screenshot({path:`${out}/profiles-3d-desktop.png`});
   await page.setViewportSize({width:390,height:844});
   await page.screenshot({path:`${out}/profiles-3d-mobile.png`});
   const mobile=await page.locator('.learning-panel').boundingBox();assert.ok(mobile.x>=0&&mobile.x+mobile.width<=390&&mobile.y+mobile.height<=844);
   assert.deepEqual(errors,[]);
-  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,retrieval,baseline,checks:['profiles','real worker learning','manual override','persistent champion','genetic baseline','context-aware WASM retrieval','offspring credit','archive round trip','cross-tab context','2D/3D/mobile learning UI']},null,2));
+  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,retrieval,baseline,checks:['profiles','real worker learning','manual override','persistent champion','SONA circuit example replay','genetic baseline','context-aware WASM retrieval','offspring credit','archive round trip','cross-tab context','2D/3D/mobile learning UI']},null,2));
   console.log('Driver profiles and learning browser checks passed');
 }catch(error){
   await writeFile(`${out}/failure.json`,JSON.stringify({stage,error:String(error.stack),errors},null,2));

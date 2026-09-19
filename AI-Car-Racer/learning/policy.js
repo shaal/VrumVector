@@ -84,7 +84,9 @@ export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.rand
     const offset=i*FLAT_LENGTH,single=!!protectedSeed&&N===1;
     const elite=!!protectedSeed&&i===0&&(!single||(!incumbent&&plan?.round===0));
     const fresh=!protectedSeed||(!single&&i>=N-nNovel)||(single&&plan?.stagnant>=5&&plan.round%5===0);
-    const source=elite||single?protectedSeed:pool.length?pool[(i-1+pool.length)%pool.length]:protectedSeed;
+    // Always mutate the champion as well as recalling other memories. This
+    // matters for N=2, where the only challenger must refine the incumbent.
+    const source=elite||single||i%2===1?protectedSeed:pool.length?pool[Math.floor((i-2)/2)%pool.length]:protectedSeed;
     if(fresh){fillRandom(offset);counts.random_init++;kinds[i]='random';continue;}
     const amount=elite?0:clamp(mutation*(i%2?.5:1.8),.005,1);
     for(let j=0;j<FLAT_LENGTH;j++)flat[offset+j]=source.vector[j]*(1-amount)+(random()*2-1)*amount;
