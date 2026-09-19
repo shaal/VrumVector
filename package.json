@@ -8,11 +8,16 @@
     "a11y": "node scripts/a11y-contrast.mjs",
     "vendor:three": "node scripts/vendor-three.mjs",
     "test:graphics": "node --test tests/graphics-state.test.mjs",
-    "test:graphics:browser": "node tests/graphics-browser.mjs"
+    "test:graphics:browser": "node tests/graphics-browser.mjs",
+    "test:multiplayer": "node --test tests/multiplayer.test.mjs",
+    "test:multiplayer:browser": "node tests/multiplayer-browser.mjs",
+    "dev:multiplayer": "wrangler dev --config multiplayer/wrangler.jsonc --var ALLOW_LOCAL:true --port 8878"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
+    "miniflare": "4.20260617.1",
     "playwright": "^1.59.1",
-    "three": "0.186.0"
+    "three": "0.186.0",
+    "wrangler": "4.103.0"
   }
 }

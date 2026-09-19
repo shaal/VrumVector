@@ -1,5 +1,6 @@
 class Controls{
     constructor(type){
+        if(type==='KEYS'||type==='WASD')this.abort=new AbortController();
         this.forward=false;
         this.left=false;
         this.right=false;
@@ -14,9 +15,11 @@ class Controls{
                 break;
         }
     }
+    dispose(){this.abort?.abort();}
     #addWASDListeners(){
         document.addEventListener("keydown",(event)=>{
-            switch(event.key){
+            if (event.ctrlKey || event.metaKey || event.altKey || event.target?.closest?.('input,textarea,select,[contenteditable="true"]')) return;
+            switch(event.key.toLowerCase()){
                 case "a":
                     this.left=true;
                     break;
@@ -30,9 +33,9 @@ class Controls{
                     this.reverse=true;
                     break;
             }
-        });
+        },{signal:this.abort.signal});
         document.addEventListener("keyup",(event)=>{
-            switch(event.key){
+            switch(event.key.toLowerCase()){
                 case "a":
                     this.left=false;
                     break;
@@ -46,10 +49,11 @@ class Controls{
                     this.reverse=false;
                     break;
             }
-        });
+        },{signal:this.abort.signal});
     }
     #addKeyboardListeners(){
         document.addEventListener("keydown",(event)=>{
+            if (event.ctrlKey || event.metaKey || event.altKey || event.target?.closest?.('input,textarea,select,[contenteditable="true"]')) return;
             switch(event.key){
                 case "ArrowLeft":
                     this.left=true;
@@ -64,7 +68,7 @@ class Controls{
                     this.reverse=true;
                     break;
             }
-        });
+        },{signal:this.abort.signal});
         document.addEventListener("keyup",(event)=>{
             switch(event.key){
                 case "ArrowLeft":
@@ -80,6 +84,6 @@ class Controls{
                     this.reverse=false;
                     break;
             }
-        });
+        },{signal:this.abort.signal});
     }
 }

@@ -1,0 +1,94 @@
+import assert from 'node:assert/strict';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {spawn} from 'node:child_process';
+import {build} from 'esbuild';
+import {Miniflare} from 'miniflare';
+import {chromium} from 'playwright';
+
+const out='test-results/multiplayer';await mkdir(out,{recursive:true});
+const bundle=await build({entryPoints:['multiplayer/worker.js'],bundle:true,write:false,format:'esm',external:['cloudflare:workers']});
+const mf=new Miniflare({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-06-17',durableObjects:{ROOMS:{className:'LiveRoom',useSQLite:true}},bindings:{ALLOW_LOCAL:'true'},port:8878});
+const server=spawn('python3',['-m','http.server','8877','--bind','127.0.0.1'],{stdio:'ignore'});
+const origin='http://127.0.0.1:8877';
+let browser;const errors=[];let stage='boot';
+try{
+  await mf.ready;
+  browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+  const contexts=await Promise.all([browser.newContext({viewport:{width:1120,height:800}}),browser.newContext({viewport:{width:1120,height:800}})]);
+  const [a,b]=await Promise.all(contexts.map(async context=>{
+    const p=await context.newPage();p.setDefaultTimeout(30000);
+    p.on('pageerror',e=>errors.push(e.message));
+    await p.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+    await p.route('**/multiplayer/config.json',route=>route.fulfill({json:{endpoint:'http://127.0.0.1:8878'}}));
+    await p.goto(`${origin}/AI-Car-Racer/?rv=0&graphics=classic`);
+    await p.waitForFunction(()=>!!window.LiveSession?.info);
+    await p.evaluate(()=>{setN(2);setSeconds(4);setSimSpeed(1);});
+    return p;
+  }));
+  stage='default off and editable identity';console.log(stage);
+  const names=await Promise.all([a,b].map(p=>p.evaluate(()=>window.LiveSession.callsign)));
+  for(const name of names)assert.match(name,/^[A-Za-z]+ [A-Za-z]+ \d+$/);
+  assert.equal(await a.evaluate(()=>window.LiveSession.enabled||!!window.LiveSession.ws),false);
+  await a.locator('.live-launch').click();await b.locator('.live-launch').click();
+  await a.locator('#live-callsign').fill('Silver Fox');await a.locator('[data-live-name] button').click();
+  await b.locator('#live-callsign').fill('Neon Lynx');await b.locator('[data-live-name] button').click();
+  assert.equal(await a.evaluate(()=>playerCar2.controls.forward||playerCar2.controls.left||playerCar2.controls.reverse),false);
+  await a.locator('#live-enabled').check();await b.locator('#live-enabled').check();
+  await Promise.all([a,b].map(p=>p.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.drivers().length===1)));
+  assert.match(await a.locator('.live-standings').textContent(),/Neon Lynx/);
+  stage='actual WASD movement over the network';console.log(stage);
+  await a.locator('#live-callsign').fill('Comet');await a.locator('[data-live-name] button').click();
+  await b.waitForFunction(()=>[...window.LiveSession.peers.values()].some(p=>p.name==='Comet'));
+  await a.locator('[data-live-close]').click();
+  const start=await a.evaluate(()=>({x:playerCar2.x,y:playerCar2.y}));
+  await a.keyboard.down('w');await a.waitForTimeout(350);await a.keyboard.up('w');
+  await b.waitForFunction(start=>{const p=window.LiveSession.drivers()[0];return p&&Math.hypot(p.pose.x-start.x,p.pose.y-start.y)>1;},start);
+  stage='lap continuity and small AI cohorts';console.log(stage);
+  await a.evaluate(()=>{window.__liveCar=playerCar2;window.__liveGeneration=generation;});
+  await a.waitForFunction(()=>generation>window.__liveGeneration,{},{timeout:30000});
+  assert.equal(await a.evaluate(()=>playerCar2===window.__liveCar),true);
+  for(const n of [1,2,3,4,5]){
+    await a.evaluate(n=>{setN(n);begin(true);},n);
+    await a.waitForFunction(n=>latestSnapshot?.N===n,n);
+  }
+  await a.evaluate(()=>{setN(-5);});assert.equal(await a.evaluate(()=>batchSize),1);
+  await a.evaluate(()=>{setN(3);phaseToLayout(4);});
+  const slider=await a.locator('#batchSizeInput').evaluate(el=>({min:el.min,step:el.step,max:el.max}));
+  assert.deepEqual(slider,{min:'1',step:'1',max:'2000'});
+  stage='3D remote car and mobile layout';console.log(stage);
+  await a.evaluate(()=>{window.CircuitStudio.setQuality('low');window.CircuitStudio.forceWebGL=true;window.CircuitStudio.enable(true);});
+  await a.waitForFunction(()=>window.CircuitStudio.active&&window.CircuitStudio.liveCars.size===1,{},{timeout:90000});
+  await a.locator('.live-launch').click();
+  await a.screenshot({path:`${out}/live-grid-desktop.png`});
+  await a.setViewportSize({width:390,height:844});
+  await a.waitForTimeout(500);await a.screenshot({path:`${out}/live-grid-mobile.png`});
+  const bounds=await a.locator('#live-panel').boundingBox();assert.ok(bounds.x>=0&&bounds.x+bounds.width<=390);
+  await a.setViewportSize({width:1120,height:800});
+  stage='room isolation, reconnect, and leaving';console.log(stage);
+  await b.evaluate(()=>{maxSpeed+=1;});
+  await a.waitForFunction(()=>window.LiveSession.peers.size===0);
+  await b.evaluate(()=>{maxSpeed-=1;});
+  await a.waitForFunction(()=>window.LiveSession.peers.size===1);
+  await b.evaluate(()=>window.LiveSession.ws.close());
+  await b.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.peers.size===1,{},{timeout:30000});
+  await b.locator('#live-enabled').uncheck();
+  await a.waitForFunction(()=>window.LiveSession.peers.size===0&&window.CircuitStudio.liveCars.size===0);
+  await b.locator('#live-enabled').check();
+  await a.waitForFunction(()=>window.LiveSession.peers.size===1);
+  // Visibility changes run the same lifecycle handler used for real background tabs.
+  await b.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
+  await a.waitForFunction(()=>window.LiveSession.peers.size===0);
+  await b.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
+  await a.waitForFunction(()=>window.LiveSession.peers.size===1);
+  await b.reload();await b.waitForFunction(()=>!!window.LiveSession?.info);
+  assert.equal(await b.evaluate(()=>window.LiveSession.callsign),'Neon Lynx');
+  assert.equal(await b.evaluate(()=>window.LiveSession.enabled),false);
+  await a.waitForFunction(()=>window.LiveSession.peers.size===0);
+  assert.deepEqual(errors,[]);
+  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,checks:['default off','callsigns','cross-browser WASD','generation continuity','AI 1–5','3D cars','mobile','room isolation','reconnect','hidden tab departure','reload persistence']},null,2));
+  console.log('Live multiplayer browser checks passed');
+}catch(error){
+  await writeFile(`${out}/failure.json`,JSON.stringify({stage,error:String(error.stack),errors},null,2));
+  for(const context of browser?.contexts()||[])for(const p of context.pages())await p.screenshot({path:`${out}/failure-${browser.contexts().indexOf(context)}.png`}).catch(()=>{});
+  throw error;
+}finally{await browser?.close();await mf.dispose();server.kill();}

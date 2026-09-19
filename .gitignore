@@ -12,3 +12,7 @@ test-results/
 # OS noise
 .DS_Store
 Thumbs.db
+
+# Local Cloudflare runtime / deploy staging
+.wrangler/
+.pages-upload/

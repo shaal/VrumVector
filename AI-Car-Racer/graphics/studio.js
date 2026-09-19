@@ -69,6 +69,8 @@ class CircuitStudio {
       this.sun.shadow.normalBias=.08;this.sun.shadow.bias=-.0001;this.scene.add(this.sun);
       this.rim=new T.DirectionalLight(0xb6dce7,.7);this.rim.position.set(35,25,-30);this.scene.add(this.rim);
       this.hero=createCar();this.scene.add(this.hero);
+      this.liveCars=new Map();
+      this.liveLabels=document.createElement('div');this.liveLabels.className='live-driver-labels';this.host.append(this.liveLabels);
       this.players=[createCar(0xc55146),createCar(0x539bbb)];this.players.forEach(c=>{c.visible=false;this.scene.add(c);});
       this.ghostCars=[createCar(0x82e4c5,true),createCar(0xedb67a,true)];this.ghostCars.forEach(c=>{c.visible=false;this.scene.add(c);});
       this.pack=new T.InstancedMesh(new T.BoxGeometry(.94,.30,1.62),new T.MeshStandardMaterial({color:0xffffff,roughness:.55,metalness:.15}),1600);
@@ -99,6 +101,7 @@ class CircuitStudio {
     this.releaseRenderer();
   }
   releaseRenderer(){
+    this.liveLabels?.remove();this.liveCars?.clear();
     this.resizeObserver?.disconnect();this.controls?.dispose();
     this.reflection?.dispose();this.reflection=null;
     this.pipeline?.dispose();this.bloom?.dispose();
@@ -113,6 +116,7 @@ class CircuitStudio {
     if(this.active===active)return;this.active=active;
     this.host.classList.toggle('studio-active',active);document.body.classList.toggle('studio-enabled',active);
     this.ui.root.hidden=!active;if(this.canvas)this.canvas.hidden=!active;
+    if(this.liveLabels)this.liveLabels.hidden=!active;
     if(!active){if(this.controls)this.controls.enabled=false;this.audio.silence();}
     this.lastTime=performance.now();this.resize();
   }
@@ -210,6 +214,7 @@ class CircuitStudio {
       if(this.replay&&!this.replay.paused){this.replay.time=Math.min(this.replay.run.duration,this.replay.time+dt*this.replay.rate);if(this.replay.time===this.replay.run.duration)this.replay.paused=true;}
       this.updateCars(info,now,dt);
       this.updateCamera(info,now,dt);
+      this.updateLiveDrivers(now,dt);
       this.audio.update({pose:this.focusPose,controls:this.focusControls,maxSpeed:this.followingPlayer?info.players[1].maxSpeed:info.snapshot?.bestMaxSpeed,
         key:this.replay?`replay/${this.replay.run.generation}/${this.replay.run.driverIndex}`:`${this.run}/${this.followingPlayer?'player':this.focusIndex}`,
         paused:info.awaitingStart||(this.replay?this.replay.paused:info.paused)});
@@ -238,6 +243,28 @@ class CircuitStudio {
       this.focusIndex=snap.bestIdx;
     }
     this.lastSnapshot=snap;
+  }
+  updateLiveDrivers(now,dt){
+    const drivers=this.replay?[]:window.LiveSession?.drivers(now)||[];
+    const ids=new Set(drivers.map(p=>p.id));
+    for(const [id,item] of this.liveCars){
+      if(!ids.has(id)){disposeTree(item.car);item.label.remove();this.liveCars.delete(id);}
+    }
+    this.camera.updateMatrixWorld();
+    const point=new T.Vector3(),width=this.host.clientWidth,height=this.host.clientHeight;
+    for(const driver of drivers){
+      let item=this.liveCars.get(driver.id);
+      if(!item){
+        const car=createCar(new T.Color(driver.color).getHex());this.scene.add(car);
+        const label=document.createElement('span');label.className='live-driver-label';this.liveLabels.append(label);
+        item={car,label};this.liveCars.set(driver.id,item);
+      }
+      this.placeCar(item.car,driver.pose,dt);
+      item.label.textContent=driver.name+(driver.pose.paused?' · paused':'');item.label.style.borderColor=driver.color;
+      point.copy(item.car.position);point.y+=1.9;point.project(this.camera);
+      item.label.hidden=point.z< -1||point.z>1||Math.abs(point.x)>1||Math.abs(point.y)>1;
+      item.label.style.transform=`translate(${(point.x+1)*width/2}px,${(1-point.y)*height/2}px) translate(-50%,-100%)`;
+    }
   }
   updateHeat(){
     const ctx=this.world.heatCanvas.getContext('2d');ctx.clearRect(0,0,160,90);

@@ -1253,8 +1253,13 @@ function begin(preservePause = false){
     }
     if (!preservePause) pause = false;
     computeStartInfoInPlace(currentCheckpointList());
-    playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
-    playerCar2 = new Car(startInfo.x, startInfo.y, 30, 50, "WASD", maxSpeed, startInfo.heading);
+    // Automatic AI generations must not interrupt a human's live lap.
+    if (!(preservePause && window.LiveSession?.enabled && playerCar && playerCar2)) {
+        playerCar?.controls?.dispose?.();playerCar2?.controls?.dispose?.();
+        playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
+        playerCar2 = new Car(startInfo.x, startInfo.y, 30, 50, "WASD", maxSpeed, startInfo.heading);
+        window.LiveSession?.resetRace();
+    }
     frameCount = 0;
     wallStart = performance.now();
     _simStepAccum = 1;
@@ -1488,12 +1493,14 @@ function animate(){
     var _perfDraw = 0;
     var _perfT0 = perfEnabled ? performance.now() : 0;
     const DP = window.DemoPresentation;
-    const gpuActive = !!window.CircuitStudio?.frame({
+    const presentationInfo = {
         phase, road, snapshot: latestSnapshot, bestCar, generation,
         runSerial: presentationRunSerial, paused: pause, simSpeed,
         awaitingStart: !!window.__awaitingStart, startInfo,
-        players: [playerCar, playerCar2]
-    });
+        players: [playerCar, playerCar2], maxSpeed, traction, invincible
+    };
+    window.LiveSession?.frame(presentationInfo);
+    const gpuActive = !!window.CircuitStudio?.frame(presentationInfo);
     // Presentation layer (road cache / follow-cam / 3D) owns the phase-4
     // frame setup. Outside training, fall back to the classic full redraw.
     let _pres = null;
@@ -1556,7 +1563,7 @@ function animate(){
             let dt = (now - _lastTickWall) / 1000;
             _lastTickWall = now;
             if (dt > 0.25) dt = 0.25;
-            _simStepAccum += simSpeed * dt * 60;
+            _simStepAccum += (window.LiveSession?.enabled ? 1 : simSpeed) * dt * 60;
             let playerSteps = Math.floor(_simStepAccum);
             _simStepAccum -= playerSteps;
             if (playerSteps > MAX_STEPS_PER_RAF){ playerSteps = MAX_STEPS_PER_RAF; _simStepAccum = 0; }
@@ -1564,6 +1571,7 @@ function animate(){
             for (let s = 0; s < playerSteps; s++){
                 playerCar.update(road.borders, road.checkPointList);
                 playerCar2.update(road.borders, road.checkPointList);
+                window.LiveSession?.step(playerCar2, road.checkPointList);
             }
         }
 
@@ -1591,6 +1599,7 @@ function animate(){
             if (!skipPlayers){
                 if (playerCar) playerCar.draw(ctx,"#E6194B",true);
                 if (playerCar2) playerCar2.draw(ctx,"#4FC3F7",true);
+                window.LiveSession?.drawClassic(ctx);
             }
             if (perfEnabled) _perfDraw += performance.now() - _perfDrawT0;
         }

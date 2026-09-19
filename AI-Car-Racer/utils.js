@@ -128,8 +128,12 @@ function phaseToLayout(phase){
             <details id="trainingTuning" class="more-actions">
                 <summary>Training tuning (sliders)</summary>
                 <div id="inputsContainer">
-                    <input min="0" max="2000" id="batchSizeInput" step="50" onkeydown="return false;" type="range" onchange='setN(this.value)' oninput="document.getElementById('batchSizeOutput').value = 'Batch Size: ' + this.value" >
-                    <output  id="batchSizeOutput" name="Batch Size"></output>
+                    <label for="batchSizeInput">AI cars · next generation</label>
+                    <input min="1" max="2000" id="batchSizeInput" step="1" type="range" oninput="setN(this.value)">
+                    <output id="batchSizeOutput" name="AI cars"></output>
+                    <div class="ai-small-grid" role="group" aria-label="Small AI populations">
+                        ${[1,2,3,4,5].map(n=>`<button type="button" class="controlButton" onclick="setN(${n})" aria-label="${n} AI car${n===1?'':'s'}">${n}</button>`).join('')}
+                    </div>
                     <input min="5" max="100" id="secondsInput" step="5" onkeydown="return false;" type="range" onchange='setSeconds(this.value)' oninput="document.getElementById('secondsOutput').value = 'Round Length: ' + this.value" >
                     <output id="secondsOutput" name="Round Length"></output>
                     <input min=".001" max=".3" id="mutateValueInput" onkeydown="return false;" step=".001" type="range" onchange='setMutateValue(this.value)' oninput="document.getElementById('mutateValueOutput').value = 'Variance: ' + this.value" >

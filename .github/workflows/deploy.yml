@@ -43,17 +43,46 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Deploy live multiplayer service
+        id: live
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.103.0'
+          command: >-
+            deploy --config multiplayer/wrangler.jsonc
+            --name=${{ github.event_name == 'pull_request' && format('vectorvroom-live-pr-{0}', github.event.pull_request.number) || 'vectorvroom-live' }}
+
+      - name: Configure live endpoint and stage static site
+        env:
+          LIVE_ENDPOINT: ${{ steps.live.outputs.deployment-url }}
+        run: |
+          node --input-type=module -e '
+            import {writeFileSync} from "node:fs";
+            const endpoint = new URL(process.env.LIVE_ENDPOINT);
+            if (endpoint.protocol !== "https:") throw new Error("Missing secure multiplayer endpoint");
+            writeFileSync("AI-Car-Racer/multiplayer/config.json", JSON.stringify({endpoint:endpoint.origin}) + "\n");
+          '
+          mkdir -p .pages-upload
+          rsync -a --exclude='.git' --exclude='.github' --exclude='.pages-upload' --exclude='.wrangler' --exclude='node_modules' --exclude='test-results' --exclude='/multiplayer' --exclude='/tests' --exclude='/scripts' --exclude='/ruvector' ./ .pages-upload/
+
       - name: Deploy to Cloudflare Pages
         id: deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # The runner's checkout doesn't contain the root `ruvector`
-          # dev symlink (it's gitignored), so we don't need the rsync
-          # staging step that the local script uses — deploy . directly.
+          wranglerVersion: '4.103.0'
           command: >-
-            pages deploy .
+            pages deploy .pages-upload
             --project-name=vectorvroom
             --branch=${{ github.head_ref || github.ref_name }}
             --commit-hash=${{ github.sha }}

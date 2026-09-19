@@ -1,0 +1,27 @@
+name: Live multiplayer
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:multiplayer
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:multiplayer:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-multiplayer
+          path: test-results/multiplayer/
+          retention-days: 14

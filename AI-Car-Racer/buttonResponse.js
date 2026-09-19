@@ -496,7 +496,13 @@ function backPhase(){
     nextPhase();
 }
 function setN(value){
-    batchSize=value;
+    const n=Number(value);
+    if (!Number.isFinite(n)) return;
+    batchSize=Math.max(1,Math.min(2000,Math.round(n)));
+    const input=document.getElementById('batchSizeInput');
+    const output=document.getElementById('batchSizeOutput');
+    if(input)input.value=String(batchSize);
+    if(output)output.value='AI cars: '+batchSize;
 }
 function setSeconds(value){
     nextSeconds=value;
@@ -540,7 +546,7 @@ function applyTrainingPreset(name){
     }
     // Reflect values in the DOM so the user can see what changed.
     const bs = document.getElementById('batchSizeInput');
-    if (bs){ bs.value = p.N; document.getElementById('batchSizeOutput').value = 'Batch Size: ' + p.N; }
+    if (bs){ bs.value = p.N; document.getElementById('batchSizeOutput').value = 'AI cars: ' + p.N; }
     const se = document.getElementById('secondsInput');
     if (se){ se.value = p.seconds; document.getElementById('secondsOutput').value = 'Round Length: ' + p.seconds; }
     const mv = document.getElementById('mutateValueInput');
