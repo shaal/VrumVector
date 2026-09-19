@@ -145,7 +145,8 @@ AI-Car-Racer/              # the playable app (serve index.html from here)
 vendor/ruvector/           # pre-built WASM, committed so no toolchain needed
 ├── ruvector_wasm/         # VectorDB (default Euclidean HNSW)
 ├── ruvector_cnn_wasm/     # CNN embedder (track-shape → 512-d)
-├── ruvector_gnn_wasm/     # P1.A GNN reranker over the lineage DAG
+├── ruvector_gnn_wasm/     # Legacy attention-layer bindings
+├── ruvector_gnn_trainable_wasm/ # Experimental outcome-trained graph + checkpoints
 ├── ruvector_dag_wasm/     # P3.B lineage DAG + cycle-safe traversal
 ├── ruvector_learning_wasm/# P1.B MicroLoRA track adapter
 ├── ruvector_hyperbolic_hnsw_wasm/ # P3.A Poincaré-ball HNSW (opt-in)
