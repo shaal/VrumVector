@@ -31,6 +31,10 @@ export class WasmEphemeralAgent {
      */
     clear(): void;
     /**
+     * Full, versioned learning checkpoint; unlike exportState, does not train.
+     */
+    exportCheckpoint(): string;
+    /**
      * Export agent state for coordinator aggregation
      *
      * # Returns
@@ -68,6 +72,10 @@ export class WasmEphemeralAgent {
      */
     getStats(): any;
     /**
+     * Validate the complete checkpoint before replacing any live state.
+     */
+    importCheckpoint(json: string): void;
+    /**
      * Create a new ephemeral agent with default config
      *
      * # Arguments
@@ -79,6 +87,15 @@ export class WasmEphemeralAgent {
      * ```
      */
     constructor(agent_id: string);
+    /**
+     * Process task with model route information
+     *
+     * # Arguments
+     * * `embedding` - Query embedding
+     * * `quality` - Quality score
+     * * `route` - Model route used (e.g., "gpt-4", "claude-3")
+     */
+    processTaskWithRoute(embedding: Float32Array, quality: number, route: string): void;
     /**
      * Process a task and record trajectory
      *
@@ -93,15 +110,6 @@ export class WasmEphemeralAgent {
      * ```
      */
     processTask(embedding: Float32Array, quality: number): void;
-    /**
-     * Process task with model route information
-     *
-     * # Arguments
-     * * `embedding` - Query embedding
-     * * `quality` - Quality score
-     * * `route` - Model route used (e.g., "gpt-4", "claude-3")
-     */
-    processTaskWithRoute(embedding: Float32Array, quality: number, route: string): void;
     /**
      * Get number of collected trajectories
      */
@@ -262,6 +270,17 @@ export class WasmSonaEngine {
     free(): void;
     [Symbol.dispose](): void;
     /**
+     * Apply LoRA transformation to specific layer
+     *
+     * # Arguments
+     * * `layer_idx` - Layer index
+     * * `input` - Input vector as Float32Array
+     *
+     * # Returns
+     * Transformed vector as Float32Array
+     */
+    applyLoraLayer(layer_idx: number, input: Float32Array): Float32Array;
+    /**
      * Apply LoRA transformation to input vector
      *
      * # Arguments
@@ -277,17 +296,6 @@ export class WasmSonaEngine {
      * ```
      */
     applyLora(input: Float32Array): Float32Array;
-    /**
-     * Apply LoRA transformation to specific layer
-     *
-     * # Arguments
-     * * `layer_idx` - Layer index
-     * * `input` - Input vector as Float32Array
-     *
-     * # Returns
-     * Transformed vector as Float32Array
-     */
-    applyLoraLayer(layer_idx: number, input: Float32Array): Float32Array;
     /**
      * End the trajectory and submit for learning
      *
@@ -491,53 +499,57 @@ export interface InitOutput {
     readonly __wbg_wasmephemeralagent_free: (a: number, b: number) => void;
     readonly __wbg_wasmfederatedcoordinator_free: (a: number, b: number) => void;
     readonly __wbg_wasmsonaengine_free: (a: number, b: number) => void;
+    readonly wasm_init: () => void;
     readonly wasmephemeralagent_averageQuality: (a: number) => number;
     readonly wasmephemeralagent_clear: (a: number) => void;
-    readonly wasmephemeralagent_exportState: (a: number) => number;
-    readonly wasmephemeralagent_findPatterns: (a: number, b: number, c: number, d: number) => number;
-    readonly wasmephemeralagent_forceLearn: (a: number, b: number) => void;
-    readonly wasmephemeralagent_getPatterns: (a: number) => number;
-    readonly wasmephemeralagent_getStats: (a: number) => number;
-    readonly wasmephemeralagent_new: (a: number, b: number, c: number) => void;
+    readonly wasmephemeralagent_exportCheckpoint: (a: number) => [number, number, number, number];
+    readonly wasmephemeralagent_exportState: (a: number) => any;
+    readonly wasmephemeralagent_findPatterns: (a: number, b: number, c: number, d: number) => any;
+    readonly wasmephemeralagent_forceLearn: (a: number) => [number, number];
+    readonly wasmephemeralagent_getPatterns: (a: number) => any;
+    readonly wasmephemeralagent_getStats: (a: number) => any;
+    readonly wasmephemeralagent_importCheckpoint: (a: number, b: number, c: number) => [number, number];
+    readonly wasmephemeralagent_new: (a: number, b: number) => [number, number, number];
     readonly wasmephemeralagent_processTask: (a: number, b: number, c: number, d: number) => void;
     readonly wasmephemeralagent_processTaskWithRoute: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly wasmephemeralagent_trajectoryCount: (a: number) => number;
     readonly wasmephemeralagent_uptimeSeconds: (a: number) => bigint;
-    readonly wasmephemeralagent_withConfig: (a: number, b: number, c: number, d: number) => void;
+    readonly wasmephemeralagent_withConfig: (a: number, b: number, c: any) => [number, number, number];
     readonly wasmfederatedcoordinator_agentCount: (a: number) => number;
-    readonly wasmfederatedcoordinator_aggregate: (a: number, b: number) => number;
-    readonly wasmfederatedcoordinator_applyLora: (a: number, b: number, c: number, d: number) => void;
+    readonly wasmfederatedcoordinator_aggregate: (a: number, b: any) => any;
+    readonly wasmfederatedcoordinator_applyLora: (a: number, b: number, c: number) => [number, number];
     readonly wasmfederatedcoordinator_clear: (a: number) => void;
-    readonly wasmfederatedcoordinator_consolidate: (a: number, b: number) => void;
-    readonly wasmfederatedcoordinator_findPatterns: (a: number, b: number, c: number, d: number) => number;
-    readonly wasmfederatedcoordinator_getPatterns: (a: number) => number;
-    readonly wasmfederatedcoordinator_getStats: (a: number) => number;
-    readonly wasmfederatedcoordinator_new: (a: number, b: number, c: number) => void;
+    readonly wasmfederatedcoordinator_consolidate: (a: number) => [number, number];
+    readonly wasmfederatedcoordinator_findPatterns: (a: number, b: number, c: number, d: number) => any;
+    readonly wasmfederatedcoordinator_getPatterns: (a: number) => any;
+    readonly wasmfederatedcoordinator_getStats: (a: number) => any;
+    readonly wasmfederatedcoordinator_new: (a: number, b: number) => [number, number, number];
     readonly wasmfederatedcoordinator_setQualityThreshold: (a: number, b: number) => void;
     readonly wasmfederatedcoordinator_totalTrajectories: (a: number) => number;
-    readonly wasmfederatedcoordinator_withConfig: (a: number, b: number, c: number, d: number) => void;
-    readonly wasmsonaengine_applyLora: (a: number, b: number, c: number, d: number) => void;
-    readonly wasmsonaengine_applyLoraLayer: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly wasmfederatedcoordinator_withConfig: (a: number, b: number, c: any) => [number, number, number];
+    readonly wasmsonaengine_applyLora: (a: number, b: number, c: number) => [number, number];
+    readonly wasmsonaengine_applyLoraLayer: (a: number, b: number, c: number, d: number) => [number, number];
     readonly wasmsonaengine_endTrajectory: (a: number, b: bigint, c: number) => void;
-    readonly wasmsonaengine_findPatterns: (a: number, b: number, c: number, d: number) => number;
-    readonly wasmsonaengine_forceLearn: (a: number, b: number) => void;
-    readonly wasmsonaengine_getConfig: (a: number) => number;
-    readonly wasmsonaengine_getStats: (a: number) => number;
+    readonly wasmsonaengine_findPatterns: (a: number, b: number, c: number, d: number) => any;
+    readonly wasmsonaengine_forceLearn: (a: number) => [number, number];
+    readonly wasmsonaengine_getConfig: (a: number) => any;
+    readonly wasmsonaengine_getStats: (a: number) => any;
     readonly wasmsonaengine_isEnabled: (a: number) => number;
     readonly wasmsonaengine_learnFromFeedback: (a: number, b: number, c: number, d: number) => void;
-    readonly wasmsonaengine_new: (a: number, b: number) => void;
+    readonly wasmsonaengine_new: (a: number) => [number, number, number];
     readonly wasmsonaengine_recordStep: (a: number, b: bigint, c: number, d: number, e: bigint) => void;
     readonly wasmsonaengine_runInstantCycle: (a: number) => void;
     readonly wasmsonaengine_setEnabled: (a: number, b: number) => void;
     readonly wasmsonaengine_startTrajectory: (a: number, b: number, c: number) => bigint;
     readonly wasmsonaengine_tick: (a: number) => number;
-    readonly wasmsonaengine_withConfig: (a: number, b: number) => void;
-    readonly wasm_init: () => void;
-    readonly __wbindgen_export: (a: number, b: number) => number;
-    readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
-    readonly __wbindgen_export3: (a: number, b: number, c: number) => void;
-    readonly __wbindgen_export4: (a: number) => void;
-    readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
+    readonly wasmsonaengine_withConfig: (a: any) => [number, number, number];
+    readonly __wbindgen_malloc: (a: number, b: number) => number;
+    readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+    readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+    readonly __wbindgen_exn_store: (a: number) => void;
+    readonly __externref_table_alloc: () => number;
+    readonly __wbindgen_externrefs: WebAssembly.Table;
+    readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_start: () => void;
 }
 

@@ -1,152 +1,86 @@
-// gnnReranker.js
-// Graph Neural Network reranker over the lineage DAG.
-//
-// Closes the P2.C [!] note in ruvectorBridge.js: replaces the scalar EMA term
-// in recommendSeeds() with a GNN forward pass whose node features carry
-// fitness, generation, and track similarity, and whose edges follow the
-// parentIds DAG assembled from _brainMirror.
-//
-// The GNN layer (JsRuvectorLayer, from ruvector-gnn-wasm) is a single-message
-// aggregator with multi-head attention. We run it once per brain: each brain's
-// node embedding is refreshed from its parents, and the scalar score we return
-// is derived from the post-message-pass embedding (mean of the updated vector,
-// shifted into a multiplicative band so the bridge's `trackTerm * fitTerm *
-// score` composition stays well-behaved).
-//
-// This module is intentionally standalone: it does NOT import ruvectorBridge
-// (ruvectorBridge imports us), and it gracefully returns null from loadGnn()
-// when the wasm module is unavailable so the bridge can silently fall back to
-// the EMA path.
-
-let _gnnReady = null;
-let _gnnMod = null;
-let _gnnLayer = null;
-
-const GNN_INPUT_DIM = 3;   // [fitnessNorm, generationNorm, trackSim]
-const GNN_HIDDEN_DIM = 8;  // small hidden for a tiny lineage graph
-const GNN_HEADS = 2;
-const GNN_DROPOUT = 0.0;   // deterministic at inference
-
-// Load + init the GNN wasm module. Returns a truthy handle when ready, or
-// null if loading fails (missing artifact, wasm instantiation error, API
-// mismatch). Safe to call multiple times.
-export function loadGnn() {
-  if (_gnnReady) return _gnnReady;
-  _gnnReady = (async () => {
-    try {
-      // Same dynamic-import pattern as ruvectorBridge uses for the CNN module
-      // (--target web glue; default export is the init function).
-      const mod = await import('../vendor/ruvector/ruvector_gnn_wasm/ruvector_gnn_wasm.js');
-      await mod.default();
-      _gnnMod = mod;
-      _gnnLayer = new mod.JsRuvectorLayer(GNN_INPUT_DIM, GNN_HIDDEN_DIM, GNN_HEADS, GNN_DROPOUT);
-      return { mod: _gnnMod, layer: _gnnLayer };
-    } catch (e) {
-      console.warn('[gnn-reranker] load failed; EMA fallback will be used', e);
-      _gnnMod = null;
-      _gnnLayer = null;
-      return null;
-    }
-  })();
-  return _gnnReady;
+// Supervised message passing over the lineage graph. The old untrained layer's
+// normalized mean was effectively neutral; all projection and readout weights
+// in this backend learn from actual descendant outcomes. Automatic mode stays
+// on EMA until held-out racing evidence warrants a default change.
+import {contextKey} from './learning/policy.js';
+import {GRAPH_DIM,GRAPH_SCHEMA,graphExample,validExample,heldOut} from './learning/graph-features.js';
+let _ready=null,_module=null,_model=null,_saved=null;
+let _replay=[],_cursor=0,_pending=new Map();
+const emptyStats=()=>({trained:0,heldOut:0,modelError:0,emaError:0});
+let _stats=emptyStats();
+const create=()=>new _module.WasmGraphRanker(GRAPH_DIM,8,20260919);
+export function loadGnn(){
+  if(_ready)return _ready;
+  _ready=(async()=>{
+    try{
+      const mod=await import('../vendor/ruvector/ruvector_gnn_trainable_wasm/ruvector_gnn_trainable_wasm.js');
+      await mod.default();_module=mod;_model=create();return {layer:_model,mod};
+    }catch(error){console.warn('[gnn] trainable model unavailable; using EMA',error);return null;}
+  })();return _ready;
 }
-
-export function isReady() {
-  return !!(_gnnMod && _gnnLayer);
-}
-
-// Core scoring entry point.
-//
-// Arguments:
-//   brainMirror — Map<id, { vector, meta }>  (ruvectorBridge._brainMirror)
-//   candidates  — Map<id, trackSim>          (output of the bridge's track-hit join)
-//
-// Returns Map<id, number>: a multiplicative score in roughly [0.5, 1.5] that
-// slots into recommendSeeds() where the EMA `obsTerm` used to live.
-export function gnnScore(brainMirror, candidates) {
-  if (!isReady()) return null;
-  if (!brainMirror || brainMirror.size === 0) return new Map();
-
-  // Normalise features across the full archive so the GNN sees a stable
-  // distribution regardless of candidate-set size.
-  let maxFit = 0, maxGen = 0;
-  for (const { meta } of brainMirror.values()) {
-    const f = Math.abs((meta && meta.fitness) || 0);
-    const g = Math.abs((meta && meta.generation) || 0);
-    if (f > maxFit) maxFit = f;
-    if (g > maxGen) maxGen = g;
-  }
-  const fitScale = maxFit > 0 ? maxFit : 1;
-  const genScale = maxGen > 0 ? maxGen : 1;
-
-  // Build node features for every brain (even non-candidates — they might be
-  // parents of candidates, and we want their embeddings in the graph).
-  const feats = new Map();
-  for (const [id, entry] of brainMirror) {
-    const meta = entry.meta || {};
-    const fitnessNorm = (Number(meta.fitness) || 0) / fitScale;
-    const generationNorm = (Number(meta.generation) || 0) / genScale;
-    const trackSim = candidates.has(id) ? candidates.get(id) : 0;
-    feats.set(id, new Float32Array([fitnessNorm, generationNorm, trackSim]));
-  }
-
-  // One message-pass per brain: aggregate from meta.parentIds (the lineage
-  // edges). The layer's forward() takes (nodeEmb, neighborEmbArray, edgeWeights).
-  // We weight edges uniformly at 1.0 — upstream fitness is already in the
-  // neighbor's feature vector, so uniform weights keep the propagation
-  // interpretable.
-  const out = new Map();
-  for (const [id, entry] of brainMirror) {
-    const meta = entry.meta || {};
-    const parentIds = Array.isArray(meta.parentIds) ? meta.parentIds : [];
-    const neighborEmbs = [];
-    for (const pid of parentIds) {
-      const pf = feats.get(pid);
-      if (pf) neighborEmbs.push(pf);
+export const isReady=()=>!!_model;
+const predict=sample=>_model.predict(new Float64Array(sample.node),JSON.stringify(sample.neighbors));
+export function gnnScore(memory,candidates,context){
+  if(!_model||_stats.trained<8)return null;
+  try{
+    const scores=new Map();
+    for(const id of candidates.keys()){
+      const sample=graphExample(id,memory,candidates,context);if(!sample)continue;
+      scores.set(id,1+.3*predict(sample));
     }
-    const nodeEmb = feats.get(id);
-    let updated;
-    try {
-      if (neighborEmbs.length === 0) {
-        // Isolated nodes (no archived parents) — forward with a single zero
-        // self-loop so the layer has a neighbour to attend to. This keeps the
-        // GNN output dimensionality consistent across nodes.
-        const zeros = new Float32Array(GNN_INPUT_DIM);
-        updated = _gnnLayer.forward(nodeEmb, [zeros], new Float32Array([1.0]));
-      } else {
-        const weights = new Float32Array(neighborEmbs.length).fill(1.0);
-        updated = _gnnLayer.forward(nodeEmb, neighborEmbs, weights);
-      }
-    } catch (e) {
-      // If a single forward fails (bad shape, NaN, etc.), give this node a
-      // neutral score rather than killing the whole reranker.
-      console.warn('[gnn-reranker] forward failed for', id, e);
-      out.set(id, 1.0);
-      continue;
-    }
-    // Collapse the hidden vector to a scalar via mean; tanh-squash + shift into
-    // [0.7, 1.3] so the GNN term plays the same role shape as the old obsTerm
-    // (which lived in [0.7, 1.3] for EMA weight ∈ [-1, 1]).
-    let sum = 0;
-    const n = updated.length || 1;
-    for (let i = 0; i < n; i++) sum += updated[i];
-    const mean = sum / n;
-    const squashed = Math.tanh(mean);
-    out.set(id, 1 + 0.3 * squashed);
-  }
-
-  // Restrict the returned map to just the candidate set; callers only rerank
-  // within that set, and keeping non-candidates would just bloat the return.
-  const scored = new Map();
-  for (const id of candidates.keys()) {
-    scored.set(id, out.has(id) ? out.get(id) : 1.0);
-  }
-  return scored;
+    return scores;
+  }catch(error){console.warn('[gnn] scoring failed; using EMA',error);return null;}
 }
-
-// Test-only: reset the module state so unit tests can re-init with fresh state.
-export function _debugReset() {
-  _gnnReady = null;
-  _gnnMod = null;
-  _gnnLayer = null;
+// Freeze selection-time inputs. Never reconstruct them from the archive after
+// a descendant outcome has changed its fitness or lineage metadata.
+export function rememberSelection(seeds,memory,candidates,context,emaFor=()=>0){
+  if(!_model||!context)return;
+  for(const seed of seeds){
+    const sample=graphExample(seed.id,memory,candidates,context);if(!sample)continue;
+    const key=sample.context+'::'+seed.id;
+    _pending.set(key,{...sample,prediction:predict(sample),ema:Math.max(-1,Math.min(1,emaFor(seed.id)||0))});
+  }
+  while(_pending.size>100)_pending.delete(_pending.keys().next().value);
+}
+export function observeGraph(id,context,target){
+  const key=contextKey(context)+'::'+id,sample=_pending.get(key);_pending.delete(key);
+  if(!_model||!sample||!Number.isFinite(target)||Math.abs(target)>1)return false;
+  if(heldOut(sample.context)){
+    _stats.heldOut++;_stats.modelError+=(sample.prediction-target)**2;_stats.emaError+=(sample.ema-target)**2;
+    return true;
+  }
+  try{
+    _model.train(new Float64Array(sample.node),JSON.stringify(sample.neighbors),target,.05);
+    _replay.push({node:sample.node,neighbors:sample.neighbors,context:sample.context,target});
+    if(_replay.length>128)_replay.shift();
+    // Bounded rehearsal reduces recency bias across contexts. Held-out contexts
+    // never enter this buffer, including after checkpoint import.
+    for(let i=0;i<Math.min(3,_replay.length);i++){
+      const r=_replay[_cursor++%_replay.length];
+      _model.train(new Float64Array(r.node),JSON.stringify(r.neighbors),r.target,.05);
+    }
+    _cursor%=128;_stats.trained++;return true;
+  }catch(error){console.warn('[gnn] training sample rejected',error);return false;}
+}
+export function info(){return {ready:!!_model,experimental:true,trained:_stats.trained,updates:_model?.steps()||0,
+  heldOut:_stats.heldOut,modelMSE:_stats.heldOut?_stats.modelError/_stats.heldOut:null,
+  emaMSE:_stats.heldOut?_stats.emaError/_stats.heldOut:null,replay:_replay.length};}
+export function serialize(){
+  if(!_model)return _saved;
+  return {version:1,features:GRAPH_SCHEMA,model:_model.exportCheckpoint(),replay:_replay.map(s=>structuredClone(s)),cursor:_cursor,stats:{..._stats}};
+}
+export function deserialize(s){
+  if(!s||s.version!==1||s.features!==GRAPH_SCHEMA||typeof s.model!=='string'||s.model.length>2_000_000
+    ||!Array.isArray(s.replay)||s.replay.length>128||!Number.isInteger(s.cursor)||s.cursor<0||s.cursor>=128
+    ||!s.replay.every(r=>validExample(r)&&!heldOut(r.context)&&Number.isFinite(r.target)&&Math.abs(r.target)<=1)
+    ||!s.stats||!['trained','heldOut'].every(k=>Number.isSafeInteger(s.stats[k])&&s.stats[k]>=0)
+    ||!['modelError','emaError'].every(k=>Number.isFinite(s.stats[k])&&s.stats[k]>=0&&s.stats[k]<=4*s.stats.heldOut))return false;
+  let candidate;
+  try{
+    if(_model){candidate=create();candidate.importCheckpoint(s.model);_model.free();_model=candidate;candidate=null;}
+    _saved=structuredClone(s);_replay=structuredClone(s.replay);_cursor=s.cursor;_stats={...s.stats};_pending.clear();return true;
+  }catch(error){candidate?.free();console.warn('[gnn] checkpoint rejected; retaining current model',error);return false;}
+}
+export function _debugReset(){
+  _model?.free();_model=_module?create():null;_saved=null;_replay=[];_cursor=0;_stats=emptyStats();_pending.clear();
 }
