@@ -37,15 +37,17 @@ class CircuitStudio {
     try{
       // Avoid entering Three's WebGL backend when this browser has no GPU
       // context at all (remote desktops and disabled hardware acceleration).
-      const probe=document.createElement('canvas').getContext('webgl2');
-      if(probe)probe.getExtension('WEBGL_lose_context')?.loseContext();
-      else if(this.forceWebGL||!navigator.gpu||!await navigator.gpu.requestAdapter())
-        throw new Error('WebGPU and WebGL 2 are unavailable.');
+      const gpuAvailable=!this.forceWebGL&&navigator.gpu&&await navigator.gpu.requestAdapter();
+      if(!gpuAvailable){
+        const probe=document.createElement('canvas').getContext('webgl2');
+        if(!probe)throw new Error('WebGPU and WebGL 2 are unavailable.');
+        probe.getExtension('WEBGL_lose_context')?.loseContext();
+      }
       this.canvas=document.createElement('canvas');this.canvas.id='studio-canvas';this.canvas.hidden=true;
       this.canvas.tabIndex=0;this.canvas.setAttribute('aria-label','3D race circuit. Drag to orbit; use the scene controls to change camera.');
       this.host.prepend(this.canvas);
       this.renderer=new T.WebGPURenderer({canvas:this.canvas,antialias:true,forceWebGL:this.forceWebGL,powerPreference:'high-performance'});
-      this.renderer.onDeviceLost=()=>this.fail(new Error('The graphics device was reset. Classic view is available; reopen Circuit Studio to retry.'));
+      this.renderer.onDeviceLost=info=>this.fail(new Error(`The graphics device was reset: ${info.message||info.reason||'unknown reason'}`));
       await this.renderer.init();
       if(this.disposed)return;
       this.backend=this.renderer.backend.isWebGPUBackend?'WebGPU':'WebGL 2';
@@ -86,6 +88,7 @@ class CircuitStudio {
     }catch(error){this.fail(error);}
   }
   fail(error){
+    this.lastError=String(error?.stack||error);
     console.warn('[Circuit Studio]',error);
     this.failed=true;this.loading=false;this.ready=false;this.setActive(false);
     this.ui.message('Circuit Studio could not start on this device. You can keep training in Classic 2D, or reopen Studio to retry.');
@@ -119,7 +122,9 @@ class CircuitStudio {
   applyQuality(){
     if(!this.ready)return;const q=QUALITY[this.quality];
     this.renderer.setPixelRatio(Math.min(devicePixelRatio||1,q.dpr));
-    this.sun.shadow.mapSize.set(q.shadow,q.shadow);this.sun.shadow.map?.dispose();this.sun.shadow.map=null;
+    // ShadowNode owns this render target and resizes it from mapSize. Disposing
+    // the target here leaves its cached node bindings pointing at freed textures.
+    this.sun.shadow.mapSize.set(q.shadow,q.shadow);this.sun.shadow.needsUpdate=true;
     this.renderer.shadowMap.enabled=true;this.pack.castShadow=this.quality!=='low';
     this.resize();this.updateReflection();
   }

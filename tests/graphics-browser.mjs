@@ -21,12 +21,16 @@ async function exercise(backend){
   // These are test-only flags; the application requests normal browser APIs.
   const browser=await chromium.launch({headless:true,args:[
     '--use-angle=swiftshader','--enable-unsafe-swiftshader','--enable-unsafe-webgpu',
+    '--disable-gpu-watchdog',
   ]});
-  const context=await browser.newContext({viewport:{width:1440,height:960}});
+  const context=await browser.newContext({viewport:{width:1280,height:800}});
   const page=await context.newPage();page.setDefaultTimeout(45000);
-  const errors=[];
+  const errors=[],warnings=[];
   page.on('pageerror',e=>errors.push(e.stack||e.message));
   page.on('console',m=>{if(m.type()==='error'&&/THREE|WebGL|WebGPU|WGSL|shader|validation|Circuit Studio/i.test(m.text()))errors.push(m.text());});
+  page.on('console',m=>{if(m.type()==='warning')warnings.push(m.text());});
+  let stage='initial scene';
+  const watchdog=setTimeout(()=>{console.error(`${backend}: stalled at ${stage}`);browser.close().catch(()=>{});},360000);
   // Keep browser checks independent of analytics and font service uptime.
   await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
   try{
@@ -44,6 +48,7 @@ async function exercise(backend){
     await page.locator('[data-action="settings"]').first().click();
 
     // Run the real worker with a small, short training cohort.
+    stage='worker and cameras';console.log(`${backend}: ${stage}`);
     await page.evaluate(()=>{setN(48);setSeconds(3);setSimSpeed(1);});
     await page.locator('#startOverlayBtn').click();
     await page.waitForFunction(()=>window.CircuitStudio.archive.runs.length>0,{},{timeout:60000});
@@ -57,6 +62,7 @@ async function exercise(backend){
     await page.waitForFunction(()=>window.CircuitStudio.sensors.count>0);
     await page.screenshot({path:`${out}/${backend}-vision.png`});
 
+    stage='night and reflections';console.log(`${backend}: ${stage}`);
     await page.locator('[data-action="settings"]').first().click();
     await page.locator('[data-setting="quality"]').selectOption('high');
     await page.locator('[data-setting="theme"]').selectOption('alpine');
@@ -67,7 +73,9 @@ async function exercise(backend){
     await page.screenshot({path:`${out}/${backend}-night.png`});
 
     // Playback is separate from the live worker and uses recorded poses.
+    stage='recorded playback';console.log(`${backend}: ${stage}`);
     await page.locator('[data-action="settings"]').first().click();
+    await page.locator('[data-setting="quality"]').selectOption('low');
     await page.locator('[data-setting="ghosts"]').check();
     await page.locator('[data-action="replay"]').click();
     await page.locator('[data-action="replay-pause"]').click();
@@ -80,6 +88,7 @@ async function exercise(backend){
     await page.locator('[data-action="live"]').click();
     assert.equal(await page.evaluate(()=>!!window.CircuitStudio.replay),false);
 
+    stage='classic and mobile';console.log(`${backend}: ${stage}`);
     await page.locator('[data-action="training"]').click();
     await page.waitForFunction(()=>window.CircuitStudio.info.paused);
     await page.locator('[data-action="settings"]').first().click();
@@ -105,11 +114,11 @@ async function exercise(backend){
     assert.deepEqual(errors,[],'No uncaught JavaScript or shader errors');
     report.push({requested:backend,selected,result:'pass',checks:'day, worker, chase, vision, night, reflections, replay, independent training, classic, mobile, editor'});
   }catch(error){
-    await page.screenshot({path:`${out}/${backend}-failure.png`}).catch(()=>{});
-    const state=await page.evaluate(()=>{const s=window.CircuitStudio;return {active:s?.active,failed:s?.failed,backend:s?.backend,frame:s?.info?.snapshot?.frameCount,rays:s?.info?.snapshot?.bestRays?.length,sensors:s?.sensors?.count};}).catch(()=>null);
-    await writeFile(`${out}/${backend}-errors.txt`,JSON.stringify({error:String(error),errors,state,body:await page.locator('body').innerText().catch(()=>'' )},null,2));
+    await page.screenshot({path:`${out}/${backend}-failure.png`,timeout:10000}).catch(()=>{});
+    const state=await page.evaluate(()=>{const s=window.CircuitStudio;return {active:s?.active,failed:s?.failed,lastError:s?.lastError,backend:s?.backend,frame:s?.info?.snapshot?.frameCount,rays:s?.info?.snapshot?.bestRays?.length,sensors:s?.sensors?.count};}).catch(()=>null);
+    await writeFile(`${out}/${backend}-errors.txt`,JSON.stringify({stage,error:String(error),errors,warnings,state,body:await page.locator('body').innerText().catch(()=>'' )},null,2));
     throw error;
-  }finally{await browser.close();}
+  }finally{clearTimeout(watchdog);await browser.close();}
 }
 async function fallback(){
   const browser=await chromium.launch({headless:true,args:['--disable-gpu','--disable-software-rasterizer']});
