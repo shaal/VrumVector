@@ -1,7 +1,7 @@
 name: Deploy to Cloudflare Pages
 
 # Triggers:
-#   - push to main            → production deploy (vectorvroom.shaal.dev)
+#   - push to main            → production deploy (vv.shaal.dev)
 #   - pull_request            → preview deploy at <branch>.vectorvroom.pages.dev
 #   - workflow_dispatch       → manual redeploy button in the Actions tab
 #

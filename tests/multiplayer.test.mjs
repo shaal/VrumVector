@@ -69,6 +69,15 @@ test('server rejects hostile origins and malformed state, and removes the invali
   await until(()=>b.messages.some(m=>m.type==='leave'&&m.id===a.welcome.id));b.ws.close();
 });
 
+test('production domain can join live races while lookalike origins are rejected',async()=>{
+  const url=`http://local/room/${'d'.repeat(64)}?name=Production`;
+  const response=await mf.dispatchFetch(url,{headers:{Upgrade:'websocket',Origin:'https://vv.shaal.dev'}});
+  assert.equal(response.status,101);response.webSocket.accept();response.webSocket.close();
+  for(const origin of ['https://vv.shaal.dev.evil.example','http://vv.shaal.dev','https://other.shaal.dev']){
+    assert.equal((await mf.dispatchFetch(url,{headers:{Upgrade:'websocket',Origin:origin}})).status,403);
+  }
+});
+
 const controlsSource=await readFile(new URL('../AI-Car-Racer/controls.js',import.meta.url),'utf8');
 function drivingControls(){
   const document=new EventTarget(),window=new EventTarget();

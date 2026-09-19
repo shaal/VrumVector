@@ -9,6 +9,7 @@ export default {
     const origin=request.headers.get('Origin')||'';
     const allowed=/^https:\/\/([a-z0-9-]+\.)?vectorvroom\.pages\.dev$/.test(origin)
       || origin==='https://vectorvroom.shaal.dev'
+      || origin==='https://vv.shaal.dev'
       || (env.ALLOW_LOCAL==='true' && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin));
     if (!allowed) return new Response('Origin not allowed',{status:403});
     const match=url.pathname.match(/^\/room\/([a-f0-9]{64})$/);
