@@ -17,6 +17,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:learning
+      - run: npm run test:learning:wasm
       - run: npx playwright install --with-deps chromium
       - run: npm run test:learning:browser
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

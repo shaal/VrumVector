@@ -181,7 +181,8 @@ export function deserialize(snap) {
   if (!isReady() || !snap || snap.halfDim !== HALF_DIM) return false;
   const b0 = toF32(snap.b0);
   const b1 = toF32(snap.b1);
-  if (b0.length !== 2 * HALF_DIM || b1.length !== 2 * HALF_DIM) return false;
+  if (b0.length !== 2 * HALF_DIM || b1.length !== 2 * HALF_DIM
+      || !b0.every(Number.isFinite) || !b1.every(Number.isFinite)) return false;
   _loraLo.set_b(b0);
   _loraHi.set_b(b1);
   _baseline = Number.isFinite(snap.baseline) ? snap.baseline : 0;

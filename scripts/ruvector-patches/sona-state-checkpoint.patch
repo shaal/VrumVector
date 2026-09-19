@@ -1,6 +1,6 @@
 diff --git a/crates/sona/src/checkpoint.rs b/crates/sona/src/checkpoint.rs
 new file mode 100644
-index 0000000..b077a1f
+index 0000000..652c3d2
 --- /dev/null
 +++ b/crates/sona/src/checkpoint.rs
 @@ -0,0 +1,228 @@
@@ -63,7 +63,7 @@ index 0000000..b077a1f
 +        ensure(self.micro.hidden_dim == c.hidden_dim && self.micro.rank == c.micro_lora_rank
 +            && vector(&self.micro.down_proj,m) && vector(&self.micro.up_proj,m)
 +            && vector(&self.grad_down,m) && vector(&self.grad_up,m)
-+            && finite(self.micro.scale) && self.micro.scale > 0
++            && finite(self.micro.scale) && self.micro.scale > 0.0
 +            && self.update_count < 100 && self.pending_signals == self.update_count as u64, "micro optimizer")?;
 +        let b = c.hidden_dim * c.base_lora_rank;
 +        ensure(self.base.hidden_dim == c.hidden_dim && self.base.rank == c.base_lora_rank

@@ -74,36 +74,57 @@ try{
   const cached=await page.evaluate(()=>JSON.parse(localStorage.getItem('vv.driverChampions')));
   assert.ok(cached.some(c=>c.meta.learningContext.profile==='careful'));
   assert.ok(cached.some(c=>c.meta.learningContext.profile==='wild'));
-  mark('successful SONA circuit examples survive reload');
+  mark('exact SONA checkpoint and pending trajectory survive reload');
   await page.evaluate(async()=>{
     const b=window.__rvBridge,vector=new Float32Array(512);vector[0]=1;
     b.beginPhase4Trajectory(vector);b.addPhase4Step(vector,null,20);b.endPhase4Trajectory(20);
     if(!b.info().sona.savedExamples)throw Error('Circuit example was not saved');
+    b.beginPhase4Trajectory(vector);b.addPhase4Step(vector,null,12);
+    const engine=await import('/AI-Car-Racer/sona/engine.js');
+    window.__checkpointBefore=engine.serialize();
     await b.persist();
   });
+  const checkpointBefore=await page.evaluate(()=>window.__checkpointBefore);
   await page.reload();await ready();
-  await page.waitForFunction(()=>window.__rvBridge.info().sona.replayedExamples>=1);
+  await page.waitForFunction(()=>window.__rvBridge.info().sona.restoration==='exact');
+  const checkpointAfter=await page.evaluate(async()=> (await import('/AI-Car-Racer/sona/engine.js')).serialize());
+  for(const key of ['bank','ewc','micro','grad_up','grad_down','base','pending','metrics','next_id'])
+    assert.deepEqual(JSON.parse(checkpointAfter.sona.checkpoint)[key],JSON.parse(checkpointBefore.sona.checkpoint)[key],key);
+  assert.deepEqual(checkpointAfter.sona.trajectory,checkpointBefore.sona.trajectory);
   mark('journal survives missing or rejected LoRA independently');
   const migrated=await page.evaluate(async()=>{
     const engine=await import('/AI-Car-Racer/sona/engine.js'),saved=engine.serialize();
     engine._debugReset();
     const legacy=engine.deserialize({...saved.lora,sonaJournal:saved.sonaJournal});
     const rejected=engine.deserialize({...saved,lora:{halfDim:-1}});
-    const examples=engine.info().sona.replayedExamples;
+    const exact=engine.info().sona.restoration;
+    const corrupt=structuredClone(saved);corrupt.sona.checkpoint='{}';
+    engine.deserialize(corrupt);const examples=engine.info().sona.replayedExamples;
     engine.deserialize(saved);await window.__rvBridge.persist();
-    return {legacy,rejected,examples};
+    return {legacy,rejected,examples,exact};
   });
-  assert.equal(migrated.legacy,true);assert.equal(migrated.rejected,true);assert.ok(migrated.examples>=1);
+  assert.equal(migrated.legacy,true);assert.equal(migrated.rejected,true);assert.ok(migrated.examples>=1);assert.equal(migrated.exact,'exact');
   await page.route('**/ruvector_learning_wasm_bg.wasm',route=>route.abort());
   for(let reload=0;reload<2;reload++){
     await page.reload();await ready();
-    await page.waitForFunction(()=>window.__rvBridge.info().sona.replayedExamples>=1);
+    await page.waitForFunction(()=>window.__rvBridge.info().sona.restoration==='exact');
     assert.equal(await page.evaluate(()=>window.__rvBridge.info().lora.ready),false);
     await page.evaluate(()=>window.__rvBridge.persist());
   }
   await page.unroute('**/ruvector_learning_wasm_bg.wasm');
   await page.reload();await ready();
   assert.equal(await page.evaluate(()=>window.__rvBridge.info().lora.ready),true);
+  mark('unavailable SONA retains its exact checkpoint across saves');
+  const retained=await page.evaluate(async()=> (await import('/AI-Car-Racer/sona/engine.js')).serialize().sona);
+  await page.route('**/ruvector_sona_bg.wasm',route=>route.abort());
+  for(let reload=0;reload<2;reload++){
+    await page.reload();await ready();
+    assert.equal(await page.evaluate(()=>window.__rvBridge.info().sona.ready),false);
+    await page.evaluate(()=>window.__rvBridge.persist());
+    assert.deepEqual(await page.evaluate(async()=> (await import('/AI-Car-Racer/sona/engine.js')).serialize().sona),retained);
+  }
+  await page.unroute('**/ruvector_sona_bg.wasm');await page.reload();await ready();
+  assert.equal(await page.evaluate(()=>window.__rvBridge.info().sona.restoration),'exact');
   assert.equal(await page.evaluate(()=>window.DriverLearning.profile),'wild');
   assert.equal(await page.evaluate(()=>window.DriverLearning.adaptive),false);
   assert.equal(await page.evaluate(()=>window.PlayerAssist.enabled||window.CircuitStudio.enabled),false);
