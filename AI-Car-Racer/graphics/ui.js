@@ -6,8 +6,8 @@ export class StudioUI {
     this.root.setAttribute('aria-label','Circuit Studio');
     this.root.innerHTML=`
       <header class="studio-header">
-        <div><span class="studio-eyebrow">VECTORVROOM / LIVE LEARNING</span><h2 data-title>Circuit Studio<span>.</span></h2><p>Intelligence finds its line.</p></div>
-        <div class="studio-header-actions"><span class="studio-status" data-status>READY</span><button data-action="classic-top">Switch to 2D</button><button data-action="learn">Learn</button><button data-action="panel">Training controls</button><button class="studio-primary" data-action="training">Start training</button></div>
+        <div><span class="studio-eyebrow">VECTORVROOM / LIVE LEARNING</span><h2 data-title>Circuit Studio<span>.</span></h2><button data-action="classic-top">Switch to 2D</button></div>
+        <div class="studio-header-actions"><span class="studio-status" data-status>READY</span><button data-action="learn">Learn</button><button data-action="panel">Training controls</button><button class="studio-primary" data-action="training">Start training</button></div>
       </header>
       <div class="studio-vitals" aria-label="Training statistics"><span>GENERATION<b data-gen>01</b></span><span>ALIVE<b data-alive>—</b></span><span>LEADER GATES<b data-progress>—</b></span></div>
       <aside class="studio-vision" hidden data-vision-panel><span class="studio-eyebrow">INSIDE THE DRIVER</span><strong data-driver>Live sensor readings</strong><div class="studio-decisions">${['Forward','Left','Right','Reverse'].map((n,i)=>`<span data-decision="${i}">${n}<b>OFF</b></span>`).join('')}</div><p data-vision-note>Cyan: sensor hits · Amber: crash density</p></aside>

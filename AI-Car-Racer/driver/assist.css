@@ -8,4 +8,5 @@
 @media(max-width:600px){
   #player-assist {top:154px;right:12px;max-width:190px;}
   #ai-drive-toggle {min-height:38px;font-size:12px;padding:8px 11px;}
+  body.studio-enabled #player-assist {max-width:calc(50% - 24px);}
 }
