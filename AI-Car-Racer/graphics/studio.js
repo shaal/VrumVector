@@ -35,6 +35,13 @@ class CircuitStudio {
   async init(){
     if(this.loading||this.ready||this.failed)return;this.loading=true;
     try{
+      // Avoid entering Three's WebGL backend when this browser has no GPU
+      // context at all (remote desktops and disabled hardware acceleration).
+      if(this.forceWebGL||!navigator.gpu){
+        const probe=document.createElement('canvas').getContext('webgl2');
+        if(!probe)throw new Error('WebGPU and WebGL 2 are unavailable.');
+        probe.getExtension('WEBGL_lose_context')?.loseContext();
+      }
       this.canvas=document.createElement('canvas');this.canvas.id='studio-canvas';this.canvas.hidden=true;
       this.canvas.tabIndex=0;this.canvas.setAttribute('aria-label','3D race circuit. Drag to orbit; use the scene controls to change camera.');
       this.host.prepend(this.canvas);
@@ -92,7 +99,7 @@ class CircuitStudio {
     if(this.world){this.world.heatTexture.dispose();this.world=null;}
     if(this.scene)disposeTree(this.scene);
     const renderer=this.renderer;this.renderer=null;
-    if(renderer)Promise.resolve(renderer.dispose()).catch(()=>{});
+    if(renderer){try{Promise.resolve(renderer.dispose()).catch(()=>{});}catch{}}
     this.canvas?.remove();this.scene=null;
   }
   dispose(){this.disposed=true;this.releaseRenderer();}

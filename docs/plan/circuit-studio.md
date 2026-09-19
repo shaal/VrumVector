@@ -47,8 +47,12 @@ errors and device loss return to the existing renderer. `?graphics=classic`
 forces the original view; `?graphics=studio&backend=webgl` exercises WebGL 2.
 Use `?graphics=studio&scene=night&camera=chase` for the night view.
 
-`npm run test:graphics` covers interpolation, restart identity, track membership,
-private randomness, replay timing, bounded memory, and track-specific ghosts.
+`npm run test:graphics` covers all ten preset road meshes, interpolation, restart
+identity, track membership, private randomness, replay timing, bounded memory,
+and track-specific ghosts. `npm run test:graphics:browser` starts a local server
+and exercises real shader compilation, training, camera controls, reflections,
+replay, mobile layout, the editor, and failure recovery with Playwright Chromium.
+CI attaches screenshots and a report identifying the backend actually selected.
 Visual/browser validation results are recorded in the pull request.
 
 Quality is a rendering choice, not a promise of a particular frame rate. Profile

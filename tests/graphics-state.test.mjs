@@ -3,8 +3,32 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { SnapshotBuffer, ReplayArchive, sampleRun, interpolatePose, pointInLoop, cleanLoop, seededRandom, distanceToLoop } from '../AI-Car-Racer/graphics/state.js';
+import { createRoadGeometry } from '../AI-Car-Racer/graphics/world.js';
 
 const snapshot=(frame,x,angle=0)=>({frameCount:frame,N:1,positions:new Float32Array([x,200,angle,0,2])});
+const presetSource=await readFile(new URL('../AI-Car-Racer/trackPresets.js',import.meta.url),'utf8');
+const presetContext=vm.createContext({window:{}});
+vm.runInContext(presetSource.slice(0,presetSource.indexOf('\n];')+3),presetContext);
+for(const preset of presetContext.window.TRACK_PRESETS){
+  test(`3D road triangles stay inside the ${preset.name} collision corridor`,()=>{
+    const g=createRoadGeometry(preset.points2,preset.points),p=g.attributes.position,idx=g.index.array;
+    let area=0;
+    for(let i=0;i<idx.length;i+=3){
+      const [a,b,c]=[idx[i],idx[i+1],idx[i+2]];
+      const triangleArea=Math.abs((p.getX(b)-p.getX(a))*(p.getZ(c)-p.getZ(a))-(p.getZ(b)-p.getZ(a))*(p.getX(c)-p.getX(a)))/2;
+      // Earcut may retain zero-area faces on collinear boundary vertices.
+      if(triangleArea<1e-8)continue;
+      const cx=(p.getX(a)+p.getX(b)+p.getX(c))/3/.035+1600;
+      const cy=(p.getZ(a)+p.getZ(b)+p.getZ(c))/3/.035+900;
+      assert.ok(pointInLoop(cx,cy,preset.points2)&&!pointInLoop(cx,cy,preset.points),`triangle at ${cx},${cy}`);
+      area+=triangleArea;
+      assert.ok(g.attributes.normal.getY(a)>.99);
+    }
+    const polygonArea=loop=>Math.abs(loop.reduce((s,a,i)=>{const b=loop[(i+1)%loop.length];return s+a.x*b.y-b.x*a.y;},0)/2);
+    const expected=(polygonArea(preset.points2)-polygonArea(preset.points))*.035**2;
+    assert.ok(Math.abs(area-expected)<.01,`area ${area} versus ${expected}`);g.dispose();
+  });
+}
 test('heading interpolation takes the short turn across the ±π seam',()=>{
   const p=interpolatePose({x:0,y:0,angle:Math.PI-.1},{x:10,y:20,angle:-Math.PI+.1},.5);
   assert.ok(Math.abs(p.angle-Math.PI)<1e-6);assert.equal(p.x,5);assert.equal(p.y,10);

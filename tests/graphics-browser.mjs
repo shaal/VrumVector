@@ -1,0 +1,128 @@
+import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { chromium } from 'playwright';
+
+const out='test-results/graphics';
+await mkdir(out,{recursive:true});
+const server=spawn('python3',['-m','http.server','8877','--bind','127.0.0.1'],{stdio:'ignore'});
+const origin='http://127.0.0.1:8877';
+const report=[];
+async function ready(page){
+  await page.waitForFunction(()=>window.CircuitStudio?.active||window.CircuitStudio?.failed,{},{timeout:90000});
+  assert.equal(await page.evaluate(()=>window.CircuitStudio.active),true,await page.locator('.studio-notice').textContent());
+}
+async function settle(page){
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  await page.waitForTimeout(600);
+}
+async function exercise(backend){
+  // Chromium's software adapters exercise actual shader compilation in CI.
+  // These are test-only flags; the application requests normal browser APIs.
+  const browser=await chromium.launch({headless:true,args:[
+    '--use-angle=swiftshader','--enable-unsafe-swiftshader','--enable-unsafe-webgpu',
+  ]});
+  const context=await browser.newContext({viewport:{width:1440,height:960}});
+  const page=await context.newPage();page.setDefaultTimeout(45000);
+  const errors=[];
+  page.on('pageerror',e=>errors.push(e.stack||e.message));
+  page.on('console',m=>{if(m.type()==='error'&&/THREE|WebGL|WebGPU|WGSL|shader|validation|Circuit Studio/i.test(m.text()))errors.push(m.text());});
+  // Keep browser checks independent of analytics and font service uptime.
+  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+  try{
+    await page.goto(`${origin}/AI-Car-Racer/?rv=0&graphics=studio&backend=${backend}`);
+    await ready(page);await settle(page);
+    const selected=await page.evaluate(()=>window.CircuitStudio.backend);
+    if(backend==='webgl')assert.equal(selected,'WebGL 2');
+    console.log(`${backend}: renderer selected ${selected}`);
+    await page.screenshot({path:`${out}/${backend}-day.png`});
+
+    // Run the real worker with a small, short training cohort.
+    await page.evaluate(()=>{setN(48);setSeconds(3);setSimSpeed(1);});
+    await page.locator('#startOverlayBtn').click();
+    await page.waitForFunction(()=>window.CircuitStudio.archive.runs.length>0,{},{timeout:60000});
+    assert.equal(await page.evaluate(()=>window.CircuitStudio.info.snapshot.N),48);
+    await page.locator('[data-camera="chase"]').click();await settle(page);
+    await page.screenshot({path:`${out}/${backend}-chase.png`});
+    await page.locator('[data-action="vision"]').click();await settle(page);
+    assert.equal(await page.locator('[data-vision-panel]').isVisible(),true);
+    assert.ok(await page.evaluate(()=>window.CircuitStudio.sensors.count)>0,'Live champion sensors are rendered');
+    await page.screenshot({path:`${out}/${backend}-vision.png`});
+
+    await page.locator('[data-action="settings"]').first().click();
+    await page.locator('[data-setting="quality"]').selectOption('high');
+    await page.locator('[data-setting="theme"]').selectOption('alpine');
+    await page.locator('[data-action="settings"]').first().click();
+    await page.locator('[data-action="night"]').click();await settle(page);
+    await ready(page);
+    assert.equal(await page.evaluate(()=>!!window.CircuitStudio.reflection),true);
+    await page.screenshot({path:`${out}/${backend}-night.png`});
+
+    // Playback is separate from the live worker and uses recorded poses.
+    await page.locator('[data-action="settings"]').first().click();
+    await page.locator('[data-setting="ghosts"]').check();
+    await page.locator('[data-action="replay"]').click();
+    await page.locator('[data-action="replay-pause"]').click();
+    await page.locator('[data-setting="rate"]').selectOption('0.25');
+    const serial=await page.evaluate(()=>window.CircuitStudio.info.runSerial);
+    await page.locator('[data-setting="scrub"]').fill('0.5');
+    assert.equal(await page.evaluate(()=>window.CircuitStudio.replay.time),.5);
+    await page.waitForFunction(before=>window.CircuitStudio.info.runSerial>before,serial,{timeout:60000});
+    await page.screenshot({path:`${out}/${backend}-replay.png`});
+    await page.locator('[data-action="live"]').click();
+    assert.equal(await page.evaluate(()=>!!window.CircuitStudio.replay),false);
+
+    await page.locator('[data-action="training"]').click();
+    await page.waitForFunction(()=>window.CircuitStudio.info.paused);
+    await page.locator('[data-action="settings"]').first().click();
+    await page.locator('[data-action="classic"]').click();
+    await page.waitForFunction(()=>!window.CircuitStudio.active);
+    assert.equal(await page.locator('#myCanvas').isVisible(),true);
+    await page.locator('.studio-launch').click();await ready(page);
+    await page.keyboard.press('Escape');
+    await page.locator('[data-action="night"]').click();
+    await page.locator('[data-camera="orbit"]').click();
+    await page.setViewportSize({width:390,height:844});await settle(page);
+    await page.screenshot({path:`${out}/${backend}-mobile.png`});
+    const bounds=await page.locator('.studio-dock').boundingBox();
+    assert.ok(bounds.x>=0&&bounds.x+bounds.width<=391&&bounds.y+bounds.height<=845,'Mobile controls fit the viewport');
+    await page.locator('[data-action="settings"]').first().click();
+    await page.locator('[data-setting="quality"]').selectOption('low');await settle(page);
+    await ready(page);
+    await page.keyboard.press('Escape');
+    // The existing editor owns Canvas 2D and must become interactive again.
+    await page.evaluate(()=>customizeTrack());
+    await page.waitForFunction(()=>!window.CircuitStudio.active);
+    assert.equal(await page.locator('#myCanvas').isVisible(),true);
+    assert.deepEqual(errors,[],'No uncaught JavaScript or shader errors');
+    report.push({requested:backend,selected,result:'pass',checks:'day, worker, chase, vision, night, reflections, replay, independent training, classic, mobile, editor'});
+  }catch(error){
+    await page.screenshot({path:`${out}/${backend}-failure.png`}).catch(()=>{});
+    await writeFile(`${out}/${backend}-errors.txt`,JSON.stringify({error:String(error),errors,body:await page.locator('body').innerText().catch(()=>'' )},null,2));
+    throw error;
+  }finally{await browser.close();}
+}
+async function fallback(){
+  const browser=await chromium.launch({headless:true,args:['--disable-gpu','--disable-software-rasterizer']});
+  const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  try{
+    await page.goto(`${origin}/AI-Car-Racer/?rv=0&graphics=studio&backend=webgl`);
+    await page.waitForFunction(()=>window.CircuitStudio?.failed);
+    assert.equal(await page.locator('#myCanvas').isVisible(),true);
+    await page.evaluate(()=>{setN(24);setSeconds(3);});
+    await page.locator('#startOverlayBtn').click();
+    await page.waitForFunction(()=>window.CircuitStudio.info.snapshot?.frameCount>0);
+    assert.deepEqual(errors,[]);
+    report.push({requested:'no GPU',selected:'Classic 2D',result:'pass'});
+  }finally{await browser.close();}
+}
+try{
+  for(let i=0;i<50;i++){try{await fetch(origin);break;}catch{await new Promise(r=>setTimeout(r,100));}}
+  await exercise('webgl');
+  await exercise('auto');
+  await fallback();
+}finally{
+  server.kill();
+  await writeFile(`${out}/report.json`,JSON.stringify(report,null,2));
+  console.log(JSON.stringify(report,null,2));
+}

@@ -23,7 +23,7 @@ function instances(root, geometry, material, transforms) {
   m.count=transforms.length; m.castShadow=true; m.receiveShadow=true;
   root.add(m); return m;
 }
-function polygonGeometry(outer, inner) {
+export function createRoadGeometry(outer, inner) {
   const shape = new T.Shape(outer.map(p=>new T.Vector2(worldX(p.x),-worldZ(p.y))));
   shape.holes.push(new T.Path(inner.map(p=>new T.Vector2(worldX(p.x),-worldZ(p.y)))));
   const g = new T.ShapeGeometry(shape);
@@ -48,7 +48,6 @@ export function buildWorld(road, themeName, quality) {
   const wet=T.uniform(0), vision=T.uniform(0);
   const heatCanvas=document.createElement('canvas'); heatCanvas.width=160; heatCanvas.height=90;
   const heatTexture=new T.CanvasTexture(heatCanvas);
-  const materials=[];
   const slab=standard(0x293331,{roughness:0.65});
   mesh(root,new T.RoundedBoxGeometry(121,2.3,72,3,1.1),slab,0,-1.3,0);
   const terrain=standard(theme.ground);
@@ -59,7 +58,7 @@ export function buildWorld(road, themeName, quality) {
   roadMat.colorNode=T.mix(T.vec3(.15,.18,.19),T.vec3(.095,.13,.15),wet).mul(noise.mul(.13).add(.94));
   roadMat.roughnessNode=T.mix(T.float(.95),puddle.mul(.24).add(.17),wet);
   roadMat.emissiveNode=T.texture(heatTexture,T.vec2(T.positionWorld.x.div(112).add(.5),T.positionWorld.z.div(-63).add(.5))).rgb.mul(vision).mul(1.8);
-  const asphalt=mesh(root,polygonGeometry(outer,inner),roadMat,0,.008,0);
+  const asphalt=mesh(root,createRoadGeometry(outer,inner),roadMat,0,.008,0);
   asphalt.castShadow=false;
   const barriers=[], whiteCurbs=[], redCurbs=[], lamps=[];
   for(const loop of [outer,inner]) {
