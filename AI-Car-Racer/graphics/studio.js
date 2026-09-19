@@ -37,11 +37,10 @@ class CircuitStudio {
     try{
       // Avoid entering Three's WebGL backend when this browser has no GPU
       // context at all (remote desktops and disabled hardware acceleration).
-      if(this.forceWebGL||!navigator.gpu){
-        const probe=document.createElement('canvas').getContext('webgl2');
-        if(!probe)throw new Error('WebGPU and WebGL 2 are unavailable.');
-        probe.getExtension('WEBGL_lose_context')?.loseContext();
-      }
+      const probe=document.createElement('canvas').getContext('webgl2');
+      if(probe)probe.getExtension('WEBGL_lose_context')?.loseContext();
+      else if(this.forceWebGL||!navigator.gpu||!await navigator.gpu.requestAdapter())
+        throw new Error('WebGPU and WebGL 2 are unavailable.');
       this.canvas=document.createElement('canvas');this.canvas.id='studio-canvas';this.canvas.hidden=true;
       this.canvas.tabIndex=0;this.canvas.setAttribute('aria-label','3D race circuit. Drag to orbit; use the scene controls to change camera.');
       this.host.prepend(this.canvas);
@@ -300,7 +299,8 @@ class CircuitStudio {
     this.controls.enabled=mode==='orbit'&&this.cameraMode==='orbit';
     const eye=this.desiredEye,look=this.desiredLook,p=this.focusPose;
     const x=worldX(p.x),z=worldZ(p.y),a=p.angle,fx=-Math.sin(a),fz=-Math.cos(a);
-    if(this.resetCamera){
+    const reset=this.resetCamera;
+    if(reset){
       const scale=Math.max(1,Math.sqrt(1.65/this.camera.aspect));
       this.camera.position.set(65*scale,70*scale,86*scale);this.controls.target.set(0,0,0);this.camera.lookAt(0,0,0);this.controls.update();this.smoothLook.set(0,0,0);this.resetCamera=false;
     }
@@ -321,7 +321,7 @@ class CircuitStudio {
       }
       eye.copy(this.tracksideEye);look.set(x,.4,z);
     }
-    const smooth=this.reducedMotion?1:1-Math.exp(-dt*4);
+    const smooth=this.reducedMotion||reset?1:1-Math.exp(-dt*4);
     this.camera.position.lerp(eye,smooth);this.smoothLook.lerp(look,smooth);this.camera.lookAt(this.smoothLook);
   }
 }

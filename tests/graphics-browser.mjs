@@ -37,6 +37,12 @@ async function exercise(backend){
     console.log(`${backend}: renderer selected ${selected}`);
     await page.screenshot({path:`${out}/${backend}-day.png`});
 
+    // Keep interaction tests responsive on CPU-only CI. The balanced pipeline
+    // was rendered above; high quality (including reflections) is checked below.
+    await page.locator('[data-action="settings"]').first().click();
+    await page.locator('[data-setting="quality"]').selectOption('low');
+    await page.locator('[data-action="settings"]').first().click();
+
     // Run the real worker with a small, short training cohort.
     await page.evaluate(()=>{setN(48);setSeconds(3);setSimSpeed(1);});
     await page.locator('#startOverlayBtn').click();
@@ -46,7 +52,9 @@ async function exercise(backend){
     await page.screenshot({path:`${out}/${backend}-chase.png`});
     await page.locator('[data-action="vision"]').click();await settle(page);
     assert.equal(await page.locator('[data-vision-panel]').isVisible(),true);
-    assert.ok(await page.evaluate(()=>window.CircuitStudio.sensors.count)>0,'Live champion sensors are rendered');
+    // Generation-zero snapshots have no ray data yet. Wait for actual sensor
+    // output instead of asserting during an arbitrary restart boundary.
+    await page.waitForFunction(()=>window.CircuitStudio.sensors.count>0);
     await page.screenshot({path:`${out}/${backend}-vision.png`});
 
     await page.locator('[data-action="settings"]').first().click();
@@ -98,7 +106,8 @@ async function exercise(backend){
     report.push({requested:backend,selected,result:'pass',checks:'day, worker, chase, vision, night, reflections, replay, independent training, classic, mobile, editor'});
   }catch(error){
     await page.screenshot({path:`${out}/${backend}-failure.png`}).catch(()=>{});
-    await writeFile(`${out}/${backend}-errors.txt`,JSON.stringify({error:String(error),errors,body:await page.locator('body').innerText().catch(()=>'' )},null,2));
+    const state=await page.evaluate(()=>{const s=window.CircuitStudio;return {active:s?.active,failed:s?.failed,backend:s?.backend,frame:s?.info?.snapshot?.frameCount,rays:s?.info?.snapshot?.bestRays?.length,sensors:s?.sensors?.count};}).catch(()=>null);
+    await writeFile(`${out}/${backend}-errors.txt`,JSON.stringify({error:String(error),errors,state,body:await page.locator('body').innerText().catch(()=>'' )},null,2));
     throw error;
   }finally{await browser.close();}
 }
@@ -118,9 +127,10 @@ async function fallback(){
 }
 try{
   for(let i=0;i<50;i++){try{await fetch(origin);break;}catch{await new Promise(r=>setTimeout(r,100));}}
-  await exercise('webgl');
-  await exercise('auto');
-  await fallback();
+  const failures=[];
+  for(const backend of ['webgl','auto']){try{await exercise(backend);}catch(error){console.error(error);failures.push(error);}}
+  try{await fallback();}catch(error){console.error(error);failures.push(error);}
+  if(failures.length)throw new AggregateError(failures,'Browser graphics verification failed');
 }finally{
   server.kill();
   await writeFile(`${out}/report.json`,JSON.stringify(report,null,2));

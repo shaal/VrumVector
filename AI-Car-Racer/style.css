@@ -2475,12 +2475,12 @@ label {
     outline-offset: 2px;
 }
 #cinema-controls button.is-on {
-    background: rgba(211, 139, 75, 0.28);
+    background: #604024;
     border-color: rgba(255, 229, 102, 0.55);
     color: #ffe566;
 }
 #cinema-controls button.cinema-demo.is-on {
-    background: rgba(122, 101, 204, 0.35);
+    background: #493c74;
     border-color: rgba(190, 175, 255, 0.55);
     color: #e4dcff;
 }
