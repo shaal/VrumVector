@@ -100,6 +100,12 @@ self.onmessage = (ev) => {
             _lastTickWall = performance.now();
             break;
         case 'setPause':    handlePause(m.pause); break;
+        case 'driverBrain': {
+            if (!self.bestCar?.brain) break;
+            const brain = flattenBrain(self.bestCar.brain);
+            self.postMessage({type:'driverBrain', requestId:m.requestId, runSerial:m.runSerial, brain}, [brain.buffer]);
+            break;
+        }
         case 'setTraction': self.traction = m.v;  break;
         case 'setMaxSpeed': self.maxSpeed = m.v;  break;
         // Phase 1C (F4) — minimal A/B-baseline freeze-sync hook. When

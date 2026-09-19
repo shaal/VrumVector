@@ -13,8 +13,10 @@ closed pages, and switching multiplayer off leave the room. Failed connections
 retry with bounded backoff. Silent connections expire within 15–30 seconds;
 stale car poses disappear after three seconds. Rooms are limited to 32 drivers.
 
-Live human driving runs at 1× even when AI training is accelerated. Automatic AI
-generation changes preserve the human car and lap. Manual restarts reset the
+Enabling multiplayer sets the game and AI training to 1× and locks the speed
+selector while connected or reconnecting. Turning multiplayer off unlocks the
+selector and leaves it at 1×. Automatic AI generation changes preserve the human
+car and lap. Manual restarts reset the
 attempt. Lap timing uses ordered start/checkpoint crossings and the independent
 60 Hz human physics clock; crashes, pauses, teleports, and backgrounding invalidate
 the current attempt. Best laps appear beside other drivers and **AI leader (local)**.
@@ -64,3 +66,22 @@ contexts against that service, covering opt-in, callsigns, actual WASD motion,
 reconnection, visibility lifecycle, and reload defaults. The visibility event is
 simulated in this headless test; socket disconnection and rejoining are real.
 The existing WebGPU/WebGL and contrast workflows continue to run.
+
+## AI driving
+
+**AI driving: off/on** is available in Classic 2D and Circuit Studio. It starts off
+on every visit. Enabling it starts or resumes training and copies the live leading
+AI network once per second. The WASD car evaluates its own sensors against a
+private copy, so the co-driver learns along with the local population and may
+still crash while training. It does not replay the leader's position or inputs.
+
+Holding A/D overrides the complete steering axis; holding W/S overrides the
+acceleration/braking axis. Other axes remain under AI control. Releasing the keys
+returns those controls to the AI. Switching AI driving off immediately restores
+manual control, including keys already held. Blur and visibility changes clear
+held inputs. Automatic generations preserve the assisted car; manual restarts
+reset it. Worker replies from old runs are ignored.
+
+Normal visits start in Classic 2D, including after a previous 3D session. The
+**Switch to 3D graphics** button opens Studio; **Switch to 2D** returns. Explicit
+`?graphics=studio` links remain available for direct Studio previews.

@@ -768,6 +768,9 @@ simWorker.onmessage = (ev) => {
         case 'genEnd':
             handleGenEnd(m);
             break;
+        case 'driverBrain':
+            if (m.runSerial === presentationRunSerial) window.PlayerAssist?.acceptBrain(m);
+            break;
         case 'debug':
             if (hitchEnabled && m.event === 'beginBuilt' && m.ms > 30){
                 recordHitch('workerBegin', m.ms, 'N=' + m.N);
@@ -789,6 +792,10 @@ simWorker.onmessage = (ev) => {
 simWorker.onerror = (err) => {
     console.error('[sim-worker] error', err.message || err, err.filename, err.lineno);
 };
+
+function requestPlayerBrain(requestId){
+    if (workerReady && workerInited) simWorker.postMessage({type:'driverBrain', requestId, runSerial:presentationRunSerial});
+}
 
 // bestCar identity epoch: the worker increments bestEpoch each time a new
 // car is promoted. Main creates a fresh proxy object on every change so the
@@ -1238,6 +1245,7 @@ function begin(preservePause = false){
         // Lightweight placeholders so phase-3 tooling still has objects if the
         // user hops into Customize Track before starting. AI swarm is deferred.
         try {
+            playerCar?.controls?.dispose?.();playerCar2?.controls?.dispose?.();
             playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
             playerCar2 = new Car(startInfo.x, startInfo.y, 30, 50, "WASD", maxSpeed, startInfo.heading);
         } catch (_) {}
@@ -1254,7 +1262,7 @@ function begin(preservePause = false){
     if (!preservePause) pause = false;
     computeStartInfoInPlace(currentCheckpointList());
     // Automatic AI generations must not interrupt a human's live lap.
-    if (!(preservePause && window.LiveSession?.enabled && playerCar && playerCar2)) {
+    if (!(preservePause && (window.LiveSession?.enabled || window.PlayerAssist?.enabled) && playerCar && playerCar2)) {
         playerCar?.controls?.dispose?.();playerCar2?.controls?.dispose?.();
         playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
         playerCar2 = new Car(startInfo.x, startInfo.y, 30, 50, "WASD", maxSpeed, startInfo.heading);
@@ -1500,6 +1508,7 @@ function animate(){
         players: [playerCar, playerCar2], maxSpeed, traction, invincible
     };
     window.LiveSession?.frame(presentationInfo);
+    window.PlayerAssist?.frame(presentationInfo);
     const gpuActive = !!window.CircuitStudio?.frame(presentationInfo);
     // Presentation layer (road cache / follow-cam / 3D) owns the phase-4
     // frame setup. Outside training, fall back to the classic full redraw.

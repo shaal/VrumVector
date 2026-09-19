@@ -11,7 +11,8 @@ class CircuitStudio {
     this.host=document.getElementById('canvasDiv');
     const query=new URLSearchParams(location.search);
     let saved={};try{saved=JSON.parse(localStorage.getItem('vv.circuitStudio')||'{}');}catch{}
-    this.enabled=query.get('graphics')==='classic'?false:query.has('graphics')?true:saved.enabled!==false;
+    // A normal visit always starts in 2D, even after previously using Studio.
+    this.enabled=query.get('graphics')==='studio';
     this.cameraMode=CAMERAS.includes(query.get('camera'))?query.get('camera'):CAMERAS.includes(saved.camera)?saved.camera:'orbit';
     this.theme=['circuit','alpine','desert'].includes(saved.theme)?saved.theme:'circuit';
     this.quality=QUALITY[query.get('quality')]?query.get('quality'):QUALITY[saved.quality]?saved.quality:innerWidth<600?'low':'balanced';
@@ -33,7 +34,7 @@ class CircuitStudio {
     document.addEventListener('visibilitychange',()=>{this.lastTime=performance.now();if(document.hidden)this.audio.silence();});
     window.addEventListener('pagehide',event=>{if(!event.persisted)this.dispose();});
   }
-  save(){try{localStorage.setItem('vv.circuitStudio',JSON.stringify({enabled:this.enabled,camera:this.cameraMode,followTarget:this.followTarget,theme:this.theme,quality:this.quality,night:this.night,vision:this.vision,ghosts:this.ghosts}));}catch{}}
+  save(){try{localStorage.setItem('vv.circuitStudio',JSON.stringify({camera:this.cameraMode,followTarget:this.followTarget,theme:this.theme,quality:this.quality,night:this.night,vision:this.vision,ghosts:this.ghosts}));}catch{}}
   enable(on){this.enabled=on;this.save();this.ui.message('');if(on&&this.failed){this.failed=false;this.ready=false;this.loading=false;}if(!on)this.stopReplay();}
   async init(){
     if(this.loading||this.ready||this.failed)return;this.loading=true;
@@ -196,7 +197,8 @@ class CircuitStudio {
     if(this.disposed)return false;this.info=info;
     const eligible=info.phase===4&&!this.host.classList.contains('ab-on');
     this.ui.notice.hidden=!eligible||!this.failed;
-    this.ui.launch.hidden=!eligible||this.active;this.ui.launch.textContent=this.loading?'Preparing Circuit Studio…':'Open Circuit Studio';
+    this.ui.launch.hidden=!eligible||this.active;this.ui.launch.disabled=this.loading;
+    this.ui.launch.textContent=this.loading?'Loading 3D graphics…':'Switch to 3D graphics';
     if(!eligible||!this.enabled||this.failed){this.setActive(false);return false;}
     if(!this.ready){this.init();return false;}
     try{

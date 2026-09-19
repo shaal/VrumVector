@@ -558,12 +558,18 @@ function applyTrainingPreset(name){
         if (co) co.value = 'Conservative Init: ' + p.conservativeInit;
     }
     const ss = document.getElementById('simSpeedInput');
-    if (ss){ ss.value = String(p.simSpeed); }
+    if (ss){ ss.value = String(simSpeed); }
 }
 
 function setSimSpeed(value){
     const n = Number(value);
-    simSpeed = (Number.isFinite(n) && n > 0) ? n : 1;
+    simSpeed = window.LiveSession?.enabled ? 1 : (Number.isFinite(n) && n > 0) ? n : 1;
+    const selector = document.getElementById("simSpeedInput");
+    if (selector){
+        selector.value = String(simSpeed);
+        selector.disabled = !!window.LiveSession?.enabled;
+        selector.title = selector.disabled ? "Multiplayer runs at 1×" : "Simulation speed";
+    }
     _simStepAccum = 0;
     _lastTickWall = performance.now();
     // Forward to the sim worker so its AI-car accumulator tracks the same

@@ -1,5 +1,7 @@
 import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import vm from 'node:vm';
 import {Miniflare} from 'miniflare';
 import {build} from 'esbuild';
 import {cleanCallsign,randomCallsign,validState,samplePeer,LapClock} from '../AI-Car-Racer/multiplayer/state.js';
@@ -65,4 +67,45 @@ test('server rejects hostile origins and malformed state, and removes the invali
   const a=await join('Bad state','d'.repeat(64)),b=await join('Observer','d'.repeat(64));
   a.send({...pose,x:'injected'});
   await until(()=>b.messages.some(m=>m.type==='leave'&&m.id===a.welcome.id));b.ws.close();
+});
+
+const controlsSource=await readFile(new URL('../AI-Car-Racer/controls.js',import.meta.url),'utf8');
+function drivingControls(){
+  const document=new EventTarget(),window=new EventTarget();
+  const context=vm.createContext({document,window,AbortController});
+  vm.runInContext(controlsSource+'\nglobalThis.controls=new Controls("WASD");',context);
+  const key=(type,value,typing=false)=>{
+    const event=new Event(type,{cancelable:true});event.key=value;
+    if(typing)Object.defineProperty(event,'target',{value:{closest:()=>({})}});
+    document.dispatchEvent(event);
+  };
+  return {controls:context.controls,window,key};
+}
+test('held steering and throttle override opposing AI commands without losing key state',()=>{
+  const {controls:c,key}=drivingControls();
+  try{
+    c.setAI([1,1,0,0]);key('keydown','d');
+    assert.equal(c.right,true);assert.equal(c.left,false);assert.equal(c.forward,true);
+    c.setAI([1,1,0,0]);assert.equal(c.right,true);assert.equal(c.left,false);
+    key('keydown','s');assert.equal(c.reverse,true);assert.equal(c.forward,false);
+    key('keyup','d');assert.equal(c.left,true);assert.equal(c.right,false);assert.equal(c.reverse,true);
+    key('keyup','s');assert.equal(c.forward,true);assert.equal(c.reverse,false);
+  }finally{c.dispose();}
+});
+test('turning AI off keeps held keys and immediately releases every other AI command',()=>{
+  const {controls:c,key}=drivingControls();
+  try{
+    c.setAI([1,1,0,0]);key('keydown','d');c.setAI(null);
+    assert.equal(c.right,true);assert.equal(c.left,false);assert.equal(c.forward,false);
+    key('keyup','d');assert.equal(c.right,false);
+    c.setAI([1,0,0,0]);c.setAI(null);assert.equal(c.forward,false);
+  }finally{c.dispose();}
+});
+test('typing, leaving the window, and disposing a car cannot leave a manual override stuck',()=>{
+  const {controls:c,key,window}=drivingControls();
+  key('keydown','w',true);assert.equal(c.forward,false);
+  key('keydown','d');assert.equal(c.right,true);
+  window.dispatchEvent(new Event('blur'));assert.equal(c.right,false);
+  c.setAI([1,1,0,0]);assert.equal(c.left,true);assert.equal(c.right,false);
+  c.dispose();key('keydown','w');assert.equal(c.forward,false);
 });

@@ -7,7 +7,7 @@ export class StudioUI {
     this.root.innerHTML=`
       <header class="studio-header">
         <div><span class="studio-eyebrow">VECTORVROOM / LIVE LEARNING</span><h2 data-title>Circuit Studio<span>.</span></h2><p>Intelligence finds its line.</p></div>
-        <div class="studio-header-actions"><span class="studio-status" data-status>READY</span><button data-action="learn">Learn</button><button data-action="panel">Training controls</button><button class="studio-primary" data-action="training">Start training</button></div>
+        <div class="studio-header-actions"><span class="studio-status" data-status>READY</span><button data-action="classic-top">Switch to 2D</button><button data-action="learn">Learn</button><button data-action="panel">Training controls</button><button class="studio-primary" data-action="training">Start training</button></div>
       </header>
       <div class="studio-vitals" aria-label="Training statistics"><span>GENERATION<b data-gen>01</b></span><span>ALIVE<b data-alive>—</b></span><span>LEADER GATES<b data-progress>—</b></span></div>
       <aside class="studio-vision" hidden data-vision-panel><span class="studio-eyebrow">INSIDE THE DRIVER</span><strong data-driver>Live sensor readings</strong><div class="studio-decisions">${['Forward','Left','Right','Reverse'].map((n,i)=>`<span data-decision="${i}">${n}<b>OFF</b></span>`).join('')}</div><p data-vision-note>Cyan: sensor hits · Amber: crash density</p></aside>
@@ -32,8 +32,8 @@ export class StudioUI {
         <label class="studio-scrub"><span data-replay-time>0.0 s</span><input type="range" min="0" max="20" step="0.05" value="0" aria-label="Replay time" data-setting="scrub"></label><p>Recorded poses and controls. Training continues independently.</p>
       </section>`;
     host.appendChild(this.root);
-    this.launch=document.createElement('button');this.launch.className='studio-launch';this.launch.textContent='Open Circuit Studio';this.launch.hidden=true;
-    this.launch.addEventListener('click',()=>studio.enable(true));host.appendChild(this.launch);
+    this.launch=document.getElementById('graphics-toggle');
+    this.launch.addEventListener('click',()=>studio.enable(true));
     this.notice=document.createElement('p');this.notice.className='studio-notice';this.notice.hidden=true;this.notice.setAttribute('role','status');host.appendChild(this.notice);
     this.root.addEventListener('click',ev=>{
       const btn=ev.target.closest('button');if(!btn)return;
@@ -44,6 +44,7 @@ export class StudioUI {
         case 'vision':studio.setVision(!studio.vision);break;
         case 'night':studio.setNight(!studio.night);break;
         case 'settings':this.toggleSettings();break;
+        case 'classic-top':
         case 'classic':studio.enable(false);break;
         case 'training':window.pauseGame?.();break;
         case 'panel':document.getElementById('panelToggle')?.click();break;

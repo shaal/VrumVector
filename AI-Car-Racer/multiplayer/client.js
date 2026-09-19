@@ -29,7 +29,7 @@ class LiveSession {
         <p class="live-status" role="status" aria-live="polite"></p>
         <p class="live-note">Join to share your WASD car with drivers on the same track and vehicle settings. Hidden tabs leave the grid.</p>
         <div class="live-standings" hidden><div class="live-table-heading"><strong>Best laps</strong><span>seconds</span></div><ol></ol><p class="live-lap-hint"></p></div>
-        <p class="live-note">Drive at 1× alongside your local AI. Cross the start line, then every gate in order. Live cars pass through each other.</p>
+        <p class="live-note">Multiplayer keeps the game at 1×. Cross the start line, then every gate in order. Live cars pass through each other.</p>
         <button data-live-chase>Chase my car · WASD</button>
       </section>`;
     document.getElementById('canvasDiv').append(this.root);
@@ -57,12 +57,13 @@ class LiveSession {
   setEnabled(on){
     this.enabled=!!on;this.checkbox.checked=this.enabled;this.retryAt=0;this.failures=0;this.unavailable=false;
     this.clock=new LapClock();this.localAI=null;
+    window.setSimSpeed?.(1);
     if(!on){this.disconnect();this.status='Off · drive privately';}
     else {this.status='Connecting…';if(window.__awaitingStart)window.pauseGame?.();}
     this.renderUI();
   }
   clearControls(){
-    for(const car of this.info?.players||[])if(car?.controls)for(const k of ['forward','reverse','left','right'])car.controls[k]=false;
+    for(const car of this.info?.players||[])car?.controls?.clear?.();
   }
   frame(info){
     this.info=info;this.root.hidden=info.phase!==4||document.getElementById('canvasDiv').classList.contains('ab-on');

@@ -159,6 +159,10 @@ class Car{
                     this.controls.left=outputs[1];
                     this.controls.right=outputs[2];
                     this.controls.reverse=outputs[3];
+                } else if(this.aiDriving){
+                    // A private copy of the live leader drives this car using
+                    // its own sensors; held keys override each control axis.
+                    this.controls.setAI(outputs);
                 }
             }
         }

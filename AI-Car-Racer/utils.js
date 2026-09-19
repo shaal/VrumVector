@@ -234,7 +234,11 @@ function phaseToLayout(phase){
             }
             // Sim-speed <select> — match current simSpeed (default 2×).
             const ssEl = document.getElementById('simSpeedInput');
-            if (ssEl && typeof simSpeed !== 'undefined') ssEl.value = String(simSpeed);
+            if (ssEl && typeof simSpeed !== 'undefined'){
+                ssEl.value = String(simSpeed);
+                ssEl.disabled = !!window.LiveSession?.enabled;
+                ssEl.title = ssEl.disabled ? 'Multiplayer runs at 1×' : 'Simulation speed';
+            }
             // Move "Import / Export Brain" and "More actions" panels to sit
             // below #rv-panel (Vector Memory) so they live at the bottom of
             // the right column instead of above it. Order placed:
