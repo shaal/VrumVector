@@ -58,7 +58,7 @@ try{
   await page.getByLabel('Driving style',{exact:true}).selectOption('wild');
   await page.getByLabel('Adaptive exploration',{exact:true}).uncheck();
   await page.evaluate(()=>{setSeconds(2);setSimSpeed(5);begin(true);});
-  await page.waitForFunction(()=>window.DriverLearning.coach.rounds>=3&&latestSnapshot.driverProfile==='wild');
+  await page.waitForFunction(()=>window.DriverLearning.coach.rounds>=3&&latestSnapshot?.driverProfile==='wild');
   assert.equal(await page.evaluate(()=>window.DriverLearning.context.profile),'wild');
   await page.evaluate(()=>{if(!pause)pauseGame();});
   await page.screenshot({path:`${out}/learning-progress.png`});
