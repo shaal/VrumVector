@@ -10,6 +10,8 @@ const origin='http://127.0.0.1:8887';let browser,page,stage='boot';const errors=
 const ready=async()=>{
   await page.waitForFunction(()=>window.DriverLearning&&window.PlayerAssist?.info&&window.CircuitStudio?.info);
   await page.waitForFunction(()=>window.__rvBridge?.info?.().ready,{},{timeout:60000});
+  // The vector DB appears before optional engines finish loading/hydrating.
+  await page.evaluate(()=>window.__rvBridge.ready());
 };
 const mark=value=>{stage=value;console.log(stage);};
 try{
