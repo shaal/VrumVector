@@ -1225,7 +1225,7 @@ function buildBrainsBuffer(N){
 // -----------------------------------------------------------------------------
 // begin() / nextBatch() — lifecycle
 // -----------------------------------------------------------------------------
-function begin(){
+function begin(preservePause = false){
     seconds = nextSeconds;
     // Page-load gate: while awaiting an explicit Start click, do NOT build
     // the 500-car population or touch the worker. That work used to run on
@@ -1251,7 +1251,7 @@ function begin(){
         pendingBegin = null;
         return;
     }
-    pause = false;
+    if (!preservePause) pause = false;
     computeStartInfoInPlace(currentCheckpointList());
     playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
     playerCar2 = new Car(startInfo.x, startInfo.y, 30, 50, "WASD", maxSpeed, startInfo.heading);
@@ -1440,7 +1440,9 @@ function performNextBatch(genData){
     _times.graph = performance.now() - _tGraph;
 
     const _tBegin = performance.now();
-    begin();
+    // A completed worker message can already be queued when the user clicks
+    // Pause. Carry that intent across the automatic generation transition.
+    begin(true);
     _times.begin = performance.now() - _tBegin;
 
     const totalMs = performance.now() - _genT0;

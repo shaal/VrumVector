@@ -50,7 +50,10 @@ async function exercise(backend){
 
     // Run the real worker with a small, short training cohort.
     stage='worker and cameras';console.log(`${backend}: ${stage}`);
-    await page.evaluate(()=>{setN(48);setSeconds(3);setSimSpeed(1);});
+    await page.evaluate(()=>{
+      setN(48);setSeconds(3);setSimSpeed(1);
+      simWorker.addEventListener('message',event=>{if(event.data.type==='genEnd')window.__testLastGenEnd=event.data;});
+    });
     await page.locator('#startOverlayBtn').click();
     await page.waitForFunction(()=>window.CircuitStudio.archive.runs.length>0,{},{timeout:60000});
     await page.waitForFunction(()=>window.CircuitStudio.info.snapshot?.N===48);
@@ -92,6 +95,10 @@ async function exercise(backend){
 
     stage='classic and mobile';console.log(`${backend}: ${stage}`);
     await page.locator('[data-action="training"]').click();
+    await page.waitForFunction(()=>window.CircuitStudio.info.paused);
+    // Re-deliver an actual worker result to reproduce a generation completion
+    // that was already queued when Pause was clicked. It must remain paused.
+    await page.evaluate(()=>simWorker.dispatchEvent(new MessageEvent('message',{data:window.__testLastGenEnd})));
     await page.waitForFunction(()=>window.CircuitStudio.info.paused);
     await page.locator('[data-action="settings"]').first().click();
     await page.locator('[data-action="classic"]').click();
