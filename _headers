@@ -25,4 +25,7 @@
   # CF Pages was rewriting `ruvectorBridge.js` in-transit
   # (static-import query strings were being stripped), which defeated
   # the cache-bust used to route around the vendor stale-cache issue.
-  Cache-Control: public, max-age=300, no-transform
+  Cache-Control: public, no-cache, no-transform
+
+/releases/*
+  Cache-Control: public, max-age=31536000, immutable, no-transform

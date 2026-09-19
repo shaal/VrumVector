@@ -74,6 +74,7 @@ jobs:
           '
           mkdir -p .pages-upload
           rsync -a --exclude='.git' --exclude='.github' --exclude='.pages-upload' --exclude='.wrangler' --exclude='node_modules' --exclude='test-results' --exclude='/multiplayer' --exclude='/tests' --exclude='/scripts' --exclude='/ruvector' ./ .pages-upload/
+          node scripts/stage-release.mjs .pages-upload "$GITHUB_SHA"
 
       - name: Deploy to Cloudflare Pages
         id: deploy
