@@ -117,9 +117,13 @@ try{
     const merged=b.exportSnapshot().brains.find(s=>s.id===duplicate).meta;
     b.importSnapshot(b.exportSnapshot());b.setLearningContext(context);
     const imported=b.recommendSeeds(basis,2).find(s=>s.id===duplicate);
+    b.hydrateFromFixture({tracks:[],brains:[{id:'vec_0',vec:Array.from(a),meta:{fitness:4,parentIds:[]}}],observations:[]});
+    const fresh=b.archiveBrain(window.__rvUnflatten(w),2,null,2);
+    const identity=b.exportSnapshot();
     return {first,second,feedback,federated,context:decoded.meta.learning.context,
       retainedBaseline:saved.observations.some(o=>Number.isFinite(o.baseline)),metas:saved.brains.map(s=>s.meta.learningContext),
-      dedup:{id:duplicate,careful:carefulAgain?.meta.fitness,wild:wildAgain?.meta.fitness,restored:imported?.meta.fitness,evaluations:merged.evaluations?.length,selfParent:merged.parentIds.includes(duplicate)}};
+      dedup:{id:duplicate,careful:carefulAgain?.meta.fitness,wild:wildAgain?.meta.fitness,restored:imported?.meta.fitness,evaluations:merged.evaluations?.length,selfParent:merged.parentIds.includes(duplicate)},
+      identity:{count:identity.brains.length,freshIsUnique:fresh!=='vec_0',oldFitness:identity.brains.find(s=>s.id==='vec_0')?.meta.fitness}};
   });
   assert.equal(retrieval.first[0],'careful-seed');assert.equal(retrieval.second[0],'wild-seed');
   assert.equal(retrieval.federated[0],'careful-seed');
@@ -128,6 +132,7 @@ try{
   assert.equal(retrieval.context.profile,'careful');assert.equal(retrieval.retainedBaseline,true);
   assert.ok(retrieval.metas.every(m=>m?.track==='fixture-track'));
   assert.deepEqual(retrieval.dedup,{id:'careful-seed',careful:4,wild:5,restored:4,evaluations:2,selfParent:false});
+  assert.deepEqual(retrieval.identity,{count:2,freshIsUnique:true,oldFitness:4});
   mark('learning controls in 3D');
   await page.evaluate(()=>{window.CircuitStudio.setQuality('low');window.CircuitStudio.forceWebGL=true;});
   await page.locator('#graphics-toggle').click({timeout:90000});await page.waitForFunction(()=>window.CircuitStudio.active,{},{timeout:90000});

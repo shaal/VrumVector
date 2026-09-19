@@ -33,6 +33,7 @@ import {
 import { fanOut, fanOutSync, kPrime as _kPrime } from './federation/fanout.js';
 import { unionByHash, selectTopK } from './federation/rerank.js';
 import { hashBrain } from './archive/hash.js';
+import {allocateVectorId,findIdenticalVector} from './archive/identity.js';
 import {cleanContext,contextKey,matchContext,selectDiverse,offspringFeedback,clamp,mergeEvaluations,evaluationFor} from './learning/policy.js';
 // Phase 2B — F6 cross-tab live training. Thin wrapper over BroadcastChannel;
 // when enabled, archiveBrain broadcasts a single-brain delta after a
@@ -596,7 +597,7 @@ export function archiveCrashMap(crashVec, meta = {}) {
   // sig doesn't match the live track (stops Triangle gates on Rectangle).
   if (meta.geometrySig) m.geometrySig = String(meta.geometrySig);
   try {
-    const id = _crashDB.insert(crashVec, null, m);
+    const id = _crashDB.insert(crashVec, allocateVectorId('crash',crashVec,_crashMirror), m);
     _crashMirror.set(id, { vector: crashVec.slice(), meta: m });
     schedulePersist();
     return id;
@@ -704,20 +705,21 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
   // without this field stay shape-compatible; recommendSeeds skips them
   // automatically because `!entry.meta.dynamicsId` → no lookup.
   if (dynamicsId !== null) meta.dynamicsId = dynamicsId;
-  const id = _brainDB.insert(vec, null, meta);
+  const id = findIdenticalVector(_brainMirror,vec)||allocateVectorId('brain',vec,_brainMirror);
   const previous=_brainMirror.get(id);
   // Deduplication keeps one genome. Evaluations remain separate for each
   // style, track, and set of conditions; repeating an elite is not ancestry.
   meta.parentIds=meta.parentIds.filter(parent=>parent!==id);
   if(previous&&!meta.parentIds.length)meta.parentIds=(previous.meta.parentIds||[]).filter(parent=>parent!==id);
   if(meta.learningContext||previous?.meta.evaluations)Object.assign(meta,mergeEvaluations(previous?.meta,meta));
+  if(!previous)_brainDB.insert(vec,id,meta);
   _brainMirror.set(id, { vector: vec, meta });
   // Phase 2A — F2 shadow insert. The shadow uses its own id space internally
   // but we pass the Euclidean id through so both indexes return the SAME
   // id on search (which is what unionByHash relies on to collapse the two
   // hits into a single candidate). Failure here is non-fatal — the shadow
   // just diverges from the primary by one brain, which federation tolerates.
-  if (_brainDB_hyperbolic) {
+  if (_brainDB_hyperbolic&&!previous) {
     try { _brainDB_hyperbolic.insert(vec, id, meta); }
     catch (e) { console.warn('[federation] hyperbolic shadow insert failed', e); }
   }
@@ -774,7 +776,7 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
 // whole point of the dynamics key is "how this brain drove", not "what track
 // this was". Each archiveBrain call gets its own dynamicsId.
 function insertDynamics(dynamicsVec) {
-  const id = _dynamicsDB.insert(dynamicsVec, null, { firstSeen: Date.now() });
+  const id = _dynamicsDB.insert(dynamicsVec, allocateVectorId('dynamics',dynamicsVec,_dynamicsMirror), { firstSeen: Date.now() });
   _dynamicsMirror.set(id, { vector: dynamicsVec, meta: { firstSeen: Date.now() } });
   return id;
 }
@@ -787,7 +789,7 @@ function upsertTrack(trackVec) {
     const hits = _trackDB.search(trackVec, 1);
     if (hits.length && hits[0].score <= TRACK_DEDUPE_MAX_DIST) return hits[0].id;
   }
-  const id = _trackDB.insert(trackVec, null, { firstSeen: Date.now() });
+  const id = _trackDB.insert(trackVec, allocateVectorId('track',trackVec,_trackMirror), { firstSeen: Date.now() });
   _trackMirror.set(id, { vector: trackVec, meta: { firstSeen: Date.now() } });
   return id;
 }

@@ -6,6 +6,7 @@ import {LearningCoach,buildPopulation,cleanContext,contextKey,matchContext,selec
 import {seededRandom} from '../AI-Car-Racer/graphics/state.js';
 import {Simulation} from './helpers/simulation.mjs';
 import {CircuitJournal} from '../AI-Car-Racer/sona/journal.js';
+import {allocateVectorId,findIdenticalVector} from '../AI-Car-Racer/archive/identity.js';
 
 const fixture=vm.createContext({});
 vm.runInContext(await readFile(new URL('../AI-Car-Racer/driver/profiles.js',import.meta.url),'utf8'),fixture);
@@ -92,6 +93,14 @@ test('deduplicated brains keep separate bounded evaluations for each profile and
   assert.equal(meta.evaluations.length,20);
   const legacy=mergeEvaluations({fitness:3,trackId:'legacy'},wild);
   assert.equal(evaluationFor(legacy,{...context,profile:'balanced'}).learningContext,null);
+});
+test('archive identity preserves restored IDs and never overwrites a hash collision',()=>{
+  const vector=brain(.2),other=brain(.3),mirror=new Map([['vec_0',{vector}]]);
+  assert.equal(findIdenticalVector(mirror,vector),'vec_0');
+  assert.equal(findIdenticalVector(mirror,other),null);
+  const id=allocateVectorId('brain',other,mirror);assert.notEqual(id,'vec_0');
+  mirror.set(id,{vector});const collision=allocateVectorId('brain',other,mirror);
+  assert.notEqual(collision,id);assert.equal(mirror.get('vec_0').vector,vector);
 });
 test('diverse memory selection keeps the strongest and removes exact duplicate brains',()=>{
   const a=brain(.2),b=Float32Array.from(a,(v,i)=>i%2?-v:v);

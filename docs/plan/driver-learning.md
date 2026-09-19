@@ -29,6 +29,8 @@ The best evaluated networks are kept in a bounded 20-entry local startup cache, 
 
 Content-deduplicated networks keep up to 20 separate context evaluations. Reusing one genome as a Careful and Wild driver therefore preserves both measured results. Retrieval and feedback select the relevant evaluation. Re-archiving an unchanged elite neither adds a self-parent lineage edge nor duplicates its insertion-order entry. Descendant feedback is applied before the current generation updates its parent evaluation.
 
+Archive identity is checked against the restored mirror, with exact genome comparison and collision-safe explicit IDs. The vendored database's automatic counter could otherwise reuse `vec_0` after restoring legacy records and overwrite an existing memory. Brains, tracks, dynamics, and crash maps now allocate IDs without relying on that counter. Existing records retain their IDs.
+
 ## What the learning panel shows
 
 - Current exploration stage and effective mutation rate.
