@@ -101,6 +101,35 @@ test('archive identity preserves restored IDs and never overwrites a hash collis
   const id=allocateVectorId('brain',other,mirror);assert.notEqual(id,'vec_0');
   mirror.set(id,{vector});const collision=allocateVectorId('brain',other,mirror);
   assert.notEqual(collision,id);assert.equal(mirror.get('vec_0').vector,vector);
+  assert.equal(allocateVectorId('brain',vector,new Map()),allocateVectorId('brain',vector,new Map()));
+  assert.notEqual(allocateVectorId('brain',vector,new Map()),allocateVectorId('brain',other,new Map()));
+});
+test('cross-tab memories preserve bounded driving metrics',async()=>{
+  // brainCodec's browser-only startup self-check schedules a DOM callback.
+  globalThis.window={addEventListener(){}};
+  let toWire,fromWire;
+  try { ({toWire,fromWire}=await import('../AI-Car-Racer/crosstab/wire.js')); }
+  finally { delete globalThis.window; }
+  const driving={averageSpeed:.7,nearWallRate:.2,slideRate:.1,smoothness:.8,steeringChanges:12,aliveSeconds:45,crashed:false};
+  const input={learning:{context,styleScore:.4,driving}};
+  const decoded=fromWire(toWire(brain(.2),4,null,input));
+  assert.deepEqual(decoded.meta.learning.driving,driving);
+  input.learning.driving={...driving,averageSpeed:Infinity,slideRate:-1,aliveSeconds:NaN,unexpected:'ignored'};
+  const safe=fromWire(toWire(brain(.2),4,null,input)).meta.learning.driving;
+  assert.equal(safe.slideRate,0);assert.equal(safe.averageSpeed,undefined);assert.equal(safe.aliveSeconds,undefined);assert.equal(safe.unexpected,undefined);
+});
+test('player lap times remain positive when the AI generation clock resets',()=>{
+  const sim=new Simulation();sim.begin(new Float32Array(244));
+  const player=sim.cars[0];player.controlType='WASD';player.useBrain=false;player.sensor=null;player.invincible=true;
+  const gates=sim.road.checkPointList,gate=gates[0];
+  const complete=frames=>{
+    player.x=(gate[0].x+gate[1].x)/2;player.y=(gate[0].y+gate[1].y)/2;
+    player.checkPointsPassed=Array.from({length:gates.length},(_,i)=>i);player.checkPointsCount=gates.length;
+    player.driveFrames=frames-1;sim.scope.frameCount=0;
+    player.update(sim.road.borders,gates);
+  };
+  complete(120);complete(300);
+  assert.equal(player.laps,2);assert.deepEqual(Array.from(player.lapTimes),[2,3]);
 });
 test('diverse memory selection keeps the strongest and removes exact duplicate brains',()=>{
   const a=brain(.2),b=Float32Array.from(a,(v,i)=>i%2?-v:v);

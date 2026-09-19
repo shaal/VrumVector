@@ -6,7 +6,7 @@ class PlayerAssist {
     this.enabled=false;this.requestId=0;this.nextRequest=0;this.run=-1;
     this.root=document.createElement('section');this.root.id='player-assist';this.root.hidden=true;
     this.root.setAttribute('aria-label','AI driving');
-    this.root.innerHTML=`<button type="button" id="ai-drive-toggle" aria-pressed="false" aria-describedby="ai-drive-hint">AI driving: off</button><p id="ai-drive-hint">Your car · WASD to drive</p>`;
+    this.root.innerHTML=`<button type="button" id="ai-drive-toggle" aria-pressed="false" aria-describedby="ai-drive-hint">AI driving: off</button><p id="ai-drive-hint" role="status" aria-live="polite">Your car · WASD to drive</p>`;
     document.getElementById('canvasDiv').append(this.root);
     this.button=this.root.querySelector('button');this.hint=this.root.querySelector('p');
     this.button.onclick=()=>this.setEnabled(!this.enabled);

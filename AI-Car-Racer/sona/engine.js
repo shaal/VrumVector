@@ -86,6 +86,7 @@ let _patternCount = 0;      // cached from last stats() call for UI stickiness
 let _traj = null;           // in-flight JS-side trajectory buffer
 const _journal = new CircuitJournal();
 let _replayedExamples = 0;
+let _savedLora = null;
 
 export function loadEngine() {
   if (_ready) return _ready;
@@ -126,12 +127,24 @@ export const reward       = loraReward;
 export const driftL2      = loraDrift;
 export const recentDrift  = loraRecentDrift;
 export function serialize() {
-  const snapshot=loraSerialize();
-  return snapshot?{...snapshot,sonaJournal:_journal.serialize()}:null;
+  // Keep the two independent engines independent on disk as well. Retain an
+  // unavailable adapter's previous snapshot rather than overwriting its work.
+  const lora = loraSerialize() || _savedLora;
+  if (!lora && !_agent && !_journal.examples.length) return null;
+  return { engineVersion: 1, lora, sonaJournal: _journal.serialize() };
 }
 export function deserialize(snapshot) {
-  if(!loraDeserialize(snapshot))return false;
-  _journal.restore(snapshot.sonaJournal);_replayedExamples=0;
+  if (!snapshot || typeof snapshot !== 'object') return false;
+  if (snapshot.engineVersion != null && snapshot.engineVersion !== 1) return false;
+  // Read legacy snapshots where the journal was attached to the LoRA object.
+  const lora = snapshot.engineVersion === 1 ? snapshot.lora : snapshot;
+  let restoredLora = false;
+  try { restoredLora = loraDeserialize(lora); } catch (_) { /* journal can still recover */ }
+  if (restoredLora || (!loraReady() && lora)) _savedLora = lora;
+  const journal = snapshot.sonaJournal;
+  const hasJournal = journal?.version === 1 && Array.isArray(journal.examples);
+  if (!hasJournal) return restoredLora;
+  _journal.restore(journal);_replayedExamples=0;
   if(_agent){
     try{
       _agent.clear();_traj=null;_microUpdates=0;
@@ -142,7 +155,7 @@ export function deserialize(snapshot) {
       _patternCount=readPatternCount(_agent);
     }catch(error){console.warn('[sona] circuit example replay failed',error);}
   }
-  return true;
+  return restoredLora || hasJournal;
 }
 
 export function _debugReset() {
@@ -151,6 +164,7 @@ export function _debugReset() {
   _microUpdates = 0;
   _patternCount = 0;
   _journal.clear();_replayedExamples=0;
+  _savedLora = null;
   // We don't reconstruct the SONA agent here — the wasm engines are cheap to
   // keep around, and tests that need a clean agent state can drop the
   // module's _agent reference manually. In the game we never hit debugReset

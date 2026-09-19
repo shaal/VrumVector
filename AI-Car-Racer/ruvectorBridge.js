@@ -1742,7 +1742,6 @@ export async function hydrate() {
 // Failures are swallowed: the adapter just stays at its (zero-B) cold state.
 async function hydrateLoraSnapshot() {
   if (typeof indexedDB === 'undefined') return;
-  if (!loraIsReady()) return;
   let db;
   try { db = await openDB(); } catch (e) {
     console.warn('[lora] hydrate openDB failed', e); return;

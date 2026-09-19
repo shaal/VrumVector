@@ -1,7 +1,7 @@
 #live-session {position:absolute;inset:0;z-index:24;pointer-events:none;font:12px/1.5 var(--font-body,system-ui);color:#eef3e9;}
 #live-session[hidden],#live-session [hidden] {display:none!important;}
 #live-session button,#live-session input {font:inherit;color:inherit;}
-#live-session button {cursor:pointer;border:1px solid #657c70;background:#243d33;border-radius:8px;padding:9px 12px;min-height:36px;}
+#live-session button {cursor:pointer;border:1px solid #657c70;background:#243d33;border-radius:8px;padding:9px 12px;min-height:44px;min-width:44px;}
 #live-session button:hover {background:#365443;}
 #live-session button:focus-visible,#live-session input:focus-visible {outline:3px solid #93dac6;outline-offset:2px;}
 .live-launch {position:absolute;top:82px;right:26px;pointer-events:auto;box-shadow:0 3px 14px #152a2930;}
@@ -27,7 +27,7 @@
 .live-driver-label {position:absolute;top:0;left:0;padding:3px 7px;border:1px solid;border-radius:5px;background:#142c27eb;color:#f5f6e8;font:600 10px system-ui;white-space:nowrap;}
 @media(max-width:600px){
   body:not(.studio-enabled) .live-launch {right:56px;}
-  .live-launch {top:112px;right:12px;font-size:10px!important;padding:6px 9px!important;min-height:30px!important;}
+  .live-launch {top:112px;right:12px;font-size:10px!important;padding:6px 9px!important;min-height:44px!important;}
   #live-panel {top:149px;right:12px;max-height:calc(100% - 263px);padding:14px;}
 }
 

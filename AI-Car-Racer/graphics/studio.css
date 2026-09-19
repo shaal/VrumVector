@@ -21,7 +21,7 @@ body.studio-enabled #perf-hud,body.studio-enabled #metrics-hud {display:none;}
 .studio-eyebrow {font:500 9px/1.5 var(--font-mono,monospace);letter-spacing:2.1px;color:#c4d4c8;}
 .studio-header h2 {font:500 34px/1.12 var(--font-display,Georgia);letter-spacing:-1.1px;margin:5px 0;}
 .studio-header p {font-size:11px;color:#d9e2d4;margin:5px 0 0;}
-#studio-ui .studio-header [data-action="classic-top"] {margin-top:8px;padding:6px 10px;min-height:30px;font-size:10px;}
+#studio-ui .studio-header [data-action="classic-top"] {margin-top:8px;padding:6px 10px;min-height:44px;min-width:44px;font-size:10px;}
 .studio-header-actions {display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end;max-width:480px;}
 #studio-ui .studio-primary {background:#e9efe0;color:#263c32;border-color:#e9efe0;}
 #studio-ui .studio-primary:hover {background:#fff9e8;}

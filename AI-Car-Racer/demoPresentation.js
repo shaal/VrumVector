@@ -1029,14 +1029,7 @@
       }
       if (typeof setSimSpeed === 'function') setSimSpeed(5);
       if (typeof setN === 'function') setN(600);
-      const bs = document.getElementById('batchSizeInput');
-      if (bs) {
-        bs.value = 600;
-        const o = document.getElementById('batchSizeOutput');
-        if (o) o.value = 'Batch Size: 600';
-      }
-      const ss = document.getElementById('simSpeedInput');
-      if (ss) ss.value = '5';
+      // The setters own labels and the multiplayer 1x speed constraint.
     } catch (_) {}
 
     // Unpause / first-start: pauseGame() clears __awaitingStart and calls

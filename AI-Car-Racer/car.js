@@ -10,6 +10,7 @@ class Car{
             this.invincible=invincible;
         }
         this.lapTimes='--';
+        this.driveFrames=0; // player simulation clock survives AI generation resets
 
         this.velocity={x:0,y:0};
         this.speed=0;
@@ -48,6 +49,7 @@ class Car{
     }
 
     update(roadBorders, checkPointList){
+        if(this.controlType !== "AI") this.driveFrames++;
         // Damaged AI cars contribute nothing for the rest of the generation —
         // skip sensor raycasts + NN inference entirely. At end-of-gen this is
         // usually >80% of the population, so it dominates total sim cost.
@@ -68,11 +70,12 @@ class Car{
                 if(this.checkPointsCount >= checkPointList.length && checkPoint == this.checkPointsPassed[0]){
                     this.checkPointsCount=1;
                     this.laps++;
+                    const elapsedFrames=this.controlType === "AI" ? frameCount : this.driveFrames;
                     if(this.laps == 1){
-                        this.lapTimes = [parseFloat((frameCount/60).toFixed(2))];
+                        this.lapTimes = [parseFloat((elapsedFrames/60).toFixed(2))];
                     }
                     else if (this.laps>1){
-                        this.lapTimes.push(parseFloat((frameCount/60-this.lapTimes.reduce((a, b) => a + b, 0)).toFixed(2)));
+                        this.lapTimes.push(parseFloat((elapsedFrames/60-this.lapTimes.reduce((a, b) => a + b, 0)).toFixed(2)));
                     }
                     this.checkPointsPassed = [this.checkPointsPassed[0]];
                 }

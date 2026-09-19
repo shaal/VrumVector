@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {waitForServer} from './helpers/server-ready.mjs';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {build} from 'esbuild';
@@ -12,6 +13,7 @@ const server=spawn('python3',['-m','http.server','8877','--bind','127.0.0.1'],{s
 const origin='http://127.0.0.1:8877';
 let browser;const errors=[];let stage='boot';
 try{
+  await waitForServer(origin,server);
   await mf.ready;
   browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   const contexts=await Promise.all([browser.newContext({viewport:{width:1120,height:800}}),browser.newContext({viewport:{width:1120,height:800}})]);

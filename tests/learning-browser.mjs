@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {waitForServer} from './helpers/server-ready.mjs';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {chromium} from 'playwright';
@@ -12,6 +13,7 @@ const ready=async()=>{
 };
 const mark=value=>{stage=value;console.log(stage);};
 try{
+  await waitForServer(origin,server);
   browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   page=await browser.newPage({viewport:{width:1120,height:800}});page.setDefaultTimeout(30000);
   page.on('pageerror',error=>errors.push(error.message));
@@ -79,6 +81,27 @@ try{
   });
   await page.reload();await ready();
   await page.waitForFunction(()=>window.__rvBridge.info().sona.replayedExamples>=1);
+  mark('journal survives missing or rejected LoRA independently');
+  const migrated=await page.evaluate(async()=>{
+    const engine=await import('/AI-Car-Racer/sona/engine.js'),saved=engine.serialize();
+    engine._debugReset();
+    const legacy=engine.deserialize({...saved.lora,sonaJournal:saved.sonaJournal});
+    const rejected=engine.deserialize({...saved,lora:{halfDim:-1}});
+    const examples=engine.info().sona.replayedExamples;
+    engine.deserialize(saved);await window.__rvBridge.persist();
+    return {legacy,rejected,examples};
+  });
+  assert.equal(migrated.legacy,true);assert.equal(migrated.rejected,true);assert.ok(migrated.examples>=1);
+  await page.route('**/ruvector_learning_wasm_bg.wasm',route=>route.abort());
+  for(let reload=0;reload<2;reload++){
+    await page.reload();await ready();
+    await page.waitForFunction(()=>window.__rvBridge.info().sona.replayedExamples>=1);
+    assert.equal(await page.evaluate(()=>window.__rvBridge.info().lora.ready),false);
+    await page.evaluate(()=>window.__rvBridge.persist());
+  }
+  await page.unroute('**/ruvector_learning_wasm_bg.wasm');
+  await page.reload();await ready();
+  assert.equal(await page.evaluate(()=>window.__rvBridge.info().lora.ready),true);
   assert.equal(await page.evaluate(()=>window.DriverLearning.profile),'wild');
   assert.equal(await page.evaluate(()=>window.DriverLearning.adaptive),false);
   assert.equal(await page.evaluate(()=>window.PlayerAssist.enabled||window.CircuitStudio.enabled),false);

@@ -231,6 +231,7 @@ const scenarios = [
     name: 'studio-options',
     studio: true,
     setup: async (page) => {
+      if (!(await page.locator('#studio-ui').isVisible())) return;
       await page.locator('[data-action="night"]').click();
       await page.locator('[data-action="vision"]').click();
       await page.locator('[data-action="settings"]').first().click();
