@@ -164,6 +164,13 @@ function pageAudit() {
 // panel) can't leak into the next assertion.
 const scenarios = [
   {
+    name: 'multiplayer-panel',
+    setup: async (page) => {
+      await page.locator('.live-launch').click();
+      await page.waitForTimeout(200);
+    },
+  },
+  {
     name: 'default',
     setup: async (page) => {
       if (await page.locator('#panelToggle').getAttribute('aria-expanded') === 'false') await page.click('#panelToggle');

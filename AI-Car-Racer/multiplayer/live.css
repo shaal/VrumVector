@@ -9,7 +9,7 @@
 .live-heading {display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:15px;}
 .live-heading span {font:10px var(--font-mono,monospace);letter-spacing:1.6px;color:#bfcebd;}
 .live-heading h3 {margin:6px 0 0;font:25px var(--font-display,Georgia);font-weight:400;color:#fff1d5;}
-#live-panel label {display:block;font-weight:600;}
+#live-panel label {display:block;font-weight:600;color:#eef3e9;}
 .live-name-row {display:flex;gap:6px;margin:5px 0 14px;}
 #live-callsign {min-width:0;width:100%;box-sizing:border-box;border:1px solid #7c9385;background:#203c31;border-radius:7px;padding:8px;}
 #live-panel .live-switch {display:flex;align-items:center;flex-wrap:wrap;gap:7px;cursor:pointer;}

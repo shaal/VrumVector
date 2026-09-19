@@ -39,7 +39,11 @@ The existing Pages workflow deploys the service first, writes its HTTPS origin t
 `AI-Car-Racer/multiplayer/config.json`, then stages and publishes the static site.
 A PR uses `vectorvroom-live-pr-<number>`; main uses `vectorvroom-live`. The existing
 Cloudflare token needs **Workers Scripts: Edit** as well as Pages deployment
-access on the configured account. A Durable Object migration creates the room
+access on the configured account. Alternatively, set the repository secret
+`CLOUDFLARE_WORKERS_API_TOKEN` to a token with Workers access for that account;
+the Pages token then keeps its current scope. If service deployment fails, the
+static preview still publishes with multiplayer unavailable, and the workflow
+reports the service failure. Rerun the deployment after fixing access. A Durable Object migration creates the room
 namespace. PR services can be deleted after the PR closes. A bare static checkout
 has no endpoint configured and reports that clearly when joining is attempted.
 

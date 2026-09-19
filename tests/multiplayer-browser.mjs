@@ -41,8 +41,11 @@ try{
   await b.waitForFunction(()=>[...window.LiveSession.peers.values()].some(p=>p.name==='Comet'));
   await a.locator('[data-live-close]').click();
   const start=await a.evaluate(()=>({x:playerCar2.x,y:playerCar2.y}));
-  await a.keyboard.down('w');await a.waitForTimeout(350);await a.keyboard.up('w');
-  await b.waitForFunction(start=>{const p=window.LiveSession.drivers()[0];return p&&Math.hypot(p.pose.x-start.x,p.pose.y-start.y)>1;},start);
+  await a.keyboard.down('w');
+  try{
+    await a.waitForFunction(start=>playerCar2.controls.forward&&Math.hypot(playerCar2.x-start.x,playerCar2.y-start.y)>10,start);
+    await b.waitForFunction(start=>{const p=window.LiveSession.drivers()[0];return p&&Math.hypot(p.pose.x-start.x,p.pose.y-start.y)>1;},start);
+  }finally{await a.keyboard.up('w');}
   stage='lap continuity and small AI cohorts';console.log(stage);
   await a.evaluate(()=>{window.__liveCar=playerCar2;window.__liveGeneration=generation;});
   await a.waitForFunction(()=>generation>window.__liveGeneration,{},{timeout:30000});
@@ -88,7 +91,13 @@ try{
   await writeFile(`${out}/result.json`,JSON.stringify({passed:true,checks:['default off','callsigns','cross-browser WASD','generation continuity','AI 1–5','3D cars','mobile','room isolation','reconnect','hidden tab departure','reload persistence']},null,2));
   console.log('Live multiplayer browser checks passed');
 }catch(error){
-  await writeFile(`${out}/failure.json`,JSON.stringify({stage,error:String(error.stack),errors},null,2));
+  const diagnostics=[];
+  for(const context of browser?.contexts()||[])for(const p of context.pages())diagnostics.push(await p.evaluate(()=>({
+    hidden:document.hidden,focus:document.activeElement?.outerHTML,paused:pause,phase,
+    player:{x:playerCar2.x,y:playerCar2.y,speed:playerCar2.speed,damaged:playerCar2.damaged,controls:{forward:playerCar2.controls.forward,left:playerCar2.controls.left}},
+    live:{status:window.LiveSession.status,connected:window.LiveSession.connected,peers:[...window.LiveSession.peers.values()]}
+  })).catch(()=>null));
+  await writeFile(`${out}/failure.json`,JSON.stringify({stage,error:String(error.stack),errors,diagnostics},null,2));
   for(const context of browser?.contexts()||[])for(const p of context.pages())await p.screenshot({path:`${out}/failure-${browser.contexts().indexOf(context)}.png`}).catch(()=>{});
   throw error;
 }finally{await browser?.close();await mf.dispose();server.kill();}

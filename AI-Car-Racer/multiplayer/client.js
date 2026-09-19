@@ -55,7 +55,7 @@ class LiveSession {
   }
   setCallsign(name){this.callsign=cleanCallsign(name)||randomCallsign();try{localStorage.setItem('vv.callsign',this.callsign);}catch{}}
   setEnabled(on){
-    this.enabled=!!on;this.checkbox.checked=this.enabled;this.retryAt=0;this.failures=0;
+    this.enabled=!!on;this.checkbox.checked=this.enabled;this.retryAt=0;this.failures=0;this.unavailable=false;
     this.clock=new LapClock();this.localAI=null;
     if(!on){this.disconnect();this.status='Off · drive privately';}
     else {this.status='Connecting…';if(window.__awaitingStart)window.pauseGame?.();}
@@ -84,7 +84,7 @@ class LiveSession {
       if(!this.endpoint){
         const response=await fetch(new URL('./config.json',import.meta.url),{cache:'no-store',signal:AbortSignal.timeout(7000)});
         const config=await response.json();
-        if(!config.endpoint)throw new Error('Live service is not configured yet.');
+        if(!config.endpoint){this.unavailable=true;throw new Error('Live racing is not available on this deployment yet.');}
         const endpoint=new URL(config.endpoint);
         const local=location.hostname==='localhost'||location.hostname==='127.0.0.1';
         if(endpoint.protocol!=='https:'&&!(local&&endpoint.protocol==='http:'))throw new Error('A secure live service is required.');
@@ -111,7 +111,7 @@ class LiveSession {
     }catch(error){if(epoch===this.epoch){this.status=error.message;this.retry();}}
     finally{this.connecting=false;this.renderUI();}
   }
-  retry(){this.failures=(this.failures||0)+1;this.retryAt=performance.now()+Math.min(15000,1000*2**Math.min(4,this.failures));if(this.endpoint)this.status='Connection lost · reconnecting…';}
+  retry(){if(this.unavailable){this.retryAt=Infinity;return;}this.failures=(this.failures||0)+1;this.retryAt=performance.now()+Math.min(15000,1000*2**Math.min(4,this.failures));if(this.endpoint)this.status='Connection lost · reconnecting…';}
   receive(p){
     if(typeof p.id!=='string'||p.id===this.id||!COLORS.includes(p.color))return;
     const old=this.peers.get(p.id),now=performance.now();
@@ -138,7 +138,7 @@ class LiveSession {
   renderUI(){
     if(!this.root)return;
     const count=this.peers.size+1;
-    this.launch.textContent=this.enabled?`Multiplayer · ${this.connected?count+' live':'connecting'}`:'Multiplayer · off';
+    this.launch.textContent=this.enabled?`Multiplayer · ${this.connected?count+' live':this.unavailable?'unavailable':'connecting'}`:'Multiplayer · off';
     this.statusNode.textContent=this.connected?(count===1?'You’re on the grid · waiting for rivals':`${count} drivers on this track`):this.status;
     const standings=this.root.querySelector('.live-standings');standings.hidden=!this.connected;
     if(this.panel.hidden||!this.connected)return;
