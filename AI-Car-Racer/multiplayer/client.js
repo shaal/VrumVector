@@ -6,7 +6,7 @@ class LiveSession {
     this.enabled=false;this.connected=false;this.peers=new Map();this.clock=new LapClock();this.seq=0;this.epoch=0;
     try{this.callsign=cleanCallsign(localStorage.getItem('vv.callsign'));}catch{}
     if(!this.callsign)this.callsign=randomCallsign();
-    this.setCallsign(this.callsign);this.createUI();this.status='Off · drive privately';
+    this.setCallsign(this.callsign);this.createUI();this.status='Off · drive privately';this.renderUI();
     this.timer=setInterval(()=>this.tick(),100);
     document.addEventListener('visibilitychange',()=>{
       this.clearControls();this.clock.invalidate();
@@ -104,7 +104,7 @@ class LiveSession {
           for(const p of m.players||[])this.receive(p);
         }else if(m.type==='driver')this.receive(m);
         else if(m.type==='leave')this.peers.delete(m.id);
-        this.renderUI();
+        if(m.type==='welcome'||m.type==='leave')this.renderUI();
       };
       ws.onclose=()=>{if(this.ws!==ws)return;this.disconnect();this.retry();};
       ws.onerror=()=>{if(this.ws===ws)this.status='Live service unavailable · retrying';};
@@ -138,8 +138,10 @@ class LiveSession {
   renderUI(){
     if(!this.root)return;
     const count=this.peers.size+1;
-    this.launch.textContent=this.enabled?`Multiplayer · ${this.connected?count+' live':this.unavailable?'unavailable':'connecting'}`:'Multiplayer · off';
-    this.statusNode.textContent=this.connected?(count===1?'You’re on the grid · waiting for rivals':`${count} drivers on this track`):this.status;
+    const label=this.enabled?`Multiplayer · ${this.connected?count+' live':this.unavailable?'unavailable':'connecting'}`:'Multiplayer · off';
+    const status=this.connected?(count===1?'You’re on the grid · waiting for rivals':`${count} drivers on this track`):this.status;
+    if(this.launch.textContent!==label)this.launch.textContent=label;
+    if(this.statusNode.textContent!==status)this.statusNode.textContent=status;
     const standings=this.root.querySelector('.live-standings');standings.hidden=!this.connected;
     if(this.panel.hidden||!this.connected)return;
     const rows=[{name:this.callsign+' (you)',color:this.color,bestLap:this.clock.bestLap,laps:this.clock.laps},
