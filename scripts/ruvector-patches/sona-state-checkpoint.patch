@@ -1,9 +1,9 @@
 diff --git a/crates/sona/src/checkpoint.rs b/crates/sona/src/checkpoint.rs
 new file mode 100644
-index 0000000..652c3d2
+index 0000000..76405ac
 --- /dev/null
 +++ b/crates/sona/src/checkpoint.rs
-@@ -0,0 +1,228 @@
+@@ -0,0 +1,234 @@
 +//! Versioned, quiescent browser checkpoints. No replay, training, or lossy
 +//! projection happens during export/import. Call while inference is stopped;
 +//! the WASM binding holds exclusive access to its agent for this operation.
@@ -188,7 +188,13 @@ index 0000000..652c3d2
 +    #[test]
 +    fn checkpoint_preserves_patterns_pending_optimizer_and_nonzero_ewc() {
 +        let mut a=agent();
-+        for n in 0..31 { a.process_task(vec![(n as f32+1.)/32.;8],0.8); }
++        for n in 0..31 {
++            // A real multi-step trajectory has a nonzero reward advantage;
++            // process_task's single-step baseline deliberately cancels out.
++            let mut t=a.engine.begin_trajectory(vec![(n as f32+1.)/32.;8]);
++            t.add_step(vec![0.1;8],vec![],0.2); t.add_step(vec![0.8;8],vec![],0.9);
++            a.engine.end_trajectory(t,0.8);
++        }
 +        a.force_learn();
 +        {
 +            let mut e=a.engine.coordinator.ewc.write();
