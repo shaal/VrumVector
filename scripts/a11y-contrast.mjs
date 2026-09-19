@@ -165,6 +165,7 @@ function pageAudit() {
 const scenarios = [
   {
     name: 'multiplayer-panel',
+    studio: true,
     setup: async (page) => {
       await page.locator('.live-launch').click();
       await page.waitForTimeout(200);
@@ -179,6 +180,7 @@ const scenarios = [
   },
   {
     name: 'panel-collapsed',
+    studio: true,
     setup: async (page) => {
       if (await page.locator('#panelToggle').getAttribute('aria-expanded') === 'true') await page.click('#panelToggle');
       await page.waitForTimeout(200);
@@ -225,6 +227,7 @@ const scenarios = [
   },
   {
     name: 'studio-options',
+    studio: true,
     setup: async (page) => {
       await page.locator('[data-action="night"]').click();
       await page.locator('[data-action="vision"]').click();
@@ -235,7 +238,7 @@ const scenarios = [
   {
     name: 'classic-controls',
     setup: async (page) => {
-      await page.keyboard.press('3');
+      await page.locator('#ai-drive-toggle').click();
       if (await page.locator('#panelToggle').getAttribute('aria-expanded') === 'false') await page.click('#panelToggle');
       await page.waitForTimeout(300);
     },
@@ -267,7 +270,12 @@ async function main() {
           await page.goto(targetUrl, { waitUntil: 'networkidle', timeout: 15000 });
           // Give the app a moment to finish its own async boot (wasm, panels).
           await page.waitForTimeout(500);
-          await page.waitForFunction(() => window.CircuitStudio?.active || window.CircuitStudio?.failed, {}, {timeout: 60000});
+          await page.waitForFunction(() => window.CircuitStudio?.info && window.PlayerAssist?.info, {}, {timeout: 60000});
+          if (scenario.studio) {
+            await page.locator('#graphics-toggle').click();
+            await page.waitForFunction(() => window.CircuitStudio.active || window.CircuitStudio.failed, {}, {timeout: 60000});
+            if (!await page.evaluate(() => window.CircuitStudio.active)) throw new Error('3D graphics did not initialize');
+          }
           await scenario.setup(page);
           const fails = await page.evaluate(pageAudit);
           const passCount = '(audited)';
