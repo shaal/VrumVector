@@ -1,0 +1,202 @@
+diff --git a/crates/ruvector-gnn-wasm/Cargo.toml b/crates/ruvector-gnn-wasm/Cargo.toml
+index a3ac789..02cc103 100644
+--- a/crates/ruvector-gnn-wasm/Cargo.toml
++++ b/crates/ruvector-gnn-wasm/Cargo.toml
+@@ -26,6 +26,7 @@ getrandom = { workspace = true }
+ # Serialization
+ serde = { workspace = true }
+ serde-wasm-bindgen = "0.6"
++serde_json = { workspace = true }
+ 
+ # Utils
+ console_error_panic_hook = { version = "0.1", optional = true }
+diff --git a/crates/ruvector-gnn-wasm/src/lib.rs b/crates/ruvector-gnn-wasm/src/lib.rs
+index 6fad92a..9e69b22 100644
+--- a/crates/ruvector-gnn-wasm/src/lib.rs
++++ b/crates/ruvector-gnn-wasm/src/lib.rs
+@@ -12,6 +12,10 @@ use ruvector_gnn::{
+     hierarchical_forward as core_hierarchical_forward, CompressedTensor, CompressionLevel,
+     RuvectorLayer, TensorCompress,
+ };
++use ruvector_gnn::online;
++mod online_wasm;
++pub use online_wasm::WasmGraphRanker;
++
+ use serde::{Deserialize, Serialize};
+ use wasm_bindgen::prelude::*;
+ 
+diff --git a/crates/ruvector-gnn-wasm/src/online_wasm.rs b/crates/ruvector-gnn-wasm/src/online_wasm.rs
+new file mode 100644
+index 0000000..c7aab9f
+--- /dev/null
++++ b/crates/ruvector-gnn-wasm/src/online_wasm.rs
+@@ -0,0 +1,31 @@
++//! Supervised online graph ranking bindings; inputs and checkpoints use JSON
++//! strings so browser and Node callers share identical serialization semantics.
++use crate::online::OnlineGraphRanker;
++use wasm_bindgen::prelude::*;
++fn js_error(e:String)->JsValue {JsValue::from_str(&e)}
++fn neighbors(json:&str)->Result<Vec<Vec<f64>>,JsValue>{
++    if json.len()>100_000{return Err(JsValue::from_str("Too many graph features"));}
++    serde_json::from_str(json).map_err(|e|js_error(e.to_string()))
++}
++#[wasm_bindgen]
++pub struct WasmGraphRanker {inner:OnlineGraphRanker}
++#[wasm_bindgen]
++impl WasmGraphRanker {
++    #[wasm_bindgen(constructor)]
++    pub fn new(input_dim:usize,hidden_dim:usize,seed:u32)->Result<WasmGraphRanker,JsValue>{
++        Ok(Self{inner:OnlineGraphRanker::new(input_dim,hidden_dim,seed).map_err(js_error)?})
++    }
++    pub fn predict(&self,node:Vec<f64>,parents:&str)->Result<f64,JsValue>{
++        self.inner.predict(&node,&neighbors(parents)?).map_err(js_error)
++    }
++    pub fn train(&mut self,node:Vec<f64>,parents:&str,target:f64,rate:f64)->Result<f64,JsValue>{
++        self.inner.train(&node,&neighbors(parents)?,target,rate).map_err(js_error)
++    }
++    #[wasm_bindgen(js_name=exportCheckpoint)]
++    pub fn export_checkpoint(&self)->Result<String,JsValue>{self.inner.export_checkpoint().map_err(js_error)}
++    #[wasm_bindgen(js_name=importCheckpoint)]
++    pub fn import_checkpoint(&mut self,json:&str)->Result<(),JsValue>{self.inner.import_checkpoint(json).map_err(js_error)}
++    #[wasm_bindgen(js_name=setWeights)]
++    pub fn set_weights(&mut self,weights:Vec<f64>)->Result<(),JsValue>{self.inner.set_weights(weights).map_err(js_error)}
++    pub fn steps(&self)->u32 {self.inner.steps() as u32}
++}
+diff --git a/crates/ruvector-gnn/src/lib.rs b/crates/ruvector-gnn/src/lib.rs
+index 54a8e9a..a4d9b5d 100644
+--- a/crates/ruvector-gnn/src/lib.rs
++++ b/crates/ruvector-gnn/src/lib.rs
+@@ -51,6 +51,7 @@ pub mod error;
+ pub mod ewc;
+ pub mod graphmae;
+ pub mod layer;
++pub mod online;
+ pub mod query;
+ pub mod replay;
+ pub mod scheduler;
+diff --git a/crates/ruvector-gnn/src/online.rs b/crates/ruvector-gnn/src/online.rs
+new file mode 100644
+index 0000000..d0b247c
+--- /dev/null
++++ b/crates/ruvector-gnn/src/online.rs
+@@ -0,0 +1,120 @@
++//! Small supervised GraphSAGE-style reranker with fully trainable message,
++//! aggregation, and readout weights. Designed for bounded browser lineage DAGs.
++use serde::{Deserialize, Serialize};
++
++#[derive(Clone, Serialize, Deserialize)]
++#[serde(deny_unknown_fields)]
++pub struct OnlineGraphRanker {
++    schema: u32,
++    input_dim: usize,
++    hidden_dim: usize,
++    weights: Vec<f64>,
++    velocity: Vec<f64>,
++    steps: u64,
++}
++impl OnlineGraphRanker {
++    pub fn new(input_dim:usize, hidden_dim:usize, seed:u32) -> Result<Self,String> {
++        if !(1..=64).contains(&input_dim) || !(1..=64).contains(&hidden_dim) {return Err("Invalid graph dimensions".into());}
++        let size=hidden_dim*(2*input_dim+1)+hidden_dim+1;
++        let mut rng=seed.max(1);
++        let weights=(0..size).map(|_| {
++            rng^=rng<<13; rng^=rng>>17; rng^=rng<<5;
++            (rng as f64/u32::MAX as f64-0.5)*0.5/(input_dim as f64).sqrt()
++        }).collect();
++        Ok(Self {schema:1,input_dim,hidden_dim,weights,velocity:vec![0.;size],steps:0})
++    }
++    fn inputs(&self, node:&[f64], neighbors:&[Vec<f64>]) -> Result<Vec<f64>,String> {
++        let valid=|v:&[f64]|v.len()==self.input_dim && v.iter().all(|x|x.is_finite()&&x.abs()<=1.);
++        if !valid(node) || neighbors.len()>16 || neighbors.iter().any(|n|!valid(n)) {return Err("Invalid graph features".into());}
++        let mut x=Vec::with_capacity(2*self.input_dim+1);x.extend_from_slice(node);
++        for k in 0..self.input_dim {
++            x.push(if neighbors.is_empty(){0.}else{neighbors.iter().map(|n|n[k]).sum::<f64>()/neighbors.len() as f64});
++        }
++        x.push(1.);Ok(x)
++    }
++    fn forward(&self,x:&[f64]) -> (f64,Vec<f64>) {
++        let stride=x.len();let offset=self.hidden_dim*stride;
++        let h:Vec<f64>=(0..self.hidden_dim).map(|j| {
++            self.weights[j*stride..(j+1)*stride].iter().zip(x).map(|(w,v)|w*v).sum::<f64>().tanh()
++        }).collect();
++        let y=(self.weights[offset+self.hidden_dim]+h.iter().zip(&self.weights[offset..]).map(|(v,w)|v*w).sum::<f64>()).tanh();
++        (y,h)
++    }
++    pub fn predict(&self,node:&[f64],neighbors:&[Vec<f64>])->Result<f64,String> {
++        Ok(self.forward(&self.inputs(node,neighbors)?).0)
++    }
++    fn gradient(&self,x:&[f64],target:f64)->(f64,Vec<f64>) {
++        let (prediction,h)=self.forward(x);let delta=(prediction-target)*(1.-prediction*prediction);
++        let stride=x.len();let offset=self.hidden_dim*stride;let mut grad=vec![0.;self.weights.len()];
++        for j in 0..self.hidden_dim {
++            grad[offset+j]=delta*h[j];
++            let d=delta*self.weights[offset+j]*(1.-h[j]*h[j]);
++            for (k,v) in x.iter().enumerate(){grad[j*stride+k]=d*v;}
++        }
++        grad[offset+self.hidden_dim]=delta;
++        (0.5*(prediction-target).powi(2),grad)
++    }
++    /// One analytic backpropagation step; global gradient clipping and momentum
++    /// bound updates. All graph projection and readout weights participate.
++    pub fn train(&mut self,node:&[f64],neighbors:&[Vec<f64>],target:f64,rate:f64)->Result<f64,String> {
++        if !target.is_finite() || target.abs()>1. || !rate.is_finite() || !(0.00001..=0.1).contains(&rate) || self.steps>=1_000_000_000 {
++            return Err("Invalid optimizer input".into());
++        }
++        let x=self.inputs(node,neighbors)?;let (loss,grad)=self.gradient(&x,target);
++        let norm=grad.iter().map(|g|g*g).sum::<f64>().sqrt().max(1.);
++        for k in 0..grad.len() {
++            self.velocity[k]=0.9*self.velocity[k]+0.1*(grad[k]/norm+0.0001*self.weights[k]);
++            self.weights[k]-=rate*self.velocity[k];
++        }
++        self.steps+=1;Ok(loss)
++    }
++    pub fn steps(&self)->u64 {self.steps}
++    pub fn export_checkpoint(&self)->Result<String,String>{serde_json::to_string(self).map_err(|e|e.to_string())}
++    pub fn import_checkpoint(&mut self,json:&str)->Result<(),String>{
++        if json.len()>2_000_000{return Err("Checkpoint too large".into());}
++        let value:Self=serde_json::from_str(json).map_err(|e|e.to_string())?;
++        let valid=|v:&[f64]|v.len()==self.weights.len()&&v.iter().all(|x|x.is_finite()&&x.abs()<=1000.);
++        if value.schema!=1 || value.input_dim!=self.input_dim || value.hidden_dim!=self.hidden_dim
++            || !valid(&value.weights) || !valid(&value.velocity) || value.steps>1_000_000_000 {
++            return Err("Incompatible graph checkpoint".into());
++        }
++        *self=value;Ok(())
++    }
++    /// Explicit weight initialization; resets optimizer momentum and count.
++    pub fn set_weights(&mut self,weights:Vec<f64>)->Result<(),String>{
++        if weights.len()!=self.weights.len()||weights.iter().any(|v|!v.is_finite()||v.abs()>1000.) {return Err("Invalid graph weights".into());}
++        self.weights=weights;self.velocity.fill(0.);self.steps=0;Ok(())
++    }
++}
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn analytic_gradients_match_finite_differences_for_every_weight() {
++        let mut m=OnlineGraphRanker::new(3,4,42).unwrap();
++        let x=m.inputs(&[0.2,-0.4,0.8],&[vec![0.7,0.1,-0.6]]).unwrap();
++        let (_,grad)=m.gradient(&x,0.6);let eps=1e-5;
++        for (i,g) in grad.iter().enumerate(){let w=m.weights[i];m.weights[i]=w+eps;
++            let hi=m.gradient(&x,0.6).0;m.weights[i]=w-eps;let lo=m.gradient(&x,0.6).0;m.weights[i]=w;
++            assert!(((hi-lo)/(2.*eps)-g).abs()<1e-8,"weight {i}");}
++    }
++    #[test]
++    fn trains_messages_and_restores_optimizer_exactly() {
++        let mut a=OnlineGraphRanker::new(2,8,7).unwrap();let initial=a.weights.clone();
++        for i in 0..4000 {
++            let x=(i%23) as f64/11.-1.;let n=(i%17) as f64/8.-1.;
++            a.train(&[x,0.],&[vec![n,0.]],(0.6*x+0.5*n).tanh(),0.05).unwrap();
++        }
++        assert!(a.weights[..40].iter().zip(initial).any(|(x,y)|(*x-y).abs()>1e-3));
++        let mut mse=0.;for i in 0..31 {let x=i as f64/15.-1.;let n=-0.6;
++            mse+=(a.predict(&[x,0.],&[vec![n,0.]]).unwrap()-(0.6*x+0.5*n).tanh()).powi(2);}
++        assert!(mse/31.<0.005,"held-out synthetic MSE {}",mse/31.);
++        let mut b=OnlineGraphRanker::new(2,8,999).unwrap();b.import_checkpoint(&a.export_checkpoint().unwrap()).unwrap();
++        a.train(&[0.3,0.],&[vec![0.2,0.]],0.8,0.05).unwrap();
++        b.train(&[0.3,0.],&[vec![0.2,0.]],0.8,0.05).unwrap();
++        assert_eq!(a.weights,b.weights);assert_eq!(a.velocity,b.velocity);
++        let before=b.export_checkpoint().unwrap();
++        assert!(b.import_checkpoint("{\"schema\":99}").is_err());assert_eq!(before,b.export_checkpoint().unwrap());
++        assert!(b.train(&[f64::NAN,0.],&[],0.2,0.05).is_err());
++    }
++}

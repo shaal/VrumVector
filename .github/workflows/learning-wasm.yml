@@ -2,7 +2,7 @@ name: Build learning WASM
 on:
   push:
     branches: ['codex/sona-checkpoints', 'codex/trainable-gnn']
-    paths: ['scripts/ruvector-patches/**', 'scripts/build-learning-wasm.sh', '.github/workflows/learning-wasm.yml', 'tests/learning-wasm.mjs']
+    paths: ['scripts/ruvector-patches/**', 'scripts/build-learning-wasm.sh', 'scripts/build-gnn-wasm.sh', 'tests/gnn-wasm.mjs', '.github/workflows/learning-wasm.yml', 'tests/learning-wasm.mjs']
   workflow_dispatch:
 permissions:
   contents: read
@@ -34,12 +34,19 @@ jobs:
           rustup default 1.85.0
           if [[ "$(wasm-pack --version 2>/dev/null || true)" != "wasm-pack 0.13.1" ]]; then cargo install wasm-pack --version 0.13.1 --locked; fi
       - run: bash scripts/build-learning-wasm.sh
+        if: github.ref_name == 'codex/sona-checkpoints'
+      - run: bash scripts/build-gnn-wasm.sh
+        if: github.ref_name == 'codex/trainable-gnn'
       - name: Commit generated bindings and lockfile
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add vendor/ruvector/sona scripts/ruvector-patches/sona.Cargo.lock
+          if [[ "$GITHUB_REF_NAME" == 'codex/sona-checkpoints' ]]; then
+            git add vendor/ruvector/sona scripts/ruvector-patches/sona.Cargo.lock
+          else
+            git add vendor/ruvector/ruvector_gnn_trainable_wasm scripts/ruvector-patches/gnn.Cargo.lock
+          fi
           if ! git diff --cached --quiet; then
-            git commit -m 'Rebuild SONA checkpoint WASM from pinned sources'
+            git commit -m 'Rebuild learning WASM from pinned sources'
             git push origin "HEAD:$GITHUB_REF_NAME"
           fi
