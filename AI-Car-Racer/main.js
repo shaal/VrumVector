@@ -1462,6 +1462,12 @@ function performNextBatch(genData){
             if (window.__rvDynamics){
                 try { dynamicsVec = window.__rvDynamics.finalizeVector(); } catch (_) {}
             }
+            // Credit descendants against the parent evaluation from before this run.
+            if (genData.seedOutcomes&&window.__rvBridge.observeOffspring){
+                window.__rvBridge.observeOffspring(genData.seedOutcomes,genData.learningContext);
+            }else if(currentSeedIds.length){
+                window.__rvBridge.observe(currentSeedIds,fitness);
+            }
             const brainObj = window.__rvUnflatten(bestBrainFlat);
             archivedBrainId=window.__rvBridge.archiveBrain(
                 brainObj, fitness, trackVec, generation, genData.eliteParentId?[genData.eliteParentId]:[], batchFastest, dynamicsVec,
@@ -1472,11 +1478,6 @@ function performNextBatch(genData){
             }
             if (window.__rvDynamics){
                 try { window.__rvDynamics.reset(); } catch (_) {}
-            }
-            if (genData.seedOutcomes&&window.__rvBridge.observeOffspring){
-                window.__rvBridge.observeOffspring(genData.seedOutcomes,genData.learningContext);
-            }else if(currentSeedIds.length){
-                window.__rvBridge.observe(currentSeedIds,fitness);
             }
             console.log('[ruvector] gen=' + generation + ' archived best fitness=' + fitness +
                 (currentSeedIds.length ? ' (observed ' + currentSeedIds.length + ' seeds)' : ''));

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
-import {LearningCoach,buildPopulation,cleanContext,contextKey,matchContext,selectDiverse,offspringFeedback,qualityFromFitness} from '../AI-Car-Racer/learning/policy.js';
+import {LearningCoach,buildPopulation,cleanContext,contextKey,matchContext,selectDiverse,offspringFeedback,qualityFromFitness,mergeEvaluations,evaluationFor} from '../AI-Car-Racer/learning/policy.js';
 import {seededRandom} from '../AI-Car-Racer/graphics/state.js';
 import {Simulation} from './helpers/simulation.mjs';
 import {CircuitJournal} from '../AI-Car-Racer/sona/journal.js';
@@ -81,6 +81,18 @@ test('context changes reset the champion and history; retrieval favors matching 
   assert.ok(matchContext({learningContext:{...context,profile:'reckless'}},context).factor<1);
   assert.match(matchContext({},context).label,/unverified/);
 });
+test('deduplicated brains keep separate bounded evaluations for each profile and track',()=>{
+  const careful={fitness:4,learningContext:context},wild={fitness:8,learningContext:{...context,profile:'wild'}};
+  let meta=mergeEvaluations(careful,wild);
+  assert.equal(evaluationFor(meta,context).fitness,4);
+  assert.equal(evaluationFor(meta,wild.learningContext).fitness,8);
+  meta=mergeEvaluations(meta,{...careful,fitness:5});assert.equal(meta.evaluations.length,2);
+  assert.equal(evaluationFor(meta,context).fitness,5);
+  for(let i=0;i<30;i++)meta=mergeEvaluations(meta,{fitness:i,learningContext:{...context,track:`track-${i}`}});
+  assert.equal(meta.evaluations.length,20);
+  const legacy=mergeEvaluations({fitness:3,trackId:'legacy'},wild);
+  assert.equal(evaluationFor(legacy,{...context,profile:'balanced'}).learningContext,null);
+});
 test('diverse memory selection keeps the strongest and removes exact duplicate brains',()=>{
   const a=brain(.2),b=Float32Array.from(a,(v,i)=>i%2?-v:v);
   const seeds=selectDiverse([{id:'best',vector:a,score:1},{id:'copy',vector:a,score:.99},{id:'different',vector:b,score:.98}],3);
@@ -122,6 +134,15 @@ test('styles change actual driving with the same neural network and unchanged ph
   }
   assert.ok(speeds.careful<speeds.calm&&speeds.calm<speeds.balanced,JSON.stringify(speeds));
   assert.equal(speeds.reckless,speeds.balanced);
+});
+test('stopping mid-drift with steering held never corrupts the car position',()=>{
+  const sim=new Simulation(),flat=brain(0);flat.set([1,-1,1,1],176);sim.begin(flat);
+  const c=sim.cars[0];c.slide=true;c.speed=.05;c.velocity={x:.05,y:0};c.controls.left=true;
+  sim.road.borders=[];sim.road.checkPointList=[];sim.road.borderGrid=null;sim.road.cpGrid=null;
+  c.update([],[]);assert.equal(c.speed,0);assert.equal(c.slide,true);
+  for(let i=0;i<20;i++)c.update([],[]);
+  assert.ok([c.x,c.y,c.speed,c.angle,c.velocity.x,c.velocity.y].every(Number.isFinite));
+  assert.equal(c.speed,0);
 });
 test('real simulation preserves the best progress across genetic generations',()=>{
   const sim=new Simulation({track:'Triangle',seed:'learning-regression'}),coach=new LearningCoach();

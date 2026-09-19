@@ -8,8 +8,8 @@ function geometryKey(road){
 }
 class DriverLearning {
   constructor(){
-    this.profile='balanced';this.adaptive=true;this.coach=new LearningCoach();this.consolidations=0;
-    try{const saved=JSON.parse(localStorage.getItem('vv.driverLearning')||'null');if(saved){this.profile=DriverProfiles.get(saved.profile).id;this.adaptive=saved.adaptive!==false;}}catch{}
+    this.profile='balanced';this.adaptive=false;this.coach=new LearningCoach();this.consolidations=0;
+    try{const saved=JSON.parse(localStorage.getItem('vv.driverLearning')||'null');if(saved){this.profile=DriverProfiles.get(saved.profile).id;this.adaptive=saved.adaptive===true;}}catch{}
   }
   restoreChampion(){
     if(this.forceSaved)return;
@@ -114,7 +114,7 @@ export function attachLearningControls(host){
       <div class="learning-panel-heading"><strong>Find your driving style</strong><button type="button" data-learning-close aria-label="Close driver profiles">×</button></div>
       <label for="driver-profile">Driving style</label><select id="driver-profile">${Object.values(DriverProfiles.profiles).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select>
       <p data-profile-description></p><p class="learning-note">Applies to AI rivals and your AI co-driver. Manual WASD input always takes priority. Changing style starts a new AI generation.</p>
-      <label class="learning-check"><input type="checkbox" id="adaptive-learning" checked> Adaptive exploration</label>
+      <label class="learning-check"><input type="checkbox" id="adaptive-learning"> Adaptive exploration</label>
       <p class="learning-note">Protect the best driver. Try more variation when progress stalls.</p>
       <p data-learning-status role="status"></p>
       <div class="learning-stats"><span>BEST GATES<b data-learning-best>—</b></span><span>SURVIVED<b data-learning-survival>—</b></span><span>MUTATION<b data-learning-mutation>—</b></span></div>

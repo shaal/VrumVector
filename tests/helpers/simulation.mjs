@@ -40,6 +40,7 @@ export class Simulation {
       for(const car of this.cars)car.update(this.road.borders,this.road.checkPointList);
     }
     const profiles=this.scope.DriverProfiles,gates=this.road.checkPointList.length;
+    for(const car of this.cars)if(![car.x,car.y,car.angle,car.speed].every(Number.isFinite))throw Error('Non-finite car state in simulation');
     let elite=this.cars[0],score=-Infinity;
     for(const car of this.cars){const rank=profiles.rank(car,gates);if(rank>score){elite=car;score=rank;}}
     const vector=new Float32Array(244);let at=0;

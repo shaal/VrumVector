@@ -274,19 +274,34 @@ class Car{
             this.speed=this.maxSpeed;
         }
         else if (this.speed < -this.maxSpeed/2){
-            const scalar=(this.maxSpeed/2)/Math.hypot(this.velocity.x,this.velocity.y);
+            const magnitude=Math.hypot(this.velocity.x,this.velocity.y);
             this.speed=-this.maxSpeed/2;
-            this.velocity.x*=scalar;
-            this.velocity.y*=scalar;
+            if(magnitude>0){
+                const scalar=(this.maxSpeed/2)/magnitude;
+                this.velocity.x*=scalar;
+                this.velocity.y*=scalar;
+            }else{
+                this.velocity.x=this.speed*Math.sin(this.angle);
+                this.velocity.y=this.speed*Math.cos(this.angle);
+            }
         }
 
         //what to do if sliding or not
         if(this.slide){
             this.velocity.x = lerp(this.velocity.x, this.speed*Math.sin(this.angle), (this.traction/2+.5)*this.maxSpeed/(Math.abs(this.speed)+.001)*.02);
             this.velocity.y = lerp(this.velocity.y, this.speed*Math.cos(this.angle), (this.traction/2+.5)*this.maxSpeed/(Math.abs(this.speed)+.001)*.02);
-            const scalar=Math.abs(this.speed)/Math.hypot(this.velocity.x,this.velocity.y);
-            this.velocity.x*=scalar;
-            this.velocity.y*=scalar;
+            const magnitude=Math.hypot(this.velocity.x,this.velocity.y);
+            // A held turn can keep slide=true after friction stops the car.
+            // Normalizing a zero vector then produced 0/0 and poisoned its
+            // position, sensors, learning statistics, and replay samples.
+            if(magnitude>0){
+                const scalar=Math.abs(this.speed)/magnitude;
+                this.velocity.x*=scalar;
+                this.velocity.y*=scalar;
+            }else{
+                this.velocity.x=this.speed*Math.sin(this.angle);
+                this.velocity.y=this.speed*Math.cos(this.angle);
+            }
         }
         else{
             this.velocity.x=this.speed*Math.sin(this.angle);

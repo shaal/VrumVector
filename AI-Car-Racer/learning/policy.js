@@ -11,6 +11,34 @@ export function cleanContext(value={}) {
     traction:clamp(value.traction??.5,0,1),seconds:clamp(value.seconds||20,1,600)};
 }
 export function contextKey(value) {const c=cleanContext(value);return JSON.stringify([c.version,c.profile,c.track,c.maxSpeed,c.traction,c.seconds]);}
+export function mergeEvaluations(previous,current,limit=20){
+  const rows=Array.isArray(previous?.evaluations)?previous.evaluations.filter(row=>row&&Number.isFinite(row.fitness)).slice(0,limit):[];
+  const add=value=>{
+    if(!value||!Number.isFinite(value.fitness))return;
+    const {evaluations,...row}=value;
+    const key=row.learningContext?contextKey(row.learningContext):`legacy:${row.trackId||''}`;
+    const index=rows.findIndex(r=>(r.learningContext?contextKey(r.learningContext):`legacy:${r.trackId||''}`)===key);
+    if(index>=0)rows.splice(index,1);
+    rows.unshift(row);
+  };
+  add(previous);add(current);
+  return {...current,evaluations:rows.slice(0,limit)};
+}
+export function evaluationFor(meta,context){
+  if(!context||!Array.isArray(meta?.evaluations))return meta;
+  const rows=meta.evaluations.filter(row=>row&&Number.isFinite(row.fitness)).slice(0,20);
+  if(!rows.length)return meta;
+  const query=cleanContext(context),key=contextKey(query);
+  const exact=rows.find(row=>row.learningContext&&contextKey(row.learningContext)===key);
+  if(exact)return {...meta,...exact,learningContext:exact.learningContext};
+  let best=meta,score=-Infinity;
+  for(const row of rows){
+    const match=matchContext(row,query),sameTrack=!!query.track&&row.learningContext?.track===query.track;
+    const value=match.factor+(sameTrack ? .1 : 0);
+    if(value>score){score=value;best=row;}
+  }
+  return {...meta,...best,learningContext:best.learningContext||null};
+}
 export function matchContext(meta,context) {
   if(!context)return {factor:1,exact:false,label:'Archive memory'};
   const q=cleanContext(context),m=meta?.learningContext?cleanContext(meta.learningContext):null;

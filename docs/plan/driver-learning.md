@@ -2,6 +2,8 @@
 
 Open **Driver profile · Balanced**, next to **AI driving**, in either 2D or Circuit Studio. Choose a style for the AI population and the player's optional AI co-driver. Selecting a style before Start does not start the simulation. Selecting it during training starts a new generation. The profile and adaptive-exploration preference survive reload; AI driving, multiplayer, sound, and 3D remain opt-in.
 
+Adaptive exploration is **off for new visitors**. A controlled 90-run experiment found mixed results, so it remains an explicit experiment. Champion preservation, context-aware memory, and actual offspring feedback operate with either setting. See [the measured results](learning-proof/README.md).
+
 | Profile | Driving decisions | Training preference within a checkpoint tie |
 | --- | --- | --- |
 | Balanced | Original neural policy, with no speed or braking filter | Original ordering |
@@ -25,6 +27,8 @@ Checkpoint progress remains the primary selection objective. Style contributes l
 
 The best evaluated networks are kept in a bounded 20-entry local startup cache, scoped to the complete training context. The full IndexedDB archive is retained. Manual named-brain loads override the cache. Start Fresh and benchmark resets clear the cache alongside trained state. Profile metadata and feedback baselines survive archive export/import; profile context also travels with opt-in cross-tab brain sharing.
 
+Content-deduplicated networks keep up to 20 separate context evaluations. Reusing one genome as a Careful and Wild driver therefore preserves both measured results. Retrieval and feedback select the relevant evaluation. Re-archiving an unchanged elite neither adds a self-parent lineage edge nor duplicates its insertion-order entry. Descendant feedback is applied before the current generation updates its parent evaluation.
+
 ## What the learning panel shows
 
 - Current exploration stage and effective mutation rate.
@@ -45,10 +49,18 @@ The A/B baseline now uses a real genetic loop with the same profile, initializat
 
 The existing graphics, multiplayer, and contrast checks continue to run. The contrast suite includes the new profile panel in 2D and 3D.
 
+A regression test covers stopping mid-drift while holding steering. The former zero-vector normalization divided by zero and could poison positions, sensors, and replay samples; it now keeps a finite stopped car.
+
 ## Further work and current binding limits
 
 - [Trainable GNN bindings](https://github.com/shaal/VrumVector/issues/10): the current WASM layer exposes forward inference, but not weight training or checkpoint APIs. Outcome feedback now affects ranking alongside the structural GNN; it does not train the GNN's weights.
 - [Exact SONA/EWC restoration](https://github.com/shaal/VrumVector/issues/11): the ephemeral agent can export, but its browser API cannot restore an exact checkpoint. MicroLoRA and driving networks persist; exact ephemeral-agent state needs an upstream binding change.
-- Useful follow-ups include an opt-in multi-track curriculum, held-out track evaluation, independent profiles for individual AI rivals, and replay-based demonstrations of each style. These need controlled experiments before claiming better transfer or faster learning.
+- **Mixed-style rival grids:** run separate small populations and champions per profile, then race their leaders together. This preserves each profile's learning goal while making the opposition more varied.
+- **Multi-track curriculum:** alternate simple turns and complex circuits, with a held-out evaluation before replacing a champion. Retain a previous champion when transfer harms an already learned track.
+- **Sector practice:** use the existing crash-map vectors to identify repeated trouble spots, show them to the player, and train those sections before returning to a full lap.
+- **Style demonstration replays:** show the same starting network in each profile so speed and braking differences are easy to compare.
+- **Opt-in human demonstrations:** collect sensor/action examples only while a player deliberately teaches; evaluate any imitation-trained network alongside the existing champion before promoting it.
+
+These follow-ups need controlled experiments before claiming better transfer or faster learning.
 
 Upstream reference: [RuVector](https://github.com/ruvnet/ruvector). Runtime integration targets the checked-in browser WASM binaries and their type declarations.

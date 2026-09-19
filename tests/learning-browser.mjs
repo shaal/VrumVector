@@ -19,7 +19,9 @@ try{
   await page.goto(`${origin}/AI-Car-Racer/`);await ready();
   mark('profile choice before starting');
   assert.equal(await page.evaluate(()=>window.CircuitStudio.enabled||window.PlayerAssist.enabled),false);
+  assert.equal(await page.evaluate(()=>window.DriverLearning.adaptive),false,'Adaptive exploration is an explicit experiment');
   await page.locator('#driver-learning summary').click();
+  await page.getByLabel('Adaptive exploration',{exact:true}).check();
   await page.getByLabel('Driving style',{exact:true}).selectOption('careful');
   assert.equal(await page.evaluate(()=>window.__awaitingStart),true);
   assert.equal(await page.getByLabel('Driving style',{exact:true}).inputValue(),'careful');
@@ -106,8 +108,18 @@ try{
     b.setFederationEnabled(true);const federated=b.recommendSeeds(basis,2).map(s=>s.id);b.setFederationEnabled(false);
     const wire=await import('/AI-Car-Racer/crosstab/wire.js');
     const decoded=wire.fromWire(wire.toWire(a,4,basis,{learning:{context,styleScore:.5}}));
+    // The same genome can be tested with another profile. Content dedup must
+    // preserve both evaluations and must never create a self-parent edge.
+    const duplicate=b.archiveBrain(window.__rvUnflatten(a),5,basis,1,['careful-seed'],undefined,undefined,
+      {context:{...context,profile:'wild'},styleScore:.2});
+    b.setLearningContext(context);const carefulAgain=b.recommendSeeds(basis,2).find(s=>s.id===duplicate);
+    b.setLearningContext({...context,profile:'wild'});const wildAgain=b.recommendSeeds(basis,2).find(s=>s.id===duplicate);
+    const merged=b.exportSnapshot().brains.find(s=>s.id===duplicate).meta;
+    b.importSnapshot(b.exportSnapshot());b.setLearningContext(context);
+    const imported=b.recommendSeeds(basis,2).find(s=>s.id===duplicate);
     return {first,second,feedback,federated,context:decoded.meta.learning.context,
-      retainedBaseline:saved.observations.some(o=>Number.isFinite(o.baseline)),metas:saved.brains.map(s=>s.meta.learningContext)};
+      retainedBaseline:saved.observations.some(o=>Number.isFinite(o.baseline)),metas:saved.brains.map(s=>s.meta.learningContext),
+      dedup:{id:duplicate,careful:carefulAgain?.meta.fitness,wild:wildAgain?.meta.fitness,restored:imported?.meta.fitness,evaluations:merged.evaluations?.length,selfParent:merged.parentIds.includes(duplicate)}};
   });
   assert.equal(retrieval.first[0],'careful-seed');assert.equal(retrieval.second[0],'wild-seed');
   assert.equal(retrieval.federated[0],'careful-seed');
@@ -115,6 +127,7 @@ try{
   assert.equal(retrieval.feedback.find(f=>f.id==='wild-seed').feedback,null,'First transfer establishes its own baseline');
   assert.equal(retrieval.context.profile,'careful');assert.equal(retrieval.retainedBaseline,true);
   assert.ok(retrieval.metas.every(m=>m?.track==='fixture-track'));
+  assert.deepEqual(retrieval.dedup,{id:'careful-seed',careful:4,wild:5,restored:4,evaluations:2,selfParent:false});
   mark('learning controls in 3D');
   await page.evaluate(()=>{window.CircuitStudio.setQuality('low');window.CircuitStudio.forceWebGL=true;});
   await page.locator('#graphics-toggle').click({timeout:90000});await page.waitForFunction(()=>window.CircuitStudio.active,{},{timeout:90000});
