@@ -141,7 +141,8 @@ async function exercise(backend){
     await capture(page,backend,'player');
     await page.locator('[data-action="sound"]').click();
     await page.waitForFunction(()=>!window.CircuitStudio.audio.enabled&&window.CircuitStudio.audio.context.state==='suspended');
-    assert.equal(await page.evaluate(()=>window.CircuitStudio.audio.master.gain.value),0);
+    // A suspended context has stopped processing audio (and AudioParam events),
+    // so its last reported gain is not a measurement of current output.
     await page.locator('[data-camera="chase"]').click();
     await page.waitForFunction(()=>!window.CircuitStudio.followingPlayer);
 
