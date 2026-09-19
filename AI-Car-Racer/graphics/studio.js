@@ -2,7 +2,7 @@ import * as T from '../../vendor/three-0.186.0/three.js';
 import { StudioUI } from './ui.js';
 import { StudioAudio } from './audio.js';
 import { buildWorld, createCar, createRain, disposeTree } from './world.js';
-import { SnapshotBuffer, ReplayArchive, sampleRun, trackKey, worldX, worldZ, SCALE, clamp, angleDelta } from './state.js';
+import { SnapshotBuffer, ReplayArchive, sampleRun, trackKey, worldX, worldZ, SCALE, clamp, finitePose } from './state.js';
 
 const CAMERAS=['orbit','chase','overhead','director','trackside','front'];
 const QUALITY={low:{dpr:1,shadow:512,cars:300,bloom:false},balanced:{dpr:1.25,shadow:1024,cars:800,bloom:true},high:{dpr:1.75,shadow:2048,cars:1600,bloom:true}};
@@ -290,7 +290,7 @@ class CircuitStudio {
     this.replayPose=this.replay?pose:null;
     if(!pose)pose={x:info.startInfo.x,y:info.startInfo.y,angle:info.startInfo.heading||0,speed:0};
     if(!this.replay&&this.focusIndex===snap?.bestIdx)pose.speed=snap.bestSpeed;
-    this.followingPlayer=!this.replay&&this.followTarget==='player'&&!!info.players[1];
+    this.followingPlayer=!this.replay&&this.followTarget==='player'&&finitePose(info.players[1]);
     this.focusPose=this.followingPlayer?info.players[1]:pose;
     const controls=this.replay?[pose.controls&1,pose.controls&2,pose.controls&4,pose.controls&8]:this.focusIndex===snap?.bestIdx?snap.bestControls:null;
     const player=info.players[1];
@@ -310,7 +310,7 @@ class CircuitStudio {
     }
     this.pack.count=this.packWindows.count=count;this.pack.instanceMatrix.needsUpdate=true;this.packWindows.instanceMatrix.needsUpdate=true;
     if(this.pack.instanceColor)this.pack.instanceColor.needsUpdate=true;
-    this.players.forEach((car,i)=>{const p=info.players[i];car.visible=!!p&&!this.replay&&(Math.abs(p.speed)>.01||(i===1&&this.followingPlayer));if(car.visible)this.placeCar(car,p,dt,[p.controls.forward,p.controls.left,p.controls.right,p.controls.reverse]);});
+    this.players.forEach((car,i)=>{const p=info.players[i];car.visible=finitePose(p)&&!this.replay&&(Math.abs(p.speed)>.01||(i===1&&this.followingPlayer));if(car.visible)this.placeCar(car,p,dt,[p.controls.forward,p.controls.left,p.controls.right,p.controls.reverse]);});
     this.ghostCars.forEach((car,i)=>{
       const run=this.archive.runs.filter(r=>r!==this.replay?.run)[i];
       const time=this.replay?this.replay.time:(snap?.frameCount||0)/60;
@@ -349,7 +349,9 @@ class CircuitStudio {
     this.controls.enabled=mode==='orbit'&&this.cameraMode==='orbit';
     const eye=this.desiredEye,look=this.desiredLook,p=this.focusPose;
     const x=worldX(p.x),z=worldZ(p.y),a=p.angle,fx=-Math.sin(a),fz=-Math.cos(a);
-    const reset=this.resetCamera;
+    // A non-finite source pose must never poison smoothing permanently. Lerp
+    // with t=1 still keeps NaN, so resets copy the desired position outright.
+    const reset=this.resetCamera||!Number.isFinite(this.camera.position.lengthSq())||!Number.isFinite(this.smoothLook.lengthSq());
     if(reset){
       if(mode==='orbit'&&this.cameraMode==='orbit')this.fitOrbit();
       this.smoothLook.set(0,0,0);this.resetCamera=false;
@@ -366,13 +368,14 @@ class CircuitStudio {
     }else if(mode==='front'){
       eye.set(x+fx*9,3.0,z+fz*9);look.set(x-fx*1.5,.45,z-fz*1.5);
     }else{
-      if(!this.tracksideEye||now-(this.tracksideSince||0)>7000){
+      if(reset||!this.tracksideEye||now-(this.tracksideSince||0)>7000){
         this.tracksideEye=new T.Vector3(x+fz*13+fx*16,3.8,z-fx*13+fz*16);this.tracksideSince=now;
       }
       eye.copy(this.tracksideEye);look.set(x,.4,z);
     }
-    const smooth=this.reducedMotion||reset?1:1-Math.exp(-dt*4);
-    this.camera.position.lerp(eye,smooth);this.smoothLook.lerp(look,smooth);this.camera.lookAt(this.smoothLook);
+    if(reset||this.reducedMotion){this.camera.position.copy(eye);this.smoothLook.copy(look);}
+    else{const smooth=1-Math.exp(-dt*4);this.camera.position.lerp(eye,smooth);this.smoothLook.lerp(look,smooth);}
+    this.camera.lookAt(this.smoothLook);
   }
 }
 

@@ -30,6 +30,9 @@ fitness, or archive state. Each worker begin gets a separate presentation serial
 so interpolation also resets on manual restarts within one generation. Large
 snapshot gaps are not interpolated. Above 5× training, live camera selection
 temporarily uses overhead; recorded playback remains at its selected speed.
+Non-finite poses are excluded from interpolation and replay. A chase camera
+with invalid coordinates resets to the current valid target instead of allowing
+NaN to persist through camera smoothing. The WASD chase remains available above 5×.
 
 Replay records a fixed, evenly spaced cohort of at most 16 drivers at 20 Hz in
 simulation time. At generation end, the furthest of these recorded drivers is

@@ -5,14 +5,16 @@ export const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 export const worldX = x => (x - 1600) * SCALE;
 export const worldZ = y => (y - 900) * SCALE;
 export const angleDelta = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+export const finitePose = p => !!p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.angle);
 export function interpolatePose(a, b, t) {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t,
     angle: a.angle + angleDelta(a.angle, b.angle) * t };
 }
 export function poseAt(positions, index) {
   const i = index * 5;
-  return { x: positions[i], y: positions[i + 1], angle: positions[i + 2],
+  const pose = { x: positions[i], y: positions[i + 1], angle: positions[i + 2],
     damaged: !!positions[i + 3], progress: positions[i + 4] };
+  return finitePose(pose) ? pose : null;
 }
 export function pointInLoop(x, y, loop) {
   let inside = false;
@@ -69,12 +71,12 @@ export class SnapshotBuffer {
     return true;
   }
   pose(index, now, interpolate = true) {
-    if (!this.current || index < 0 || index >= this.current.snapshot.N) return null;
+    if (!this.current || !Number.isInteger(index) || index < 0 || index >= this.current.snapshot.N) return null;
     const b = poseAt(this.current.snapshot.positions, index), old = this.previous;
-    if (!interpolate || !old || b.damaged) return b;
+    if (!b || !interpolate || !old || b.damaged) return b;
     const a = poseAt(old.snapshot.positions, index);
     // Don't invent paths through corners when fast training skips a large span.
-    if (a.damaged || this.current.snapshot.frameCount - old.snapshot.frameCount > 12 || Math.hypot(a.x-b.x,a.y-b.y) > 150) return b;
+    if (!a || a.damaged || this.current.snapshot.frameCount - old.snapshot.frameCount > 12 || Math.hypot(a.x-b.x,a.y-b.y) > 150) return b;
     const t = clamp((now - this.current.at) / clamp(this.current.at - old.at, 16, 100), 0, 1);
     return { ...interpolatePose(a, b, t), damaged: b.damaged, progress: b.progress };
   }
@@ -92,13 +94,14 @@ export function sampleRun(run, seconds) {
   const discrete = frame >= data[b] ? b : a;
   const t = data[b] === data[a] ? 0 : (frame - data[a]) / (data[b] - data[a]);
   const pose = interpolatePose({x:data[a+1],y:data[a+2],angle:data[a+3]}, {x:data[b+1],y:data[b+2],angle:data[b+3]}, t);
+  if (!finitePose(pose)) return null;
   return { ...pose, speed: data[discrete+4], controls: data[discrete+5], damaged: !!data[discrete+6] };
 }
 export class ReplayArchive {
   constructor() { this.runs = []; this.key = ''; }
   setTrack(key) { if (key !== this.key) { this.key = key; this.runs = []; } }
   add(run) {
-    if (!run?.samples || run.samples.length < 14) return false;
+    if (!run?.samples || run.samples.length < 14 || run.samples.length % 7 || !run.samples.every(Number.isFinite)) return false;
     this.runs.unshift({ ...run, duration: run.samples[run.samples.length - 7] / 60 });
     this.runs.length = Math.min(this.runs.length, 6);
     return true;

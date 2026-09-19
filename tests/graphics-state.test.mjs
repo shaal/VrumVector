@@ -40,6 +40,14 @@ test('snapshot interpolation never crosses a manual restart or a large training 
   b.push(snapshot(100,2200),2,60);assert.equal(b.pose(0,61).x,2200);
   assert.equal(b.pose(-1,70),null);assert.equal(b.pose(1,70),null);
 });
+test('non-finite telemetry cannot poison interpolation or recorded playback',()=>{
+  const b=new SnapshotBuffer();b.push(snapshot(1,NaN),1,0);
+  assert.equal(b.pose(0,0),null);assert.equal(b.pose(undefined,0),null);
+  b.push(snapshot(2,120),1,16);assert.equal(b.pose(0,20).x,120);
+  b.push(snapshot(3,Infinity),1,32);assert.equal(b.pose(0,40),null);
+  const invalid={samples:new Float32Array([0,10,20,0,3,0,0,60,NaN,80,1,6,0,0])};
+  assert.equal(sampleRun(invalid,.5),null);assert.equal(new ReplayArchive().add(invalid),false);
+});
 test('road membership preserves the original corridor and irregular vertices',()=>{
   const outer=[{x:0,y:0},{x:10,y:0},{x:10,y:10},{x:6,y:7},{x:0,y:10}];
   const inner=[{x:3,y:3},{x:7,y:3},{x:5,y:6}];

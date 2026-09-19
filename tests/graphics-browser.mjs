@@ -138,6 +138,10 @@ async function exercise(backend){
       assert.equal(await page.evaluate(()=>window.CircuitStudio.focusPose===playerCar2),true,'Camera follows the actual WASD car');
       await page.waitForFunction(()=>window.CircuitStudio.audio.motor.frequency.value>65);
     }finally{await page.keyboard.up('w');}
+    // Reproduce the observed poisoned camera and require recovery without
+    // restarting the simulation or relying on lerp(NaN, target, 1).
+    await page.evaluate(()=>{const s=window.CircuitStudio;s.camera.position.set(NaN,4.8,NaN);s.smoothLook.set(NaN,0,NaN);s.resetCamera=false;});
+    await page.waitForFunction(()=>{const s=window.CircuitStudio;return [...s.camera.position.toArray(),...s.camera.quaternion.toArray()].every(Number.isFinite);});
     await capture(page,backend,'player');
     await page.locator('[data-action="sound"]').click();
     await page.waitForFunction(()=>!window.CircuitStudio.audio.enabled&&window.CircuitStudio.audio.context.state==='suspended');
