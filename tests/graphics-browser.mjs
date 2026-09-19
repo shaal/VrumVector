@@ -16,6 +16,26 @@ async function settle(page){
   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   await page.waitForTimeout(600);
 }
+async function capture(page,backend,name){
+  // Inspect the canvas itself: a working DOM can otherwise hide a blank GPU
+  // frame. Read immediately after rendering, before the drawing buffer expires.
+  const state=await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>{
+    const s=window.CircuitStudio;s.frame(s.info);
+    const canvas=document.createElement('canvas');canvas.width=160;canvas.height=100;
+    const ctx=canvas.getContext('2d');ctx.drawImage(s.canvas,0,0,160,100);
+    const pixels=ctx.getImageData(0,0,160,100).data,colors=new Set();
+    for(let i=0;i<pixels.length;i+=4)colors.add((pixels[i]>>4)*256+(pixels[i+1]>>4)*16+(pixels[i+2]>>4));
+    resolve({colors:colors.size,image:s.canvas.toDataURL(),camera:s.camera.position.toArray(),
+      rotation:s.camera.quaternion.toArray(),projection:s.camera.projectionMatrix.toArray(),
+      focus:s.focusPose,quality:s.quality,frame:s.info.snapshot?.frameCount,
+      backend:s.backend,render:s.renderer.info.render});
+  })));
+  const {image,...diagnostics}=state;
+  await writeFile(`${out}/${backend}-${name}-state.json`,JSON.stringify(diagnostics,null,2));
+  await writeFile(`${out}/${backend}-${name}-canvas.png`,Buffer.from(image.split(',')[1],'base64'));
+  await page.screenshot({path:`${out}/${backend}-${name}.png`});
+  assert.ok(state.colors>24,`${backend} ${name}: expected scene geometry, found only ${state.colors} canvas colors`);
+}
 async function exercise(backend){
   // Chromium's software adapters exercise actual shader compilation in CI.
   // These are test-only flags; the application requests normal browser APIs.
@@ -46,7 +66,7 @@ async function exercise(backend){
     if(backend==='webgl')assert.equal(selected,'WebGL 2');
     if(useMesa)assert.equal(selected,'WebGPU','The native backend must be exercised in CI');
     console.log(`${backend}: renderer selected ${selected}`);
-    await page.screenshot({path:`${out}/${backend}-day.png`});
+    await capture(page,backend,'day');
 
     // Keep interaction tests responsive on CPU-only CI. The balanced pipeline
     // was rendered above; high quality (including reflections) is checked below.
@@ -64,13 +84,13 @@ async function exercise(backend){
     await page.waitForFunction(()=>window.CircuitStudio.archive.runs.length>0,{},{timeout:60000});
     await page.waitForFunction(()=>window.CircuitStudio.info.snapshot?.N===48);
     await page.locator('[data-camera="chase"]').click();await settle(page);
-    await page.screenshot({path:`${out}/${backend}-chase.png`});
+    await capture(page,backend,'chase');
     await page.locator('[data-action="vision"]').click();await settle(page);
     assert.equal(await page.locator('[data-vision-panel]').isVisible(),true);
     // Generation-zero snapshots have no ray data yet. Wait for actual sensor
     // output instead of asserting during an arbitrary restart boundary.
     await page.waitForFunction(()=>window.CircuitStudio.sensors.count>0);
-    await page.screenshot({path:`${out}/${backend}-vision.png`});
+    await capture(page,backend,'vision');
 
     stage='night and reflections';console.log(`${backend}: ${stage}`);
     await page.locator('[data-action="settings"]').first().click();
@@ -80,7 +100,7 @@ async function exercise(backend){
     await page.locator('[data-action="night"]').click();await settle(page);
     await ready(page);
     assert.equal(await page.evaluate(()=>!!window.CircuitStudio.reflection),true);
-    await page.screenshot({path:`${out}/${backend}-night.png`});
+    await capture(page,backend,'night');
 
     // Playback is separate from the live worker and uses recorded poses.
     stage='recorded playback';console.log(`${backend}: ${stage}`);
@@ -95,7 +115,7 @@ async function exercise(backend){
     await page.locator('[data-setting="scrub"]').fill(String(seek));
     assert.ok(Math.abs(await page.evaluate(()=>window.CircuitStudio.replay.time)-seek)<.001);
     await page.waitForFunction(before=>window.CircuitStudio.info.runSerial>before,serial,{timeout:60000});
-    await page.screenshot({path:`${out}/${backend}-replay.png`});
+    await capture(page,backend,'replay');
     await page.locator('[data-action="live"]').click();
     assert.equal(await page.evaluate(()=>!!window.CircuitStudio.replay),false);
 
@@ -115,7 +135,7 @@ async function exercise(backend){
     await page.locator('[data-action="night"]').click();
     await page.locator('[data-camera="orbit"]').click();
     await page.setViewportSize({width:390,height:844});await settle(page);
-    await page.screenshot({path:`${out}/${backend}-mobile.png`});
+    await capture(page,backend,'mobile');
     const bounds=await page.locator('.studio-dock').boundingBox();
     assert.ok(bounds.x>=0&&bounds.x+bounds.width<=391&&bounds.y+bounds.height<=845,'Mobile controls fit the viewport');
     await page.locator('[data-action="settings"]').first().click();
