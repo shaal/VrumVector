@@ -73,7 +73,7 @@ body.studio-enabled #perf-hud,body.studio-enabled #metrics-hud {display:none;}
 .studio-launch {position:absolute;right:26px;top:18px;z-index:22;border:2px solid #a5cfb2;border-radius:12px;background:#173328;color:#fff6dc;font:700 15px var(--font-body,system-ui);padding:13px 20px;min-height:48px;box-shadow:0 5px 22px #17332838;cursor:pointer;}
 .studio-launch:hover {background:#2d513d;border-color:#d1e8bc;}
 .studio-launch:disabled {cursor:progress;}
-@media(max-width:600px){.studio-launch {top:52px;right:12px;min-height:44px;font-size:13px;padding:10px 14px;}}
+@media(max-width:600px){.studio-launch {top:52px;right:56px;min-height:44px;font-size:13px;padding:10px 14px;}}
 .studio-notice {position:absolute;top:64px;right:14px;max-width:min(330px,calc(100% - 28px));box-sizing:border-box;z-index:20;background:#173328ef;border:1px solid #8aac92;border-radius:9px;padding:12px 14px;color:#f5f3dd;font:12px/1.5 system-ui;}
 @media(max-width:900px){.studio-header {left:16px;right:16px;top:16px;gap:10px;}.studio-header>div:first-child {padding:12px 15px;}.studio-header h2 {font-size:27px;}.studio-header-actions {max-width:240px;}.studio-vitals {top:150px;left:16px;}.studio-vision {top:230px;left:16px;}.studio-dock button {font-size:10px!important;padding:9px!important;}.studio-eyebrow {font-size:8px;letter-spacing:1.4px;}}
 @media(max-width:600px){

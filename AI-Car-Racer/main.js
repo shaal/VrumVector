@@ -793,6 +793,12 @@ simWorker.onerror = (err) => {
     console.error('[sim-worker] error', err.message || err, err.filename, err.lineno);
 };
 
+function resumePlayerDriving(){
+    // `pause` is a lexical binding; window.pause resolves the button with that
+    // id instead. Read the actual simulation state before resuming.
+    if (window.__awaitingStart || pause) pauseGame();
+}
+
 function requestPlayerBrain(requestId){
     if (workerReady && workerInited) simWorker.postMessage({type:'driverBrain', requestId, runSerial:presentationRunSerial});
 }

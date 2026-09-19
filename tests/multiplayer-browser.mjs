@@ -70,6 +70,7 @@ try{
   stage='AI co-driver and manual overrides';console.log(stage);
   await a.evaluate(()=>{setSeconds(60);begin(true);});
   await a.locator('#ai-drive-toggle').click();
+  assert.equal(await a.evaluate(()=>pause),false,'Enabling AI must not pause an active race');
   await a.waitForFunction(()=>window.PlayerAssist.enabled&&playerCar2.aiDriving&&window.PlayerAssist.brain?.levels.length===2);
   // First exercise the real worker request. Then hold a known network's output
   // steady so assertions do not depend on which random AI currently leads.
@@ -93,6 +94,10 @@ try{
     assert.equal(await a.evaluate(()=>!playerCar2.aiDriving&&playerCar2.controls.reverse&&!playerCar2.controls.forward&&!playerCar2.controls.left),true);
   }finally{await a.keyboard.up('s');}
   assert.equal(await a.evaluate(()=>playerCar2.controls.reverse||playerCar2.controls.forward||playerCar2.controls.left||playerCar2.controls.right),false);
+  await a.evaluate(()=>pauseGame());
+  await a.locator('#ai-drive-toggle').click();
+  assert.equal(await a.evaluate(()=>pause),false,'Enabling AI resumes a paused race');
+  await a.locator('#ai-drive-toggle').click();
   await a.evaluate(()=>{setSeconds(4);begin(true);});
   stage='lap continuity and small AI cohorts';console.log(stage);
   await a.evaluate(()=>{window.__liveCar=playerCar2;window.__liveGeneration=generation;});

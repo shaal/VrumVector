@@ -131,7 +131,7 @@
     el.innerHTML =
       '<button type="button" class="cinema-views-toggle" aria-expanded="false" title="Show view options">Views</button>' +
       '<button type="button" data-act="follow" title="Follow best car (F)">Follow</button>' +
-      '<button type="button" data-act="view3d" title="3D perspective (3)">3D</button>' +
+      '<button type="button" data-act="view3d" title="Tilt the 2D view (3)">Tilt</button>' +
       '<button type="button" data-act="trails" title="Motion trails (T)">Trails</button>' +
       '<button type="button" data-act="heatmap" title="Crash heatmap (H)">Heat</button>' +
       '<button type="button" data-act="rays" title="Champion sensor rays (R)">Rays</button>' +

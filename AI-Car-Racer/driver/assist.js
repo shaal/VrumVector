@@ -15,7 +15,7 @@ class PlayerAssist {
   }
   setEnabled(on) {
     this.release();this.enabled=!!on;this.brain=null;this.requestId++;this.nextRequest=0;
-    if(this.enabled&&(window.__awaitingStart||window.pause))window.pauseGame?.();
+    if(this.enabled)window.resumePlayerDriving?.();
     this.render();
   }
   frame(info) {
