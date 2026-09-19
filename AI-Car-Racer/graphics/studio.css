@@ -7,6 +7,9 @@
 .studio-active #cinema-hud,.studio-active #cinema-controls,.studio-active #bottomText {display:none!important;}
 body.studio-enabled .eli15-fab,body.studio-enabled .eli15-tour-fab,body.studio-enabled .github-fab {display:none;}
 body.studio-enabled #perf-hud,body.studio-enabled #metrics-hud {display:none;}
+.studio-active #startOverlay {background:none;}
+.studio-active .start-overlay-btn {background:#e9efe0;color:#263c32;border-color:#b0c4b5;animation:none;box-shadow:0 12px 36px #17332833;}
+.studio-active .start-overlay-btn:hover {background:#fff9e8;}
 #studio-ui {position:absolute;inset:0;z-index:15;pointer-events:none;color:#f3f0e6;font:12px/1.5 var(--font-body,system-ui);}
 #studio-ui button,#studio-ui select,#studio-ui input,#studio-ui a {pointer-events:auto;}
 #studio-ui button {appearance:none;cursor:pointer;color:inherit;font:600 11px/1.25 var(--font-body,system-ui);border:1px solid #ffffff25;background:#23302cda;padding:11px 14px;border-radius:8px;white-space:nowrap;min-height:38px;transition:background .15s,color .15s;}

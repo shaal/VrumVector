@@ -128,7 +128,8 @@ async function fallback(){
 try{
   for(let i=0;i<50;i++){try{await fetch(origin);break;}catch{await new Promise(r=>setTimeout(r,100));}}
   const failures=[];
-  for(const backend of ['webgl','auto']){try{await exercise(backend);}catch(error){console.error(error);failures.push(error);}}
+  const backends=process.env.STUDIO_TEST_BACKEND?[process.env.STUDIO_TEST_BACKEND]:['webgl','auto'];
+  for(const backend of backends){try{await exercise(backend);}catch(error){console.error(error);failures.push(error);}}
   try{await fallback();}catch(error){console.error(error);failures.push(error);}
   if(failures.length)throw new AggregateError(failures,'Browser graphics verification failed');
 }finally{

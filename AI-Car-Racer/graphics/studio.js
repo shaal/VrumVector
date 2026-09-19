@@ -173,6 +173,7 @@ class CircuitStudio {
   frame(info){
     if(this.disposed)return false;this.info=info;
     const eligible=info.phase===4&&!this.host.classList.contains('ab-on');
+    this.ui.notice.hidden=!eligible||!this.failed;
     this.ui.launch.hidden=!eligible||this.active;this.ui.launch.textContent=this.loading?'Preparing Circuit Studio…':'Open Circuit Studio';
     if(!eligible||!this.enabled||this.failed){this.setActive(false);return false;}
     if(!this.ready){this.init();return false;}
@@ -183,13 +184,16 @@ class CircuitStudio {
       if(document.hidden)return true;
       const now=performance.now(),dt=clamp((now-(this.lastTime||now))/1000,0,.05);this.lastTime=now;
       if(info.runSerial!==this.run){
-        this.run=info.runSerial;this.buffer.reset();this.lastSnapshot=null;this.focusIndex=-1;this.trail=[];this.resetCamera=true;
+        this.run=info.runSerial;this.buffer.reset();this.lastSnapshot=null;this.focusIndex=-1;this.trail=[];
+        this.resetCamera=this.resetCamera||this.cameraMode!=='orbit';
         for(let i=0;i<this.heat.length;i++)this.heat[i]*=.55;
       }
       if(info.snapshot&&this.buffer.push(info.snapshot,this.run,now))this.observeSnapshot(info.snapshot,now);
       if(this.replay&&!this.replay.paused){this.replay.time=Math.min(this.replay.run.duration,this.replay.time+dt*this.replay.rate);if(this.replay.time===this.replay.run.duration)this.replay.paused=true;}
       this.updateCars(info,now,dt);
       this.updateCamera(info,now,dt);
+      this.scene.fog.near=Math.max(145,this.camera.position.length()-40);
+      this.scene.fog.far=this.scene.fog.near+275;
       this.rain.visible=this.night&&!this.reducedMotion&&this.quality!=='low';
       this.world.vision.value=+this.vision;
       if(now-(this.heatUpdated||0)>200){this.updateHeat();this.heatUpdated=now;}
@@ -234,6 +238,25 @@ class CircuitStudio {
       wheel.tire.rotation.x-=(pose.speed||0)*SCALE*60*dt/.23;
       wheel.hub.rotation.x=wheel.tire.rotation.x;
     }
+  }
+  fitOrbit(){
+    this.controls.target.set(0,0,0);
+    const point=new T.Vector3();let scale=1;
+    // Fit the diorama itself in both portrait and landscape, with space for
+    // the camera dock. A square-root aspect heuristic clips narrow screens.
+    for(let attempt=0;attempt<28;attempt++){
+      this.camera.position.set(65*scale,70*scale,86*scale);
+      this.camera.lookAt(0,0,0);this.camera.updateMatrixWorld();
+      let fits=true;
+      for(const x of [-61,61])for(const z of [-36,36]){
+        point.set(x,0,z).project(this.camera);
+        if(Math.abs(point.x)>.88||point.y<-.74||point.y>.6)fits=false;
+      }
+      if(fits)break;scale*=1.08;
+    }
+    this.controls.maxDistance=Math.max(310,this.camera.position.length()*1.5);
+    this.camera.far=Math.max(700,this.controls.maxDistance+200);this.camera.updateProjectionMatrix();
+    this.controls.update();
   }
   segment(mesh,index,a,b,width=.05,height=.3){
     const d=this.dummy,ax=worldX(a.x),az=worldZ(a.y),bx=worldX(b.x),bz=worldZ(b.y);
@@ -301,8 +324,8 @@ class CircuitStudio {
     const x=worldX(p.x),z=worldZ(p.y),a=p.angle,fx=-Math.sin(a),fz=-Math.cos(a);
     const reset=this.resetCamera;
     if(reset){
-      const scale=Math.max(1,Math.sqrt(1.65/this.camera.aspect));
-      this.camera.position.set(65*scale,70*scale,86*scale);this.controls.target.set(0,0,0);this.camera.lookAt(0,0,0);this.controls.update();this.smoothLook.set(0,0,0);this.resetCamera=false;
+      if(mode==='orbit'&&this.cameraMode==='orbit')this.fitOrbit();
+      this.smoothLook.set(0,0,0);this.resetCamera=false;
     }
     if(mode==='orbit'&&this.cameraMode==='orbit'){this.controls.enableDamping=!this.reducedMotion;this.controls.update();return;}
     this.controls.enabled=false;

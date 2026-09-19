@@ -9,6 +9,10 @@ jobs:
   graphics:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [webgl, auto]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,9 +23,11 @@ jobs:
       - run: npm run test:graphics
       - run: npx playwright install --with-deps chromium
       - run: npm run test:graphics:browser
+        env:
+          STUDIO_TEST_BACKEND: ${{ matrix.backend }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: circuit-studio-graphics
+          name: circuit-studio-${{ matrix.backend }}
           path: test-results/graphics/
           retention-days: 14
