@@ -154,7 +154,12 @@ export function serialize() {
   const lora = loraSerialize() || _savedLora;
   if (_agent?.exportCheckpoint && _checkpointDirty) {
     try { _checkpoint = _agent.exportCheckpoint(); _checkpointDirty = false; }
-    catch (error) { console.warn('[sona] checkpoint export failed; retaining last checkpoint and examples',error); }
+    catch (error) {
+      // A previous checkpoint cannot represent newly learned examples or
+      // counters. Omit it so reload explicitly recovers the latest journal.
+      _checkpoint = null;
+      console.warn('[sona] checkpoint export failed; saving circuit examples for recovery',error);
+    }
   }
   const sona = _agent ? {checkpoint:_checkpoint, trajectory:savedTrajectory(), microUpdates:_microUpdates} : _savedSona;
   if (!lora && !sona && !_journal.examples.length) return null;

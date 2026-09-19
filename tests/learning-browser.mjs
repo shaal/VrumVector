@@ -91,6 +91,27 @@ try{
   for(const key of ['bank','ewc','micro','grad_up','grad_down','base','pending','metrics','next_id'])
     assert.deepEqual(JSON.parse(checkpointAfter.sona.checkpoint)[key],JSON.parse(checkpointBefore.sona.checkpoint)[key],key);
   assert.deepEqual(checkpointAfter.sona.trajectory,checkpointBefore.sona.trajectory);
+  mark('failed checkpoint export recovers newest examples without claiming exact restoration');
+  const recovery=await page.evaluate(async()=>{
+    const engine=await import('/AI-Car-Racer/sona/engine.js'),adapter=await import('/AI-Car-Racer/lora/trackAdapter.js');
+    const {WasmEphemeralAgent}=await import('/vendor/ruvector/sona/ruvector_sona.js');
+    const original=engine.serialize(),lora=adapter.serialize(),vector=new Float32Array(512);vector[511]=1;
+    const invalidShapes=[new Array(513).fill(0),Array.from({length:512},()=>null),new Array(512).fill(Infinity)];
+    const rejected=invalidShapes.every(b0=>adapter.deserialize({...lora,b0})===false);
+    const unchanged=JSON.stringify(adapter.serialize())===JSON.stringify(lora);
+    engine.beginTrajectory(vector);engine.addStep(vector,null,30);engine.endTrajectory(30);
+    const exportCheckpoint=WasmEphemeralAgent.prototype.exportCheckpoint;let failed;
+    try {WasmEphemeralAgent.prototype.exportCheckpoint=()=>{throw Error('simulated export failure');};failed=engine.serialize();}
+    finally {WasmEphemeralAgent.prototype.exportCheckpoint=exportCheckpoint;}
+    engine._debugReset();engine.deserialize(failed);
+    const restored=engine.info().sona,latest=engine.findPatterns(vector,1)[0];
+    engine.deserialize(original);await window.__rvBridge.persist();
+    return {rejected,unchanged,checkpoint:failed.sona.checkpoint,restoration:restored.restoration,
+      replayed:restored.replayedExamples,expected:failed.sonaJournal.examples.length,latestSimilarity:latest?.sim};
+  });
+  assert.equal(recovery.rejected,true);assert.equal(recovery.unchanged,true);
+  assert.equal(recovery.checkpoint,null);assert.equal(recovery.restoration,'examples');
+  assert.equal(recovery.replayed,recovery.expected);assert.ok(recovery.latestSimilarity>.99);
   mark('journal survives missing or rejected LoRA independently');
   const migrated=await page.evaluate(async()=>{
     const engine=await import('/AI-Car-Racer/sona/engine.js'),saved=engine.serialize();
