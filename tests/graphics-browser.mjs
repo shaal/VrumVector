@@ -19,11 +19,16 @@ async function settle(page){
 async function exercise(backend){
   // Chromium's software adapters exercise actual shader compilation in CI.
   // These are test-only flags; the application requests normal browser APIs.
-  const browser=await chromium.launch({headless:true,channel:'chromium',args:[
-    '--use-angle=swiftshader','--enable-unsafe-swiftshader','--enable-unsafe-webgpu',
-    '--disable-gpu-watchdog',
-    ...(backend==='auto'?['--enable-features=Vulkan','--use-vulkan=swiftshader','--disable-vulkan-surface']:[]),
-  ]});
+  // Native WebGPU uses the same Mesa + virtual-display setup as Three's E2E
+  // runner: https://github.com/mrdoob/three.js/blob/dev/test/e2e/puppeteer.js
+  const useMesa=backend==='auto'&&!!process.env.CI;
+  const browser=await chromium.launch({headless:!useMesa,channel:'chromium',
+    env:useMesa?{...process.env,VK_DRIVER_FILES:'/usr/share/vulkan/icd.d/lvp_icd.x86_64.json'}:process.env,
+    args:backend==='webgl'?['--use-angle=swiftshader','--enable-unsafe-swiftshader']:[
+      '--enable-unsafe-webgpu','--enable-features=Vulkan','--disable-vulkan-surface',
+      '--ignore-gpu-blocklist','--disable-gpu-driver-bug-workarounds','--disable-gpu-watchdog',
+    ],
+  });
   const context=await browser.newContext({viewport:{width:1280,height:800}});
   const page=await context.newPage();page.setDefaultTimeout(45000);
   const errors=[],warnings=[];
@@ -39,6 +44,7 @@ async function exercise(backend){
     await ready(page);await settle(page);
     const selected=await page.evaluate(()=>window.CircuitStudio.backend);
     if(backend==='webgl')assert.equal(selected,'WebGL 2');
+    if(useMesa)assert.equal(selected,'WebGPU','The native backend must be exercised in CI');
     console.log(`${backend}: renderer selected ${selected}`);
     await page.screenshot({path:`${out}/${backend}-day.png`});
 
@@ -98,7 +104,7 @@ async function exercise(backend){
     await page.waitForFunction(()=>window.CircuitStudio.info.paused);
     // Re-deliver an actual worker result to reproduce a generation completion
     // that was already queued when Pause was clicked. It must remain paused.
-    await page.evaluate(()=>simWorker.dispatchEvent(new MessageEvent('message',{data:window.__testLastGenEnd})));
+    assert.equal(await page.evaluate(()=>{simWorker.dispatchEvent(new MessageEvent('message',{data:window.__testLastGenEnd}));return pause;}),true);
     await page.waitForFunction(()=>window.CircuitStudio.info.paused);
     await page.locator('[data-action="settings"]').first().click();
     await page.locator('[data-action="classic"]').click();

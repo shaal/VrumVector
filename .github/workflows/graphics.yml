@@ -22,7 +22,9 @@ jobs:
       - run: npm ci
       - run: npm run test:graphics
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:graphics:browser
+      - name: Install software Vulkan and virtual display
+        run: sudo apt-get install -y mesa-vulkan-drivers xvfb
+      - run: xvfb-run -a npm run test:graphics:browser
         env:
           STUDIO_TEST_BACKEND: ${{ matrix.backend }}
       - uses: actions/upload-artifact@v4

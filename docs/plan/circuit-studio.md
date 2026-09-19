@@ -53,6 +53,8 @@ and track-specific ghosts. `npm run test:graphics:browser` starts a local server
 and exercises real shader compilation, training, camera controls, reflections,
 replay, mobile layout, the editor, and failure recovery with Playwright Chromium.
 CI attaches screenshots and a report identifying the backend actually selected.
+Native WebGPU runs with Mesa Vulkan under a virtual display, following Three.js's
+own E2E setup. This verifies the API and shaders, not physical-GPU performance.
 Visual/browser validation results are recorded in the pull request.
 
 Quality is a rendering choice, not a promise of a particular frame rate. Profile
