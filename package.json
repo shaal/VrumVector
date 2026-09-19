@@ -3,11 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Dev tooling (a11y contrast audit) for the VectorVroom browser app. Runtime is pure static HTML/JS; this package.json only exists so Playwright can be installed for CI accessibility checks.",
+  "description": "Development and verification tooling for VectorVroom. The runtime is a static site with a committed Three.js bundle; serving and deploying need no build step.",
   "scripts": {
-    "a11y": "node scripts/a11y-contrast.mjs"
+    "a11y": "node scripts/a11y-contrast.mjs",
+    "vendor:three": "node scripts/vendor-three.mjs",
+    "test:graphics": "node --test tests/graphics-state.test.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.59.1"
+    "esbuild": "0.28.2",
+    "playwright": "^1.59.1",
+    "three": "0.186.0"
   }
 }

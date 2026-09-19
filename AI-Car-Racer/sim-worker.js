@@ -25,7 +25,7 @@
 // embedder identity guard; without it, recording would reset on every
 // snapshot.
 
-importScripts('utils.js', 'spatialGrid.js', 'network.js', 'controls.js', 'sensor.js', 'car.js');
+importScripts('utils.js', 'spatialGrid.js', 'network.js', 'controls.js', 'sensor.js', 'car.js', 'graphics/recorder.js');
 
 // Worker-scope globals that sensor.js / car.js read directly by name.
 self.frameCount = 0;
@@ -47,6 +47,7 @@ let _lastTickWall = 0;
 // Soft per-tick step safety (overridden by maxStepsForSpeed at runtime).
 const MAX_STEPS = 60; // legacy name; runtime uses maxAccumForSpeed / maxStepsPerTick
 let bestEpoch = 0;
+let presentationRecorder = null;
 
 // Per-tick wall-time budget base. Scaled up with simSpeed so 100× can burn
 // real CPU instead of yielding every 20ms after only a handful of steps.
@@ -232,6 +233,8 @@ function handleBegin(m) {
     }
     self.bestCar = cars.length ? cars[0] : null;
     if (self.bestCar) bestEpoch = 1;
+    presentationRecorder = new PresentationRecorder(cars, !!m.recordPresentation);
+    presentationRecorder.capture(0, true);
 
     _accum = 1;                               // match main's "guarantee one step" priming
     _lastTickWall = performance.now();
@@ -405,6 +408,7 @@ function stepOnce() {
                 }
             }
         }
+        presentationRecorder?.capture(self.frameCount);
         stepsRun++;
         const stepMs = performance.now() - stepStart;
         if (stepMs > maxStepMs) maxStepMs = stepMs;
@@ -558,6 +562,8 @@ function postSnapshot(simMs, steps) {
 }
 
 function endGen() {
+    presentationRecorder?.capture(self.frameCount, true);
+    const presentationRun = presentationRecorder?.finish(self.road.checkPointList.length) || null;
     // Re-pick the fitness elite across the whole population — including
     // damaged cars. Live bestCar prefers survivors for the ray overlay; the
     // brain we archive/seed from should still be whoever got furthest.
@@ -637,9 +643,11 @@ function endGen() {
         popDeathXY.buffer,
     ];
     if (bestHiddenActivations) transfer.push(bestHiddenActivations.buffer);
+    if (presentationRun) transfer.push(presentationRun.samples.buffer);
 
     self.postMessage({
         type: 'genEnd',
+        presentationRun,
         bestBrain: flat,
         fitness: bc.checkPointsCount + bc.laps * cpLen,
         laps: bc.laps,

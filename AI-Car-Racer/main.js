@@ -100,6 +100,7 @@ var invincible=false;
 var traction=0.5;
 
 var frameCount = 0;                // mirrors worker's frameCount via snapshots
+var presentationRunSerial = 0;     // also advances on manual same-generation restarts
 
 // === Phase A — track-aware fast lap =====================================
 // Three pieces of state, all globals because main.js is a classic script
@@ -915,6 +916,8 @@ function updateBestCarProxy(p, m){
 }
 
 function handleGenEnd(m){
+    try { window.CircuitStudio?.onGenerationEnd(m, generation); }
+    catch (error) { console.warn('[Circuit Studio] replay archive', error); }
     bestBrainFlat = m.bestBrain;
     _cachedBestBrainSeq++;
     if (bestCar){
@@ -1270,6 +1273,7 @@ function begin(){
 }
 
 function performBegin(N){
+    presentationRunSerial++;
     if (!workerInited){
         // Copy borders + checkpoints to plain {x,y} objects so postMessage can
         // structured-clone them. The live Road objects contain references to
@@ -1295,6 +1299,7 @@ function performBegin(N){
     simWorker.postMessage({
         type: 'begin',
         N, seconds, maxSpeed, traction,
+        recordPresentation: !!(window.CircuitStudio?.ready && window.CircuitStudio?.enabled),
         startInfo: { x: startInfo.x, y: startInfo.y, heading: startInfo.heading || 0 },
         poseJitter: Object.assign({ radiusPx: 0, angleDeg: 0, maxAttempts: 8 }, window.__poseJitter || {}),
         brains
@@ -1481,13 +1486,19 @@ function animate(){
     var _perfDraw = 0;
     var _perfT0 = perfEnabled ? performance.now() : 0;
     const DP = window.DemoPresentation;
+    const gpuActive = !!window.CircuitStudio?.frame({
+        phase, road, snapshot: latestSnapshot, bestCar, generation,
+        runSerial: presentationRunSerial, paused: pause, simSpeed,
+        awaitingStart: !!window.__awaitingStart, startInfo,
+        players: [playerCar, playerCar2]
+    });
     // Presentation layer (road cache / follow-cam / 3D) owns the phase-4
     // frame setup. Outside training, fall back to the classic full redraw.
     let _pres = null;
-    if (phase === 4 && DP && typeof DP.beginFrame === 'function'){
+    if (!gpuActive && phase === 4 && DP && typeof DP.beginFrame === 'function'){
         _pres = DP.beginFrame(ctx, bestCar, latestSnapshot);
     }
-    if (!_pres || !_pres.drewRoad){
+    if (!gpuActive && (!_pres || !_pres.drewRoad)){
         road.draw(ctx);
     }
     if (perfEnabled) _perfDraw += performance.now() - _perfT0;
@@ -1557,7 +1568,7 @@ function animate(){
         if (shouldDrawCars){
             const _perfDrawT0 = perfEnabled ? performance.now() : 0;
             const usePresSwarm = _pres && _pres.usePresentationSwarm && DP && typeof DP.drawSwarm === 'function';
-            if (latestSnapshot){
+            if (latestSnapshot && !gpuActive){
                 if (usePresSwarm) DP.drawSwarm(ctx, latestSnapshot);
                 else drawFromSnapshot(latestSnapshot);
             }
@@ -1567,12 +1578,14 @@ function animate(){
                 // reads .brainInputs / .brainOutputActivations (Task 2.D) to
                 // render the NN decision bars.
                 inputVisual(bestCar);
-                if (DP && typeof DP.drawChampion === 'function') DP.drawChampion(ctx, bestCar);
-                else drawBestCar(bestCar);
+                if (!gpuActive){
+                    if (DP && typeof DP.drawChampion === 'function') DP.drawChampion(ctx, bestCar);
+                    else drawBestCar(bestCar);
+                }
             }
             // Player cars are 2D-world quads — skip in pure 3D projection so
             // they don't ghost in flat screen space over the perspective scene.
-            const skipPlayers = DP && DP.state && DP.state.view3d;
+            const skipPlayers = gpuActive || (DP && DP.state && DP.state.view3d);
             if (!skipPlayers){
                 if (playerCar) playerCar.draw(ctx,"#E6194B",true);
                 if (playerCar2) playerCar2.draw(ctx,"#4FC3F7",true);
@@ -1582,7 +1595,7 @@ function animate(){
         if (_pres && DP && typeof DP.endFrame === 'function'){
             DP.endFrame(ctx, _pres.camApplied);
         }
-        if (DP && typeof DP.tickHud === 'function'){
+        if (!gpuActive && DP && typeof DP.tickHud === 'function'){
             DP.tickHud({
                 generation: generation,
                 bestCar: bestCar,
