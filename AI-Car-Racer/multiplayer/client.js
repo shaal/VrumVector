@@ -36,7 +36,7 @@ class LiveSession {
     this.panel=this.root.querySelector('#live-panel');this.launch=this.root.querySelector('.live-launch');
     this.input=this.root.querySelector('#live-callsign');this.input.value=this.callsign;
     this.checkbox=this.root.querySelector('#live-enabled');this.statusNode=this.root.querySelector('.live-status');
-    const toggle=on=>{this.panel.hidden=!on;this.launch.setAttribute('aria-expanded',String(on));};
+    const toggle=on=>{this.panel.hidden=!on;this.launch.setAttribute('aria-expanded',String(on));if(on){const profiles=document.getElementById('driver-learning');if(profiles)profiles.open=false;}};
     this.launch.onclick=()=>toggle(this.panel.hidden);
     this.root.querySelector('[data-live-close]').onclick=()=>{toggle(false);this.launch.focus();};
     this.root.querySelector('[data-live-name]').onsubmit=event=>{

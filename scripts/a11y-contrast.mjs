@@ -163,6 +163,8 @@ function pageAudit() {
 // Each scenario gets a fresh page so earlier state (drawer open, collapsed
 // panel) can't leak into the next assertion.
 const scenarios = [
+  {name:'driver-profiles',setup:async(page)=>{await page.locator('#driver-learning summary').click();}},
+  {name:'driver-profiles-3d',studio:true,setup:async(page)=>{await page.locator('#driver-learning summary').click();}},
   {
     name: 'multiplayer-panel',
     studio: true,

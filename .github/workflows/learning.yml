@@ -1,0 +1,27 @@
+name: Driver profiles and learning
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  learning:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:learning
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:learning:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: driver-profiles-learning
+          path: test-results/learning/
+          retention-days: 14

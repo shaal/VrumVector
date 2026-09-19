@@ -111,6 +111,7 @@ export function applySnapshot(snapshot, targets) {
     observations.set(row.id, {
       weight: Number(row.weight) || 0,
       count: (row.count | 0),
+      baseline: Number.isFinite(row.baseline)?row.baseline:undefined,
     });
   }
 

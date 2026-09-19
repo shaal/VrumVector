@@ -25,7 +25,7 @@
 // embedder identity guard; without it, recording would reset on every
 // snapshot.
 
-importScripts('utils.js', 'spatialGrid.js', 'network.js', 'controls.js', 'sensor.js', 'car.js', 'graphics/recorder.js');
+importScripts('utils.js', 'spatialGrid.js', 'network.js', 'controls.js', 'sensor.js', 'driver/profiles.js', 'car.js', 'graphics/recorder.js');
 
 // Worker-scope globals that sensor.js / car.js read directly by name.
 self.frameCount = 0;
@@ -48,6 +48,7 @@ let _lastTickWall = 0;
 const MAX_STEPS = 60; // legacy name; runtime uses maxAccumForSpeed / maxStepsPerTick
 let bestEpoch = 0;
 let presentationRecorder = null;
+let runSerial=0, learningContext=null, seedParents=[], seedKinds=[];
 
 // Per-tick wall-time budget base. Scaled up with simSpeed so 100× can burn
 // real CPU instead of yielding every 20ms after only a handful of steps.
@@ -103,7 +104,7 @@ self.onmessage = (ev) => {
         case 'driverBrain': {
             if (!self.bestCar?.brain) break;
             const brain = flattenBrain(self.bestCar.brain);
-            self.postMessage({type:'driverBrain', requestId:m.requestId, runSerial:m.runSerial, brain}, [brain.buffer]);
+            self.postMessage({type:'driverBrain', requestId:m.requestId, runSerial, brain}, [brain.buffer]);
             break;
         }
         case 'setTraction': self.traction = m.v;  break;
@@ -193,6 +194,9 @@ function handleBegin(m) {
     self.bestCar = null;
     bestEpoch = 0;
     seconds = m.seconds;
+    runSerial=m.runSerial||0;learningContext=m.learningContext||null;
+    seedParents=Array.isArray(m.seedParents)?m.seedParents:[];
+    seedKinds=Array.isArray(m.seedKinds)?m.seedKinds:[];
     self.maxSpeed = m.maxSpeed;
     self.traction = m.traction;
     startInfo = m.startInfo;
@@ -231,6 +235,7 @@ function handleBegin(m) {
             if (!accepted) jitterFallback++;
         }
         const c = new Car(x, y, 30, 50, 'AI', m.maxSpeed, angle);
+        c.driverProfile=DriverProfiles.get(m.driverProfile).id;
         assignBrainFromFlat(c.brain, flat, i * FLAT_LENGTH);
         cars[i] = c;
     }
@@ -398,7 +403,7 @@ function stepOnce() {
             let bestFitAll = -Infinity, bestAll = null;
             for (let i = 0; i < cars.length; i++) {
                 const c = cars[i];
-                const f = c.checkPointsCount + c.laps * cpLen;
+                const f = DriverProfiles.rank(c,cpLen);
                 if (f > bestFitAll) { bestFitAll = f; bestAll = c; }
                 if (!c.damaged && f > bestFitAlive) { bestFitAlive = f; bestAlive = c; }
             }
@@ -556,6 +561,7 @@ function postSnapshot(simMs, steps) {
 
     self.postMessage({
         type: 'snapshot',
+        runSerial,driverProfile:DriverProfiles.get(learningContext?.profile).id,
         frameCount: self.frameCount,
         bestIdx, bestEpoch,
         positions, N,
@@ -577,12 +583,21 @@ function endGen() {
     let elite = null, eliteFit = -Infinity;
     for (let i = 0; i < cars.length; i++) {
         const c = cars[i];
-        const f = c.checkPointsCount + c.laps * cpLen;
+        const f = DriverProfiles.rank(c,cpLen);
         if (f > eliteFit) { eliteFit = f; elite = c; }
     }
     if (!elite) return;
     self.bestCar = elite;
     const bc = elite;
+    const eliteIndex=cars.indexOf(elite);
+    const outcomes=new Map();
+    for(let i=0;i<cars.length;i++){
+        const id=seedParents[i];if(typeof id!=="string"||seedKinds[i]!=="mutation")continue;
+        const c=cars[i],f=c.checkPointsCount+c.laps*cpLen;
+        const o=outcomes.get(id)||{id,count:0,totalFitness:0,bestFitness:0};
+        o.count++;o.totalFitness+=f;o.bestFitness=Math.max(o.bestFitness,f);outcomes.set(id,o);
+    }
+    const seedOutcomes=[...outcomes.values()].map(o=>({id:o.id,count:o.count,meanFitness:o.totalFitness/o.count,bestFitness:o.bestFitness}));
     const flat = flattenBrain(bc.brain);
 
     // Population-wide stats: per-car checkpoint counts + death frames. Main
@@ -653,6 +668,8 @@ function endGen() {
 
     self.postMessage({
         type: 'genEnd',
+        runSerial,learningContext,seedOutcomes,eliteParentId:seedParents[eliteIndex]||null,
+        styleScore:DriverProfiles.styleScore(bc),driving:DriverProfiles.summarize(bc),
         presentationRun,
         bestBrain: flat,
         fitness: bc.checkPointsCount + bc.laps * cpLen,

@@ -34,6 +34,7 @@
 
 import { FLAT_LENGTH } from '../brainCodec.js';
 import { hashBrain } from '../archive/hash.js';
+import {cleanContext,clamp} from '../learning/policy.js';
 
 function f32ToArray(v) {
   if (!v) return null;
@@ -60,6 +61,7 @@ export function toWire(flat, fitness, trackVec, meta) {
     if (Number.isFinite(meta.generation)) outMeta.generation = meta.generation | 0;
     if (Array.isArray(meta.parentIds)) outMeta.parentIds = meta.parentIds.slice();
     if (Number.isFinite(meta.fastestLap)) outMeta.fastestLap = Number(meta.fastestLap);
+    if(meta.learning?.context)outMeta.learning={context:cleanContext(meta.learning.context),styleScore:clamp(meta.learning.styleScore,0,1)};
     if (meta.dynamicsVec instanceof Float32Array) {
       outMeta.dynamicsVec = f32ToArray(meta.dynamicsVec);
     }
@@ -88,6 +90,7 @@ export function fromWire(msg) {
     parentIds: Array.isArray(metaIn.parentIds) ? metaIn.parentIds.slice() : [],
   };
   if (Number.isFinite(metaIn.fastestLap)) meta.fastestLap = Number(metaIn.fastestLap);
+  if(metaIn.learning?.context)meta.learning={context:cleanContext(metaIn.learning.context),styleScore:clamp(metaIn.learning.styleScore,0,1)};
   if (Array.isArray(metaIn.dynamicsVec)) {
     const dyn = arrayToF32(metaIn.dynamicsVec);
     if (dyn) meta.dynamicsVec = dyn;

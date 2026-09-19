@@ -11,7 +11,9 @@
     "test:graphics:browser": "node tests/graphics-browser.mjs",
     "test:multiplayer": "node --test tests/multiplayer.test.mjs",
     "test:multiplayer:browser": "node tests/multiplayer-browser.mjs",
-    "dev:multiplayer": "wrangler dev --config multiplayer/wrangler.jsonc --var ALLOW_LOCAL:true --port 8878"
+    "dev:multiplayer": "wrangler dev --config multiplayer/wrangler.jsonc --var ALLOW_LOCAL:true --port 8878",
+    "test:learning": "node --test tests/learning.test.mjs",
+    "test:learning:browser": "node tests/learning-browser.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

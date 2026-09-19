@@ -751,6 +751,7 @@ var pendingBegin = null;
 
 simWorker.onmessage = (ev) => {
     const m = ev.data;
+    if ((m.type==='snapshot'||m.type==='genEnd')&&Number.isInteger(m.runSerial)&&m.runSerial!==presentationRunSerial)return;
     switch (m.type){
         case 'ready':
             workerReady = true;
@@ -792,6 +793,11 @@ simWorker.onmessage = (ev) => {
 simWorker.onerror = (err) => {
     console.error('[sim-worker] error', err.message || err, err.filename, err.lineno);
 };
+
+function restartDriverLearning(){
+    window.__rvSessionBestFitness=0;
+    begin(true);
+}
 
 function resumePlayerDriving(){
     // `pause` is a lexical binding; window.pause resolves the button with that
@@ -1132,6 +1138,27 @@ function fillRandom(dst, dstOff, applyConservativeBias){
 }
 
 function buildBrainsBuffer(N){
+    if(window.DriverLearning){
+        let seeds=[],prior=null;
+        if(bridgeReady()){
+            try{
+                const bridge=window.__rvBridge;
+                bridge.setQueryDynamicsVec?.(window.__rvDynamics?.queryVector?.()||null);
+                seeds=bridge.recommendSeeds(window.currentTrackVec||null,10);
+            }catch(error){console.warn('[learning] memory retrieval failed',error);}
+        }
+        try{
+            const savedContext=JSON.parse(localStorage.getItem('bestBrainLearningContext')||'null');
+            const matches=savedContext?savedContext.profile===window.DriverLearning.profile:window.DriverLearning.profile==='balanced';
+            if(matches&&localStorage.getItem('brainSchemaVersion')===String(BRAIN_SCHEMA_VERSION)&&localStorage.getItem('bestBrain')){
+                prior=flattenBrainInline(reviveBrain(JSON.parse(localStorage.getItem('bestBrain'))));
+            }
+        }catch(error){console.warn('[learning] saved driver skipped',error);}
+        const batch=window.DriverLearning.build(N,seeds,prior,mutateValue,conservativeInit);
+        currentSeedIds=[...new Set(batch.parents.filter(Boolean))];
+        window.__rvBridge?.setLastSeedSources?.({...batch.counts,generation});
+        return batch.flat;
+    }
     const out = new Float32Array(N * FLAT_LENGTH);
     currentSeedIds = [];
     let seededFromBridge = false;
@@ -1308,6 +1335,7 @@ function performBegin(N){
         });
         workerInited = true;
     }
+    window.DriverLearning?.prepare({road,maxSpeed,traction,seconds});
     const brains = buildBrainsBuffer(N);
     // Keep worker speed aligned with main defaults. setSimSpeed() only posts
     // when the user moves the dropdown — without this, a default simSpeed≠1
@@ -1318,6 +1346,9 @@ function performBegin(N){
     simWorker.postMessage({
         type: 'begin',
         N, seconds, maxSpeed, traction,
+        runSerial:presentationRunSerial,driverProfile:window.DriverLearning?.profile||'balanced',
+        learningContext:window.DriverLearning?.context||null,
+        seedParents:window.DriverLearning?.batch?.parents||[],seedKinds:window.DriverLearning?.batch?.kinds||[],
         recordPresentation: !!(window.CircuitStudio?.ready && window.CircuitStudio?.enabled),
         startInfo: { x: startInfo.x, y: startInfo.y, heading: startInfo.heading || 0 },
         poseJitter: Object.assign({ radiusPx: 0, angleDeg: 0, maxAttempts: 8 }, window.__poseJitter || {}),
@@ -1420,6 +1451,7 @@ function performNextBatch(genData){
     }
 
     const _tArchive = performance.now();
+    let archivedBrainId=null;
     if (bridgeReady() && bestBrainFlat){
         try {
             const fitness = genData.fitness;
@@ -1431,8 +1463,9 @@ function performNextBatch(genData){
                 try { dynamicsVec = window.__rvDynamics.finalizeVector(); } catch (_) {}
             }
             const brainObj = window.__rvUnflatten(bestBrainFlat);
-            window.__rvBridge.archiveBrain(
-                brainObj, fitness, trackVec, generation, currentSeedIds.slice(), batchFastest, dynamicsVec
+            archivedBrainId=window.__rvBridge.archiveBrain(
+                brainObj, fitness, trackVec, generation, genData.eliteParentId?[genData.eliteParentId]:[], batchFastest, dynamicsVec,
+                {context:genData.learningContext||window.DriverLearning?.context,styleScore:genData.styleScore,driving:genData.driving}
             );
             if (!window.__rvSessionBestFitness || fitness > window.__rvSessionBestFitness){
                 window.__rvSessionBestFitness = fitness;
@@ -1440,8 +1473,10 @@ function performNextBatch(genData){
             if (window.__rvDynamics){
                 try { window.__rvDynamics.reset(); } catch (_) {}
             }
-            if (currentSeedIds.length){
-                window.__rvBridge.observe(currentSeedIds, fitness);
+            if (genData.seedOutcomes&&window.__rvBridge.observeOffspring){
+                window.__rvBridge.observeOffspring(genData.seedOutcomes,genData.learningContext);
+            }else if(currentSeedIds.length){
+                window.__rvBridge.observe(currentSeedIds,fitness);
             }
             console.log('[ruvector] gen=' + generation + ' archived best fitness=' + fitness +
                 (currentSeedIds.length ? ' (observed ' + currentSeedIds.length + ' seeds)' : ''));
@@ -1449,6 +1484,7 @@ function performNextBatch(genData){
             console.warn('[ruvector] archive/observe failed', e);
         }
     }
+    window.DriverLearning?.record({...genData,generation},bestBrainFlat,archivedBrainId);
     _times.archive = performance.now() - _tArchive;
     generation += 1;
 
@@ -1948,6 +1984,7 @@ window.__downloadCSV = function(label, rows){
             frameCount: 0,
             generation: 0,
             metricsLog: [],
+            coach: window.DriverLearning?.createCoach()||null,
             workerReady: false,
             workerInited: false,
             lastRow: null,
@@ -1967,11 +2004,17 @@ window.__downloadCSV = function(label, rows){
         return ctxB;
     }
 
-    // Cold-random init for B, deliberately skipping the P2.C conservative-init
-    // bias that the primary's fillRandom uses. The baseline's whole point is
-    // "no help from the main-thread extras" — injecting the conservative bias
-    // would muddy the delta.
+    // A real genetic baseline: same profile, conservative initialization,
+    // mutation policy, and elite preservation, with vector retrieval omitted.
     function buildBrainsBufferB(N){
+        if(window.DriverLearning&&bState){
+            if(!bState.coach)bState.coach=window.DriverLearning.createCoach();
+            bState.coach.setContext(window.DriverLearning.context||{});
+            var profile=DriverProfiles.get(window.DriverLearning.profile);
+            var plan=bState.coach.plan(mutateValue,window.DriverLearning.adaptive,profile.exploration);
+            var batch=window.DriverLearning.buildPopulation({N:N,incumbent:bState.coach.incumbent,plan:plan,conservative:conservativeInit});
+            bState.lastKinds=batch.kinds;return batch.flat;
+        }
         var out = new Float32Array(N * FLAT_LENGTH);
         for (var i = 0; i < N * FLAT_LENGTH; i++){
             out[i] = Math.random() * 2 - 1;
@@ -2001,6 +2044,8 @@ window.__downloadCSV = function(label, rows){
         simWorkerB.postMessage({
             type: 'begin',
             N: N,
+            driverProfile:window.DriverLearning?.profile||'balanced',
+            learningContext:window.DriverLearning?.context||null,
             seconds: seconds,
             maxSpeed: maxSpeed,
             traction: traction,
@@ -2046,6 +2091,7 @@ window.__downloadCSV = function(label, rows){
 
     function handleGenEndB(m){
         if (!bState) return;
+        bState.coach?.record(m,m.bestBrain);
         try {
             var row = computeRowB(m);
             if (row){
@@ -2301,6 +2347,9 @@ window.__downloadCSV = function(label, rows){
             frameCount: bState.frameCount,
             workerReady: bState.workerReady,
             workerInited: bState.workerInited,
+            learningRounds:bState.coach?.rounds||0,
+            learningBest:bState.coach?.incumbent?.fitness??null,
+            mutatedCars:bState.lastKinds?.filter(kind=>kind==='mutation').length||0,
             metricsLogLength: bState.metricsLog.length
         } : { enabled: abEnabled };
     };

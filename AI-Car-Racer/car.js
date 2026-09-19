@@ -1,6 +1,7 @@
 class Car{
     constructor(x,y,width,height,controlType, maxSpeed=3, angle=0){
-        this.origin={x:x,y:y};
+        this.origin={x:x,y:y,angle:angle};
+        this.driverProfile="balanced";
         this.x=x;
         this.y=y;
         this.width=width;
@@ -83,7 +84,7 @@ class Car{
             if(this.delayCounter==40){
                 this.x = this.origin.x;
                 this.y = this.origin.y;
-                this.angle=0;
+                this.angle=this.origin.angle;
                 this.speed=0;
                 this.velocity.x=0
                 this.velocity.y=0;
@@ -96,6 +97,7 @@ class Car{
             }
  
         }
+        if((this.useBrain||this.aiDriving)&&!this.damaged)globalThis.DriverProfiles?.record(this);
         if(this.sensor){
             // Perception LOD. At high simSpeed, non-privileged AI cars skip
             // sensor + NN and keep last-frame controls — they're fodder
@@ -153,7 +155,9 @@ class Car{
                 }
                 offsets.push(lf);
                 offsets.push(lr);
-                const outputs=NeuralNetwork.feedForward(offsets,this.brain);
+                const rawOutputs=NeuralNetwork.feedForward(offsets,this.brain);
+                const outputs=(this.useBrain||this.aiDriving)&&globalThis.DriverProfiles
+                    ? DriverProfiles.apply(this,rawOutputs) : rawOutputs;
                 if(this.useBrain){
                     this.controls.forward=outputs[0];
                     this.controls.left=outputs[1];

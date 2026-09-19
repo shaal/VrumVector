@@ -33,6 +33,7 @@
 //   info()                           — merged {lora: …, sona: …} snapshot
 
 import initSona, { WasmEphemeralAgent } from '../../vendor/ruvector/sona/ruvector_sona.js';
+import {qualityFromFitness} from '../learning/policy.js';
 import {
   loadAdapter as loadLora,
   isReady as loraReady,
@@ -165,6 +166,9 @@ export function addStep(activations, _attention, stepReward) {
   const acts = coerceSonaVec(activations);
   if (!acts) return;
   _traj.steps.push({ activations: acts, reward: Number(stepReward) || 0 });
+  // Long unattended sessions remain bounded even when a caller forgets to
+  // close a trajectory. The normal game reviews every eight generations.
+  if(_traj.steps.length>128)_traj.steps.shift();
 }
 
 // Close the trajectory and crystallize patterns. We emit one processTask
@@ -313,14 +317,10 @@ function toFloat32(v) {
   return new Float32Array(0);
 }
 
-// tanh-squash raw fitness into (-1, 1), then shift to (0, 1) so values below
-// the quality_threshold (0.15) are truly "bad runs" and not just "small
-// positive fitness on a short track". Using tanh(f/50) as the knee because
-// a typical phase-4 best-car fitness is 10–50.
+// No progress must have zero quality. The previous shifted sigmoid gave a
+// stationary, zero-checkpoint driver 0.5 quality and admitted it as a success.
 function normaliseQuality(fitness) {
-  const f = Number(fitness);
-  if (!Number.isFinite(f)) return 0;
-  return 0.5 * (1 + Math.tanh(f / 50));
+  return qualityFromFitness(Number(fitness));
 }
 
 function cosineSim(a, b) {

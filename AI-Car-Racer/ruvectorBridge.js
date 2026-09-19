@@ -33,6 +33,7 @@ import {
 import { fanOut, fanOutSync, kPrime as _kPrime } from './federation/fanout.js';
 import { unionByHash, selectTopK } from './federation/rerank.js';
 import { hashBrain } from './archive/hash.js';
+import {cleanContext,contextKey,matchContext,selectDiverse,offspringFeedback,clamp} from './learning/policy.js';
 // Phase 2B — F6 cross-tab live training. Thin wrapper over BroadcastChannel;
 // when enabled, archiveBrain broadcasts a single-brain delta after a
 // successful insert, and received deltas are routed back through archiveBrain
@@ -136,6 +137,21 @@ const PERSIST_DEBOUNCE_MS = 250;
 // is typically a chain of 1–2 nodes and message passing degenerates to identity.
 const GNN_MIN_ARCHIVE = 10;
 
+let _learningContext=null;
+let _lastLearningFeedback=[];
+export function setLearningContext(context){_learningContext=context?cleanContext(context):null;}
+function observationKey(id,context=_learningContext){return context?contextKey(context)+'::'+id:id;}
+function learnedWeight(id){return _observations.get(observationKey(id))?.weight||0;}
+function decorateSeeds(candidates,k){
+  if(!_learningContext)return candidates.slice().sort((a,b)=>b.score-a.score).slice(0,Math.max(1,k|0));
+  const decorated=candidates.map(candidate=>{
+    const match=matchContext(candidate.meta,_learningContext);
+    // Feedback applies with either structural GNN ranking or EMA ranking.
+    return {...candidate,score:candidate.score*match.factor*(1+.3*learnedWeight(candidate.id)),
+      matchLabel:match.label,exactContext:match.exact};
+  });
+  return selectDiverse(decorated,k);
+}
 let _rerankerMode = 'none'; // 'gnn' | 'ema' | 'none' — most recent path actually taken
 
 // P3.F — per-generation seeding-source breakdown. Counters are set by the
@@ -655,7 +671,7 @@ export function setQueryDynamicsVec(vec) {
 
 // ─── archive / retrieve ──────────────────────────────────────────────────────
 
-export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds = [], fastestLap, dynamicsVec) {
+export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds = [], fastestLap, dynamicsVec, learning = null) {
   requireReady();
   // Phase 3A — F7. Advance the observability generation cursor. This is
   // a read-only counter exposed via getIndexStats().timings.lastGen so
@@ -674,6 +690,13 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
     parentIds: Array.isArray(parentIds) ? parentIds.slice() : [],
     timestamp: Date.now(),
   };
+  if (learning?.context) {
+    meta.learningContext=cleanContext(learning.context);
+    meta.styleScore=clamp(learning.styleScore,0,1);
+    if(learning.driving)meta.driving={averageSpeed:clamp(learning.driving.averageSpeed,0,1),
+      nearWallRate:clamp(learning.driving.nearWallRate,0,1),slideRate:clamp(learning.driving.slideRate,0,1),
+      smoothness:clamp(learning.driving.smoothness,0,1),crashed:!!learning.driving.crashed};
+  }
   if (lap !== undefined) meta.fastestLap = lap;
   // Only write dynamicsId when we actually got a vector. Older archives
   // without this field stay shape-compatible; recommendSeeds skips them
@@ -705,6 +728,7 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
         parentIds: meta.parentIds,
       };
       if (meta.fastestLap !== undefined) wireMeta.fastestLap = meta.fastestLap;
+      if(meta.learningContext)wireMeta.learning={context:meta.learningContext,styleScore:meta.styleScore,driving:meta.driving};
       if (dynamicsVec instanceof Float32Array) wireMeta.dynamicsVec = dynamicsVec;
       crosstabBroadcast(crosstabToWire(vec, meta.fitness, trackVec || null, wireMeta));
     } catch (e) { console.warn('[crosstab] broadcast failed', e); }
@@ -790,7 +814,7 @@ export function recommendSeeds(trackVec, k = 5) {
   // flag below drives all three behaviours in a single code path.
   const consistencyMode = _consistencyGetMode();
   const cacheKey = (consistencyMode === 'eventual' && trackVec)
-    ? _consistencyTrackVecKey(trackVec) + ':k' + (k | 0)
+    ? _consistencyTrackVecKey(trackVec) + ':k' + (k | 0) + (_learningContext?':'+contextKey(_learningContext):'')
     : null;
   if (consistencyMode === 'eventual') {
     const cached = _consistencyGetCachedResult(cacheKey);
@@ -953,7 +977,7 @@ export function recommendSeeds(trackVec, k = 5) {
       rerankTerm = gnnMap.get(bid);
     } else {
       const obs = _observations.get(bid);
-      const emaBoost = obs ? obs.weight : 0;
+      const emaBoost = _learningContext?0:obs ? obs.weight : 0;
       rerankTerm = 1 + 0.3 * emaBoost;
     }
     const dynamicsSim = dynamicsSimMap.has(bid) ? dynamicsSimMap.get(bid) : 0;
@@ -973,7 +997,7 @@ export function recommendSeeds(trackVec, k = 5) {
     });
   }
   scored.sort((a, b) => b.score - a.score);
-  const out = scored.slice(0, Math.max(1, k | 0));
+  const out = decorateSeeds(scored,k);
   // 1C — F4. In eventual mode, stash the result so the next TTL calls
   // under the same trackVec key short-circuit at the top of this fn.
   // The stored reference IS the returned array — callers MUST treat
@@ -1012,7 +1036,7 @@ function _pickRepresentativeBrain({ trackSimByTrackId, frozenIds }) {
       const fit = (entry.meta && entry.meta.fitness) || 0;
       // Rank by trackSim * (1 + normalised fitness) so a closer track
       // wins ties against a marginally-fitter brain on a weaker track.
-      const s = tsim * (1 + Math.tanh(fit / 100));
+      const s = tsim * (1 + Math.tanh(fit / 100)) * matchContext(entry.meta,_learningContext).factor;
       if (s > bestScore) { bestScore = s; bestId = bid; }
     }
   }
@@ -1022,7 +1046,8 @@ function _pickRepresentativeBrain({ trackSimByTrackId, frozenIds }) {
     for (const [bid, entry] of _brainMirror) {
       if (frozenIds && !frozenIds.has(bid)) continue;
       const fit = (entry.meta && entry.meta.fitness) || 0;
-      if (fit > bestScore) { bestScore = fit; bestId = bid; }
+      const score=(1+fit)*matchContext(entry.meta,_learningContext).factor;
+      if (score > bestScore) { bestScore = score; bestId = bid; }
     }
   }
   return bestId;
@@ -1137,16 +1162,16 @@ function _recommendSeedsFederated({ queryVec, trackVec, k, frozenIds, trackSimBy
     else if (gnnMap && gnnMap.has(c.id)) rerankTerm = gnnMap.get(c.id);
     else {
       const obs = _observations.get(c.id);
-      rerankTerm = 1 + 0.3 * (obs ? obs.weight : 0);
+      rerankTerm = 1 + 0.3 * (_learningContext?0:obs ? obs.weight : 0);
     }
     const dynamicsSim = dynamicsSimMap.has(c.id) ? dynamicsSimMap.get(c.id) : 0;
     const dynamicsTerm = dynamicsActive ? (1 + DYNAMICS_TERM_WEIGHT * dynamicsSim) : 1;
     scoreMap.set(c.id, trackTerm * fitTerm * rerankTerm * dynamicsTerm);
   }
-  const top = selectTopK(union, scoreMap, kk);
+  const top = selectTopK(union, scoreMap, _learningContext?Math.max(kk*8,40):kk);
 
   // Re-hydrate to the canonical recommendSeeds return shape.
-  const out = top.map((t) => {
+  const out = decorateSeeds(top.map((t) => {
     const entry = _brainMirror.get(t.id);
     const trackSim = candidatesMap.get(t.id) || 0;
     const dynamicsSim = dynamicsSimMap.has(t.id) ? dynamicsSimMap.get(t.id) : 0;
@@ -1162,7 +1187,7 @@ function _recommendSeedsFederated({ queryVec, trackVec, k, frozenIds, trackSimBy
       // index return path (federated-disabled callers never see it).
       shards: t.shards,
     };
-  });
+  }),kk);
 
   _federationStats.enabled = true;
   _federationStats.shards = shards.length;
@@ -1299,7 +1324,7 @@ export function _onRemoteBrain(payload) {
   _crosstabReceiving = true;
   let id = null;
   try {
-    id = archiveBrain(brain, fitness, safeTrackVec, generation, parentIds, fastestLap, dynamicsVec);
+    id = archiveBrain(brain, fitness, safeTrackVec, generation, parentIds, fastestLap, dynamicsVec, meta.learning||null);
   } catch (e) {
     console.warn('[crosstab] archiveBrain on receive failed', e);
   } finally {
@@ -1367,6 +1392,28 @@ export function observe(retrievedIds, outcomeFitness) {
   schedulePersist();
 }
 
+export function observeOffspring(outcomes,context){
+  requireReady();_lastLearningFeedback=[];
+  if(!Array.isArray(outcomes)||!context)return;
+  const seen=new Set();
+  for(const outcome of outcomes.slice(0,50)){
+    if(typeof outcome.id!=='string'||seen.has(outcome.id))continue;
+    seen.add(outcome.id);
+    const parent=_brainMirror.get(outcome.id);if(!parent)continue;
+    const key=observationKey(outcome.id,context),previous=_observations.get(key);
+    const exact=matchContext(parent.meta,context).exact;
+    // A transfer first establishes a local baseline. Checkpoints on an
+    // unrelated track are not evidence of improvement in these conditions.
+    const baseline=exact?Number(parent.meta.fitness):previous?.baseline;
+    const feedback=offspringFeedback(outcome,baseline);
+    if(!Number.isFinite(outcome.meanFitness)||!Number.isFinite(outcome.count)||outcome.count<1)continue;
+    const weight=feedback==null?(previous?.weight||0):EMA_ALPHA*feedback+(1-EMA_ALPHA)*(previous?.weight||0);
+    _observations.set(key,{weight,count:(previous?.count||0)+1,baseline:outcome.meanFitness});
+    _lastLearningFeedback.push({id:outcome.id,count:outcome.count,meanFitness:outcome.meanFitness,feedback,weight});
+  }
+  schedulePersist();
+}
+
 // ─── introspection (for UI + debugging) ──────────────────────────────────────
 
 export function info() {
@@ -1396,6 +1443,7 @@ export function info() {
     tracks: _trackMirror.size,
     observations: _observations.size,
     observationEvents: events,
+    learning:{context:_learningContext,feedback:_lastLearningFeedback.map(item=>({...item}))},
     ready: !!_brainDB,
     gnn: _rerankerMode === 'gnn',
     gnnLoaded: gnnIsReady(),
@@ -1669,7 +1717,7 @@ export async function hydrate() {
     _tEnd('3d_insert_brains', _tBrains);
     const _tObs = _tStart();
     for (const row of obsRows) {
-      _observations.set(row.id, { weight: row.weight || 0, count: row.count | 0 });
+      _observations.set(row.id, { weight: row.weight || 0, count: row.count | 0, baseline: Number.isFinite(row.baseline)?row.baseline:undefined });
     }
     _tEnd('3e_insert_obs', _tObs);
   } finally {
@@ -1776,8 +1824,8 @@ export async function persist() {
           crashes.put({ id, vec: Array.from(vector), meta });
         }
       }
-      for (const [id, { weight, count }] of _observations) {
-        obs.put({ id, weight, count });
+      for (const [id, { weight, count, baseline }] of _observations) {
+        obs.put({ id, weight, count, baseline });
       }
       // Snapshot the adapter state. Skipped silently when the wasm module
       // didn't load — we never persist a vacuous snapshot, which would
@@ -1841,7 +1889,7 @@ export function hydrateFromFixture(fixture) {
     }
   }
   for (const row of (fixture.observations || [])) {
-    _observations.set(row.id, { weight: row.weight || 0, count: row.count | 0 });
+    _observations.set(row.id, { weight: row.weight || 0, count: row.count | 0, baseline: Number.isFinite(row.baseline)?row.baseline:undefined });
   }
   _rerankerMode = 'none';
   // P3.B — rebuild the lineage DAG from scratch so its state matches the
@@ -2060,6 +2108,8 @@ export function getIndexStats() {
 // Danger-knob: purge everything. Exposed for the verifier + dev console; the
 // game never calls this.
 export async function _debugReset() {
+  globalThis.DriverLearning?.resetMemories();
+  _lastLearningFeedback=[];
   _brainMirror.clear();
   _trackMirror.clear();
   _dynamicsMirror.clear();

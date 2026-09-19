@@ -1,5 +1,6 @@
 // The co-driver copies the live leader's network, then evaluates it against
 // the human car's own sensors. Keyboard state remains separate from AI output.
+import {attachLearningControls} from '../learning/session.js';
 class PlayerAssist {
   constructor() {
     this.enabled=false;this.requestId=0;this.nextRequest=0;this.run=-1;
@@ -9,6 +10,7 @@ class PlayerAssist {
     document.getElementById('canvasDiv').append(this.root);
     this.button=this.root.querySelector('button');this.hint=this.root.querySelector('p');
     this.button.onclick=()=>this.setEnabled(!this.enabled);
+    attachLearningControls(this.root);
   }
   release() {
     if(this.car){this.car.aiDriving=false;this.car.controls.setAI(null);}
@@ -22,6 +24,7 @@ class PlayerAssist {
     this.info=info;
     this.root.hidden=info.phase!==4||document.getElementById('canvasDiv').classList.contains('ab-on');
     const car=info.players[1];
+    if(car)car.driverProfile=window.DriverLearning?.profile||'balanced';
     if(car!==this.car||this.run!==info.runSerial){
       this.release();this.car=car;this.run=info.runSerial;this.brain=null;this.requestId++;this.nextRequest=0;
     }
