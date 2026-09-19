@@ -64,6 +64,7 @@ body.studio-enabled #perf-hud,body.studio-enabled #metrics-hud {display:none;}
 .studio-replay strong {flex:1;font:11px var(--font-mono,monospace);}
 #studio-ui .studio-replay button {padding:7px 10px;min-height:30px;}
 .studio-rate-label {display:flex;align-items:center;gap:5px;font-size:10px;}
+#studio-ui .studio-rate-label,#studio-ui .studio-scrub {color:#d2dfd3;}
 #studio-ui .studio-rate-label select {display:inline-block;width:55px;margin:0;padding:6px;min-height:30px;}
 .studio-scrub {display:flex;align-items:center;gap:12px;margin-top:10px;}
 .studio-scrub>span {font:10px var(--font-mono,monospace);min-width:100px;}

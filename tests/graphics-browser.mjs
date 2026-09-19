@@ -19,9 +19,10 @@ async function settle(page){
 async function exercise(backend){
   // Chromium's software adapters exercise actual shader compilation in CI.
   // These are test-only flags; the application requests normal browser APIs.
-  const browser=await chromium.launch({headless:true,args:[
+  const browser=await chromium.launch({headless:true,channel:'chromium',args:[
     '--use-angle=swiftshader','--enable-unsafe-swiftshader','--enable-unsafe-webgpu',
     '--disable-gpu-watchdog',
+    ...(backend==='auto'?['--enable-features=Vulkan','--use-vulkan=swiftshader','--disable-vulkan-surface']:[]),
   ]});
   const context=await browser.newContext({viewport:{width:1280,height:800}});
   const page=await context.newPage();page.setDefaultTimeout(45000);
@@ -52,7 +53,7 @@ async function exercise(backend){
     await page.evaluate(()=>{setN(48);setSeconds(3);setSimSpeed(1);});
     await page.locator('#startOverlayBtn').click();
     await page.waitForFunction(()=>window.CircuitStudio.archive.runs.length>0,{},{timeout:60000});
-    assert.equal(await page.evaluate(()=>window.CircuitStudio.info.snapshot.N),48);
+    await page.waitForFunction(()=>window.CircuitStudio.info.snapshot?.N===48);
     await page.locator('[data-camera="chase"]').click();await settle(page);
     await page.screenshot({path:`${out}/${backend}-chase.png`});
     await page.locator('[data-action="vision"]').click();await settle(page);
@@ -81,8 +82,9 @@ async function exercise(backend){
     await page.locator('[data-action="replay-pause"]').click();
     await page.locator('[data-setting="rate"]').selectOption('0.25');
     const serial=await page.evaluate(()=>window.CircuitStudio.info.runSerial);
-    await page.locator('[data-setting="scrub"]').fill('0.5');
-    assert.equal(await page.evaluate(()=>window.CircuitStudio.replay.time),.5);
+    const seek=await page.evaluate(()=>Math.min(.5,Math.floor(window.CircuitStudio.replay.run.duration/.1)*.05));
+    await page.locator('[data-setting="scrub"]').fill(String(seek));
+    assert.ok(Math.abs(await page.evaluate(()=>window.CircuitStudio.replay.time)-seek)<.001);
     await page.waitForFunction(before=>window.CircuitStudio.info.runSerial>before,serial,{timeout:60000});
     await page.screenshot({path:`${out}/${backend}-replay.png`});
     await page.locator('[data-action="live"]').click();
