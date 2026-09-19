@@ -43,12 +43,15 @@ try{
   assert.ok(trained.feedback.length>0,'Mutated descendants must provide real seed feedback');
   mark('profile-assisted car still obeys manual input');
   await page.evaluate(()=>{setSeconds(60);setSimSpeed(1);begin(true);});
-  await page.waitForFunction(()=>playerCar2.aiDriving&&window.PlayerAssist.brain);
+  await page.waitForFunction(()=>playerCar2.aiDriving&&window.PlayerAssist.brain&&window.PlayerAssist.run===presentationRunSerial);
   await page.evaluate(()=>{
-    const p=window.PlayerAssist;p.nextRequest=Infinity;
+    // Finish the real handoff, then invalidate any already-in-flight update
+    // so it cannot replace the deterministic policy during key assertions.
+    const p=window.PlayerAssist;p.requestId++;p.nextRequest=Infinity;
     for(const level of p.brain.levels){level.weights.fill(0);level.biases.fill(0);}
     p.brain.levels.at(-1).biases.set([-1,-1,1,1]);
-    playerCar2.damaged=false;playerCar2.x=startInfo.x;playerCar2.y=startInfo.y;playerCar2.speed=0;
+    playerCar2.damaged=false;playerCar2.x=startInfo.x;playerCar2.y=startInfo.y;playerCar2.angle=startInfo.heading;
+    playerCar2.speed=0;playerCar2.velocity={x:0,y:0};playerCar2.slide=false;playerCar2.delayCounter=0;
   });
   await page.waitForFunction(()=>playerCar2.controls.left);
   await page.keyboard.down('d');try{await page.waitForFunction(()=>playerCar2.controls.right&&!playerCar2.controls.left);}finally{await page.keyboard.up('d');}
@@ -145,6 +148,9 @@ try{
   await writeFile(`${out}/result.json`,JSON.stringify({passed:true,retrieval,baseline,checks:['profiles','real worker learning','manual override','persistent champion','SONA circuit example replay','genetic baseline','context-aware WASM retrieval','offspring credit','archive round trip','cross-tab context','2D/3D/mobile learning UI']},null,2));
   console.log('Driver profiles and learning browser checks passed');
 }catch(error){
-  await writeFile(`${out}/failure.json`,JSON.stringify({stage,error:String(error.stack),errors},null,2));
+  const diagnostics=await page?.evaluate(()=>({serial:presentationRunSerial,assistRun:window.PlayerAssist?.run,
+    aiDriving:playerCar2?.aiDriving,damaged:playerCar2?.damaged,controls:playerCar2?.controls,
+    brain:Array.from(window.PlayerAssist?.brain?.levels.at(-1).biases||[])})).catch(()=>null);
+  await writeFile(`${out}/failure.json`,JSON.stringify({stage,error:String(error.stack),errors,diagnostics},null,2));
   await page?.screenshot({path:`${out}/failure.png`}).catch(()=>{});throw error;
 }finally{await browser?.close();server.kill();}

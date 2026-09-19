@@ -71,11 +71,11 @@ try{
   await a.evaluate(()=>{setSeconds(60);begin(true);});
   await a.locator('#ai-drive-toggle').click();
   assert.equal(await a.evaluate(()=>pause),false,'Enabling AI must not pause an active race');
-  await a.waitForFunction(()=>window.PlayerAssist.enabled&&playerCar2.aiDriving&&window.PlayerAssist.brain?.levels.length===2);
+  await a.waitForFunction(()=>window.PlayerAssist.enabled&&playerCar2.aiDriving&&window.PlayerAssist.brain?.levels.length===2&&window.PlayerAssist.run===presentationRunSerial);
   // First exercise the real worker request. Then hold a known network's output
   // steady so assertions do not depend on which random AI currently leads.
   await a.evaluate(()=>{
-    const pilot=window.PlayerAssist;pilot.nextRequest=Infinity;
+    const pilot=window.PlayerAssist;pilot.requestId++;pilot.nextRequest=Infinity;
     for(const level of pilot.brain.levels){level.weights.fill(0);level.biases.fill(0);}
     pilot.brain.levels.at(-1).biases.set([-1,-1,1,1]);
     playerCar2.x=startInfo.x;playerCar2.y=startInfo.y;playerCar2.angle=startInfo.heading;
