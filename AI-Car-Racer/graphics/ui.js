@@ -13,13 +13,14 @@ export class StudioUI {
       <aside class="studio-vision" hidden data-vision-panel><span class="studio-eyebrow">INSIDE THE DRIVER</span><strong data-driver>Live sensor readings</strong><div class="studio-decisions">${['Forward','Left','Right','Reverse'].map((n,i)=>`<span data-decision="${i}">${n}<b>OFF</b></span>`).join('')}</div><p data-vision-note>Cyan: sensor hits · Amber: crash density</p></aside>
       <p class="studio-caption" data-caption>Drag to orbit · Scroll to explore</p>
       <nav class="studio-dock" aria-label="Scene controls">
-        <div class="studio-camera-buttons" role="group" aria-label="Camera"><button data-camera="orbit" aria-pressed="true">Orbit</button><button data-camera="chase" aria-pressed="false">Chase</button><button data-camera="overhead" aria-pressed="false">Overhead</button><button data-camera="director" aria-pressed="false">Director</button></div>
-        <span class="studio-divider"></span><button data-action="vision" aria-pressed="false">AI vision</button><button data-action="night" aria-pressed="false">Night run</button><button data-action="settings" aria-expanded="false" aria-controls="studio-settings">Options</button>
+        <div class="studio-camera-buttons" role="group" aria-label="Camera"><button data-camera="orbit" aria-pressed="true">Orbit</button><button data-camera="chase" aria-pressed="false" aria-label="Chase the AI driver">Chase</button><button data-action="player" aria-pressed="false" aria-label="Chase my car, controlled with WASD">My car</button><button data-camera="overhead" aria-pressed="false">Overhead</button><button data-camera="director" aria-pressed="false">Director</button></div>
+        <span class="studio-divider"></span><button data-action="vision" aria-pressed="false">AI vision</button><button data-action="night" aria-pressed="false">Night run</button><button data-action="sound" aria-pressed="false">Sound off</button><button data-action="settings" aria-expanded="false" aria-controls="studio-settings">Options</button>
       </nav>
       <section id="studio-settings" class="studio-settings" hidden aria-label="Scene options">
         <div class="studio-settings-title"><strong>Make it your circuit</strong><button data-action="settings" aria-label="Close scene options">×</button></div>
         <label>Landscape<select data-setting="theme">${options([['circuit','Circuit garden'],['alpine','Alpine forest'],['desert','Desert proving ground']])}</select></label>
         <label>Camera<select data-setting="camera">${options([['orbit','Orbit — explore the circuit'],['chase','Chase — behind the driver'],['overhead','Overhead — the whole population'],['director','Director — automatic cuts'],['trackside','Trackside — watch the corner'],['front','Front — look back at the driver']])}</select></label>
+        <label>Follow driver<select data-setting="follow">${options([['ai','AI driver'],['player','My car — WASD']])}</select></label>
         <label>Graphics<select data-setting="quality">${options([['low','Light — battery friendly'],['balanced','Balanced'],['high','High — reflections and more detail']])}</select></label>
         <label class="studio-check"><input type="checkbox" data-setting="ghosts"> Show earlier generations</label>
         <div class="studio-replay-choice"><label>Recorded runs<select data-setting="run"><option value="">Finish a generation to record a run</option></select></label><button data-action="replay" disabled>Watch run</button><p>The furthest driver from a fixed sample of up to 16 cars. Records the first two minutes at 20 Hz.</p></div>
@@ -36,8 +37,10 @@ export class StudioUI {
     this.notice=document.createElement('p');this.notice.className='studio-notice';this.notice.hidden=true;this.notice.setAttribute('role','status');host.appendChild(this.notice);
     this.root.addEventListener('click',ev=>{
       const btn=ev.target.closest('button');if(!btn)return;
-      if(btn.dataset.camera){studio.setCamera(btn.dataset.camera);return;}
+      if(btn.dataset.camera){if(btn.dataset.camera==='chase')studio.setFollowTarget('ai');else studio.setCamera(btn.dataset.camera);return;}
       switch(btn.dataset.action){
+        case 'player':studio.setFollowTarget('player');studio.canvas?.focus({preventScroll:true});break;
+        case 'sound':studio.setSound(!studio.audio.enabled);break;
         case 'vision':studio.setVision(!studio.vision);break;
         case 'night':studio.setNight(!studio.night);break;
         case 'settings':this.toggleSettings();break;
@@ -56,6 +59,7 @@ export class StudioUI {
       const el=ev.target;
       if(el.dataset.setting==='theme')studio.setTheme(el.value);
       if(el.dataset.setting==='camera')studio.setCamera(el.value);
+      if(el.dataset.setting==='follow')studio.setFollowTarget(el.value);
       if(el.dataset.setting==='quality')studio.setQuality(el.value);
       if(el.dataset.setting==='ghosts'){studio.ghosts=el.checked;studio.save();}
       if(el.dataset.setting==='rate'&&studio.replay)studio.replay.rate=Number(el.value);
@@ -86,7 +90,14 @@ export class StudioUI {
   sync() {
     const s=this.studio;
     this.root.querySelector('[data-title]').textContent=s.night?'Night Run.':'Circuit Studio.';
-    this.root.querySelectorAll('[data-camera]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.camera===s.cameraMode)));
+    const player=!s.replay&&s.followTarget==='player';
+    this.root.querySelectorAll('[data-camera]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.camera===s.cameraMode&&!(b.dataset.camera==='chase'&&player))));
+    this.root.querySelector('[data-action="player"]').setAttribute('aria-pressed',String(player&&s.cameraMode==='chase'));
+    this.root.querySelector('[data-setting="follow"]').value=s.followTarget;
+    this.root.querySelector('[data-action="vision"]').textContent=player?'My vision':'AI vision';
+    const sound=this.root.querySelector('[data-action="sound"]');sound.textContent=s.audio.enabled?'Sound on':'Sound off';
+    sound.disabled=!!s.soundPending;
+    sound.setAttribute('aria-pressed',String(s.audio.enabled));sound.title=s.audio.error||'Engine and collision sounds. Starts off each visit.';
     for(const k of ['vision','night'])this.root.querySelector(`[data-action="${k}"]`).setAttribute('aria-pressed',String(s[k]));
     for(const [k,v] of [['camera',s.cameraMode],['theme',s.theme],['quality',s.quality]])this.root.querySelector(`[data-setting="${k}"]`).value=v;
     this.root.querySelector('[data-setting="ghosts"]').checked=s.ghosts;
@@ -110,13 +121,14 @@ export class StudioUI {
     this.root.querySelector('[data-alive]').textContent=snap?`${s.alive} / ${snap.N}`:'—';
     this.root.querySelector('[data-progress]').textContent=snap?String(snap.bestCheckpoints):'—';
     let caption=s.cameraMode==='orbit'?'Drag to orbit · Scroll to explore':`${s.cameraMode[0].toUpperCase()+s.cameraMode.slice(1)} camera · C to change`;
-    if(info.simSpeed>5&&!replay)caption=`${info.simSpeed}× training · Overhead view keeps the population readable`;
+    if(s.followingPlayer)caption=`My car · W accelerate · S reverse · A / D steer`;
+    if(info.simSpeed>5&&!replay&&!s.followingPlayer)caption=`${info.simSpeed}× training · Overhead view keeps the population readable`;
     if(s.ghosts)caption+=' · Earlier runs shown at the same simulation time';
     this.root.querySelector('[data-caption]').textContent=caption;
     if(s.vision){
       const mask=replay?s.replayPose?.controls:null;
-      const ctrl=mask==null?snap?.bestControls:[mask&1,mask&2,mask&4,mask&8];
-      this.root.querySelector('[data-driver]').textContent=replay?`Recorded driver ${replay.run.driverIndex+1}`:`Champion ${snap?snap.bestIdx+1:'—'} · live decisions`;
+      const ctrl=s.followingPlayer?s.focusControls:mask==null?snap?.bestControls:[mask&1,mask&2,mask&4,mask&8];
+      this.root.querySelector('[data-driver]').textContent=s.followingPlayer?'My car · WASD controls':replay?`Recorded driver ${replay.run.driverIndex+1}`:`Champion ${snap?snap.bestIdx+1:'—'} · live decisions`;
       this.root.querySelectorAll('[data-decision]').forEach((el,i)=>{el.classList.toggle('is-active',!!ctrl?.[i]);el.querySelector('b').textContent=ctrl?.[i]?'ON':'OFF';});
       this.root.querySelector('[data-vision-note]').textContent=replay?'Recorded controls · Sensor beams are available in live view.':'Cyan: sensor hits · Amber: crash density';
     }

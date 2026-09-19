@@ -25,9 +25,9 @@ async function capture(page,backend,name){
     const ctx=canvas.getContext('2d');ctx.drawImage(s.canvas,0,0,160,100);
     const pixels=ctx.getImageData(0,0,160,100).data,colors=new Set();
     for(let i=0;i<pixels.length;i+=4)colors.add((pixels[i]>>4)*256+(pixels[i+1]>>4)*16+(pixels[i+2]>>4));
-    resolve({colors:colors.size,image:s.canvas.toDataURL(),camera:s.camera.position.toArray(),
+    resolve({colors:colors.size,image:canvas.toDataURL(),camera:s.camera.position.toArray(),
       rotation:s.camera.quaternion.toArray(),projection:s.camera.projectionMatrix.toArray(),
-      focus:s.focusPose,quality:s.quality,frame:s.info.snapshot?.frameCount,
+      focus:{x:s.focusPose.x,y:s.focusPose.y,angle:s.focusPose.angle,speed:s.focusPose.speed,damaged:s.focusPose.damaged},quality:s.quality,frame:s.info.snapshot?.frameCount,
       backend:s.backend,render:s.renderer.info.render});
   })));
   const {image,...diagnostics}=state;
@@ -49,14 +49,14 @@ async function exercise(backend){
       '--ignore-gpu-blocklist','--disable-gpu-driver-bug-workarounds','--disable-gpu-watchdog',
     ],
   });
-  const context=await browser.newContext({viewport:{width:1280,height:800}});
+  const context=await browser.newContext({viewport:{width:1120,height:720}});
   const page=await context.newPage();page.setDefaultTimeout(45000);
   const errors=[],warnings=[];
   page.on('pageerror',e=>errors.push(e.stack||e.message));
   page.on('console',m=>{if(m.type()==='error'&&/THREE|WebGL|WebGPU|WGSL|shader|validation|Circuit Studio/i.test(m.text()))errors.push(m.text());});
   page.on('console',m=>{if(m.type()==='warning')warnings.push(m.text());});
   let stage='initial scene';
-  const watchdog=setTimeout(()=>{console.error(`${backend}: stalled at ${stage}`);browser.close().catch(()=>{});},360000);
+  const watchdog=setTimeout(()=>{console.error(`${backend}: stalled at ${stage}`);browser.close().catch(()=>{});},600000);
   // Keep browser checks independent of analytics and font service uptime.
   await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
   try{
@@ -119,9 +119,38 @@ async function exercise(backend){
     await page.locator('[data-action="live"]').click();
     assert.equal(await page.evaluate(()=>!!window.CircuitStudio.replay),false);
 
+    stage='WASD chase and sound';console.log(`${backend}: ${stage}`);
+    await page.evaluate(()=>{setSeconds(60);begin();});
+    await page.locator('[data-action="player"]').click();
+    await page.waitForFunction(()=>window.CircuitStudio.followingPlayer);
+    assert.equal(await page.evaluate(()=>window.CircuitStudio.players[1].visible),true,'Stationary player is visible');
+    assert.equal(await page.evaluate(()=>window.CircuitStudio.audio.context),null,'No audio resources before opt-in');
+    await page.locator('[data-action="sound"]').click();
+    await page.waitForFunction(()=>window.CircuitStudio.audio.enabled&&window.CircuitStudio.audio.context.state==='running');
+    await page.evaluate(()=>{
+      const audio=window.CircuitStudio.audio;
+      window.__testAudioAnalyser=audio.context.createAnalyser();audio.master.connect(window.__testAudioAnalyser);
+    });
+    await page.waitForFunction(()=>{const a=window.__testAudioAnalyser,data=new Float32Array(a.fftSize);a.getFloatTimeDomainData(data);return data.some(x=>Math.abs(x)>.001);});
+    await page.keyboard.down('w');
+    try{
+      await page.waitForFunction(()=>playerCar2.controls.forward&&Math.hypot(playerCar2.x-playerCar2.origin.x,playerCar2.y-playerCar2.origin.y)>10);
+      assert.equal(await page.evaluate(()=>window.CircuitStudio.focusPose===playerCar2),true,'Camera follows the actual WASD car');
+      await page.waitForFunction(()=>window.CircuitStudio.audio.motor.frequency.value>65);
+    }finally{await page.keyboard.up('w');}
+    await capture(page,backend,'player');
+    await page.locator('[data-action="sound"]').click();
+    await page.waitForFunction(()=>!window.CircuitStudio.audio.enabled&&window.CircuitStudio.audio.context.state==='suspended');
+    assert.equal(await page.evaluate(()=>window.CircuitStudio.audio.master.gain.value),0);
+    await page.locator('[data-camera="chase"]').click();
+    await page.waitForFunction(()=>!window.CircuitStudio.followingPlayer);
+
     stage='classic and mobile';console.log(`${backend}: ${stage}`);
+    await page.locator('[data-action="sound"]').click();
+    await page.waitForFunction(()=>window.CircuitStudio.audio.enabled);
     await page.locator('[data-action="training"]').click();
     await page.waitForFunction(()=>window.CircuitStudio.info.paused);
+    await page.waitForFunction(()=>window.CircuitStudio.audio.master.gain.value===0);
     // Re-deliver an actual worker result to reproduce a generation completion
     // that was already queued when Pause was clicked. It must remain paused.
     assert.equal(await page.evaluate(()=>{simWorker.dispatchEvent(new MessageEvent('message',{data:window.__testLastGenEnd}));return pause;}),true);
@@ -130,6 +159,7 @@ async function exercise(backend){
     await page.locator('[data-action="classic"]').click();
     await page.waitForFunction(()=>!window.CircuitStudio.active);
     assert.equal(await page.locator('#myCanvas').isVisible(),true);
+    assert.equal(await page.evaluate(()=>window.CircuitStudio.audio.master.gain.value),0);
     await page.locator('.studio-launch').click();await ready(page);
     await page.keyboard.press('Escape');
     await page.locator('[data-action="night"]').click();
@@ -147,7 +177,7 @@ async function exercise(backend){
     await page.waitForFunction(()=>!window.CircuitStudio.active);
     assert.equal(await page.locator('#myCanvas').isVisible(),true);
     assert.deepEqual(errors,[],'No uncaught JavaScript or shader errors');
-    report.push({requested:backend,selected,result:'pass',checks:'day, worker, chase, vision, night, reflections, replay, independent training, classic, mobile, editor'});
+    report.push({requested:backend,selected,result:'pass',checks:'rendered pixels, day, worker, chase, WASD player, opt-in audio signal/mute, vision, night, reflections, replay, independent training, classic, mobile, editor'});
   }catch(error){
     await page.screenshot({path:`${out}/${backend}-failure.png`,timeout:10000}).catch(()=>{});
     const state=await page.evaluate(()=>{const s=window.CircuitStudio;return {active:s?.active,failed:s?.failed,lastError:s?.lastError,backend:s?.backend,frame:s?.info?.snapshot?.frameCount,rays:s?.info?.snapshot?.bestRays?.length,sensors:s?.sensors?.count};}).catch(()=>null);

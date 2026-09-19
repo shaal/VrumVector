@@ -11,6 +11,11 @@ static deployment. Rebuild that file with `npm ci && npm run vendor:three`.
 - Lit 3D cars, instanced population silhouettes, day/night lighting, TSL asphalt,
   GPU-animated rain, bloom, and optional reduced-resolution planar reflections.
 - Orbit, overhead, chase, front, trackside, and automatic director cameras.
+- My car follows the existing WASD-controlled player, including when stationary;
+  Chase returns to the AI driver. Player vision shows that car's real sensors.
+- Optional procedural engine and impact audio follows the selected driver.
+  Sound starts off on every visit, creates its AudioContext only on an explicit
+  click, and mutes while paused, hidden, or outside Studio. No audio is downloaded.
 - Live champion sensor rays, actual binary control decisions, and crash density.
 - Worker-recorded runs, slow playback, scrubbing, and up to two earlier ghosts.
 - Classic Canvas 2D for editing, A/B comparison, and graphics failure recovery.

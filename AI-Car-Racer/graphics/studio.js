@@ -1,5 +1,6 @@
 import * as T from '../../vendor/three-0.186.0/three.js';
 import { StudioUI } from './ui.js';
+import { StudioAudio } from './audio.js';
 import { buildWorld, createCar, createRain, disposeTree } from './world.js';
 import { SnapshotBuffer, ReplayArchive, sampleRun, trackKey, worldX, worldZ, SCALE, clamp, angleDelta } from './state.js';
 
@@ -17,6 +18,8 @@ class CircuitStudio {
     this.night=query.get('scene')==='night'||!!saved.night;
     this.vision=query.get('vision')==='1'||!!saved.vision;
     this.ghosts=!!saved.ghosts;
+    this.followTarget=saved.followTarget==='player'?'player':'ai';
+    this.audio=new StudioAudio();
     this.forceWebGL=query.get('backend')==='webgl';
     this.reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
     matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',e=>{this.reducedMotion=e.matches;});
@@ -27,10 +30,10 @@ class CircuitStudio {
     this.dummy=new T.Object3D();this.color=new T.Color();
     this.desiredEye=new T.Vector3();this.desiredLook=new T.Vector3();this.smoothLook=new T.Vector3();
     this.abort=new AbortController();
-    document.addEventListener('visibilitychange',()=>{this.lastTime=performance.now();});
+    document.addEventListener('visibilitychange',()=>{this.lastTime=performance.now();if(document.hidden)this.audio.silence();});
     window.addEventListener('pagehide',event=>{if(!event.persisted)this.dispose();});
   }
-  save(){try{localStorage.setItem('vv.circuitStudio',JSON.stringify({enabled:this.enabled,camera:this.cameraMode,theme:this.theme,quality:this.quality,night:this.night,vision:this.vision,ghosts:this.ghosts}));}catch{}}
+  save(){try{localStorage.setItem('vv.circuitStudio',JSON.stringify({enabled:this.enabled,camera:this.cameraMode,followTarget:this.followTarget,theme:this.theme,quality:this.quality,night:this.night,vision:this.vision,ghosts:this.ghosts}));}catch{}}
   enable(on){this.enabled=on;this.save();this.ui.message('');if(on&&this.failed){this.failed=false;this.ready=false;this.loading=false;}if(!on)this.stopReplay();}
   async init(){
     if(this.loading||this.ready||this.failed)return;this.loading=true;
@@ -69,6 +72,7 @@ class CircuitStudio {
       this.players=[createCar(0xc55146),createCar(0x539bbb)];this.players.forEach(c=>{c.visible=false;this.scene.add(c);});
       this.ghostCars=[createCar(0x82e4c5,true),createCar(0xedb67a,true)];this.ghostCars.forEach(c=>{c.visible=false;this.scene.add(c);});
       this.pack=new T.InstancedMesh(new T.BoxGeometry(.94,.30,1.62),new T.MeshStandardMaterial({color:0xffffff,roughness:.55,metalness:.15}),1600);
+      this.pack.setColorAt(0,new T.Color(0xffffff));
       this.pack.instanceMatrix.setUsage(T.DynamicDrawUsage);this.pack.frustumCulled=false;this.pack.count=0;this.pack.castShadow=true;this.scene.add(this.pack);
       this.packWindows=new T.InstancedMesh(new T.BoxGeometry(.62,.20,.65),new T.MeshStandardMaterial({color:0x1c383a,roughness:.3,metalness:.35}),1600);
       this.packWindows.instanceMatrix.setUsage(T.DynamicDrawUsage);this.packWindows.frustumCulled=false;this.packWindows.count=0;this.scene.add(this.packWindows);
@@ -104,12 +108,12 @@ class CircuitStudio {
     if(renderer){try{Promise.resolve(renderer.dispose()).catch(()=>{});}catch{}}
     this.canvas?.remove();this.scene=null;
   }
-  dispose(){this.disposed=true;this.releaseRenderer();}
+  dispose(){this.disposed=true;this.audio.dispose();this.releaseRenderer();}
   setActive(active){
     if(this.active===active)return;this.active=active;
     this.host.classList.toggle('studio-active',active);document.body.classList.toggle('studio-enabled',active);
     this.ui.root.hidden=!active;if(this.canvas)this.canvas.hidden=!active;
-    if(!active&&this.controls)this.controls.enabled=false;
+    if(!active){if(this.controls)this.controls.enabled=false;this.audio.silence();}
     this.lastTime=performance.now();this.resize();
   }
   resize(){
@@ -132,6 +136,15 @@ class CircuitStudio {
   setTheme(value){if(!['circuit','alpine','desert'].includes(value))return;this.theme=value;this.worldKey=null;this.save();this.ui.sync();}
   setNight(on){this.night=on;this.applyLighting();this.updateReflection();this.save();this.ui.sync();}
   setVision(on){this.vision=on;this.trail=[];if(this.world)this.world.vision.value=+on;this.save();this.ui.sync();}
+  setFollowTarget(target){
+    if(!['ai','player'].includes(target))return;
+    this.stopReplay();this.followTarget=target;this.trail=[];this.setCamera('chase',true);
+  }
+  async setSound(on){
+    if(this.soundPending)return;
+    this.soundPending=true;this.ui.sync();
+    try{await this.audio.setEnabled(on);}finally{this.soundPending=false;this.ui.sync();}
+  }
   setCamera(mode,reset=false){if(!CAMERAS.includes(mode))return;this.cameraMode=mode;this.resetCamera=reset||mode==='orbit';this.cameraModeStarted=performance.now();this.save();this.ui.sync();}
   applyLighting(){
     if(!this.ready||!this.world)return;
@@ -197,6 +210,9 @@ class CircuitStudio {
       if(this.replay&&!this.replay.paused){this.replay.time=Math.min(this.replay.run.duration,this.replay.time+dt*this.replay.rate);if(this.replay.time===this.replay.run.duration)this.replay.paused=true;}
       this.updateCars(info,now,dt);
       this.updateCamera(info,now,dt);
+      this.audio.update({pose:this.focusPose,controls:this.focusControls,maxSpeed:this.followingPlayer?info.players[1].maxSpeed:info.snapshot?.bestMaxSpeed,
+        key:this.replay?`replay/${this.replay.run.generation}/${this.replay.run.driverIndex}`:`${this.run}/${this.followingPlayer?'player':this.focusIndex}`,
+        paused:info.awaitingStart||(this.replay?this.replay.paused:info.paused)});
       this.scene.fog.near=Math.max(145,this.camera.position.length()-40);
       this.scene.fog.far=this.scene.fog.near+275;
       this.rain.visible=this.night&&!this.reducedMotion&&this.quality!=='low';
@@ -274,8 +290,11 @@ class CircuitStudio {
     this.replayPose=this.replay?pose:null;
     if(!pose)pose={x:info.startInfo.x,y:info.startInfo.y,angle:info.startInfo.heading||0,speed:0};
     if(!this.replay&&this.focusIndex===snap?.bestIdx)pose.speed=snap.bestSpeed;
-    this.focusPose=pose;
+    this.followingPlayer=!this.replay&&this.followTarget==='player'&&!!info.players[1];
+    this.focusPose=this.followingPlayer?info.players[1]:pose;
     const controls=this.replay?[pose.controls&1,pose.controls&2,pose.controls&4,pose.controls&8]:this.focusIndex===snap?.bestIdx?snap.bestControls:null;
+    const player=info.players[1];
+    this.focusControls=this.followingPlayer?[player.controls.forward,player.controls.left,player.controls.right,player.controls.reverse]:controls;
     this.placeCar(this.hero,pose,dt,controls);
     let count=0;
     if(snap&&!this.replay){
@@ -291,7 +310,7 @@ class CircuitStudio {
     }
     this.pack.count=this.packWindows.count=count;this.pack.instanceMatrix.needsUpdate=true;this.packWindows.instanceMatrix.needsUpdate=true;
     if(this.pack.instanceColor)this.pack.instanceColor.needsUpdate=true;
-    this.players.forEach((car,i)=>{const p=info.players[i];car.visible=!!p&&!this.replay&&Math.abs(p.speed)>.01;if(car.visible)this.placeCar(car,p,dt,[p.controls.forward,p.controls.left,p.controls.right,p.controls.reverse]);});
+    this.players.forEach((car,i)=>{const p=info.players[i];car.visible=!!p&&!this.replay&&(Math.abs(p.speed)>.01||(i===1&&this.followingPlayer));if(car.visible)this.placeCar(car,p,dt,[p.controls.forward,p.controls.left,p.controls.right,p.controls.reverse]);});
     this.ghostCars.forEach((car,i)=>{
       const run=this.archive.runs.filter(r=>r!==this.replay?.run)[i];
       const time=this.replay?this.replay.time:(snap?.frameCount||0)/60;
@@ -299,16 +318,19 @@ class CircuitStudio {
       car.visible=!!p;if(p)this.placeCar(car,p,dt,null);
     });
     this.sensors.count=this.sensorHits.count=0;
-    if(this.vision&&!this.replay&&snap?.bestRays){
-      const R=snap.bestRays,H=snap.bestReadings,n=Math.min(32,R.length/4);
+    if(this.vision&&!this.replay&&(this.followingPlayer?player.sensor?.rays:snap?.bestRays)){
+      const R=this.followingPlayer?player.sensor.rays:snap.bestRays,H=this.followingPlayer?player.sensor.readings:snap.bestReadings;
+      const n=Math.min(32,this.followingPlayer?R.length:R.length/4);
       for(let i=0;i<n;i++){
-        const hit=H&&H[i*3+2]>=0;
-        const a={x:R[i*4],y:R[i*4+1]},b={x:hit?H[i*3]:R[i*4+2],y:hit?H[i*3+1]:R[i*4+3]};
+        const hit=this.followingPlayer?!!H?.[i]:H&&H[i*3+2]>=0;
+        const a=this.followingPlayer?R[i][0]:{x:R[i*4],y:R[i*4+1]};
+        const b=this.followingPlayer?(hit?H[i]:R[i][1]):{x:hit?H[i*3]:R[i*4+2],y:hit?H[i*3+1]:R[i*4+3]};
         this.segment(this.sensors,i,a,b,.055,.30);
         const d=this.dummy;d.position.set(worldX(b.x),.3,worldZ(b.y));d.rotation.set(0,0,0);d.scale.setScalar(hit?1:.5);d.updateMatrix();this.sensorHits.setMatrixAt(i,d.matrix);
       }
       this.sensors.count=this.sensorHits.count=n;this.sensors.instanceMatrix.needsUpdate=true;this.sensorHits.instanceMatrix.needsUpdate=true;
     }
+    pose=this.focusPose;
     if(!info.paused||this.replay){
       const last=this.trail.at(-1),dist=last?Math.hypot(pose.x-last.x,pose.y-last.y):0;
       if(dist>150)this.trail=[];
@@ -317,12 +339,12 @@ class CircuitStudio {
     this.trailMesh.count=0;
     if(this.vision||this.ghosts){for(let i=1;i<this.trail.length;i++)this.segment(this.trailMesh,i-1,this.trail[i-1],this.trail[i],.05,.06);this.trailMesh.count=Math.max(0,this.trail.length-1);this.trailMesh.instanceMatrix.needsUpdate=true;}
     this.headlight.intensity=this.night?90:0;
-    this.headlight.position.copy(this.hero.position);this.headlight.position.y=.65;
-    this.headlight.target.position.set(this.hero.position.x-Math.sin(pose.angle)*10,.1,this.hero.position.z-Math.cos(pose.angle)*10);
+    this.headlight.position.set(worldX(pose.x),.65,worldZ(pose.y));
+    this.headlight.target.position.set(worldX(pose.x)-Math.sin(pose.angle)*10,.1,worldZ(pose.y)-Math.cos(pose.angle)*10);
   }
   updateCamera(info,now,dt){
     let mode=this.cameraMode;
-    if(info.simSpeed>5&&!this.replay)mode='overhead';
+    if(info.simSpeed>5&&!this.replay&&!this.followingPlayer)mode='overhead';
     if(mode==='director')mode=this.reducedMotion?'overhead':['orbit','chase','front','trackside'][Math.floor((now-(this.cameraModeStarted||0))/6500)%4];
     this.controls.enabled=mode==='orbit'&&this.cameraMode==='orbit';
     const eye=this.desiredEye,look=this.desiredLook,p=this.focusPose;
