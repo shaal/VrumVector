@@ -633,7 +633,7 @@ p { line-height: 1.5; margin: 0 0 .6em 0; }
     padding: 1.15em 1.6em 1em;
     border: 1.5px solid var(--amber-600);
     border-radius: var(--r-xl);
-    background: linear-gradient(180deg, var(--amber-600), var(--amber-700));
+    background: var(--amber-700);
     color: #fff;
     font-family: var(--font-body);
     box-shadow: var(--shadow-lg), 0 0 0 0 rgba(211, 139, 75, 0.4);
@@ -643,7 +643,7 @@ p { line-height: 1.5; margin: 0 0 .6em 0; }
 }
 .start-overlay-btn:hover {
     transform: translateY(-2px) scale(1.02);
-    background: linear-gradient(180deg, var(--amber-500), var(--amber-700));
+    background: var(--amber-600);
 }
 .start-overlay-btn:focus-visible {
     outline: none;
@@ -2475,12 +2475,12 @@ label {
     outline-offset: 2px;
 }
 #cinema-controls button.is-on {
-    background: rgba(211, 139, 75, 0.28);
+    background: #604024;
     border-color: rgba(255, 229, 102, 0.55);
     color: #ffe566;
 }
 #cinema-controls button.cinema-demo.is-on {
-    background: rgba(122, 101, 204, 0.35);
+    background: #493c74;
     border-color: rgba(190, 175, 255, 0.55);
     color: #e4dcff;
 }

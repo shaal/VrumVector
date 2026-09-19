@@ -34,6 +34,23 @@
 
 import { FLAT_LENGTH } from '../brainCodec.js';
 import { hashBrain } from '../archive/hash.js';
+import {cleanContext,clamp} from '../learning/policy.js';
+
+function cleanLearning(value) {
+  if (!value?.context) return undefined;
+  const learning = {context:cleanContext(value.context),styleScore:clamp(value.styleScore,0,1)};
+  if (value.driving && typeof value.driving === 'object') {
+    learning.driving = {};
+    for (const key of ['averageSpeed','nearWallRate','slideRate','smoothness']) {
+      if (Number.isFinite(value.driving[key])) learning.driving[key] = clamp(value.driving[key],0,1);
+    }
+    for (const key of ['steeringChanges','aliveSeconds']) {
+      if (Number.isFinite(value.driving[key])) learning.driving[key] = clamp(value.driving[key],0,1e9);
+    }
+    if (typeof value.driving.crashed === 'boolean') learning.driving.crashed = value.driving.crashed;
+  }
+  return learning;
+}
 
 function f32ToArray(v) {
   if (!v) return null;
@@ -60,6 +77,7 @@ export function toWire(flat, fitness, trackVec, meta) {
     if (Number.isFinite(meta.generation)) outMeta.generation = meta.generation | 0;
     if (Array.isArray(meta.parentIds)) outMeta.parentIds = meta.parentIds.slice();
     if (Number.isFinite(meta.fastestLap)) outMeta.fastestLap = Number(meta.fastestLap);
+    if(meta.learning?.context)outMeta.learning=cleanLearning(meta.learning);
     if (meta.dynamicsVec instanceof Float32Array) {
       outMeta.dynamicsVec = f32ToArray(meta.dynamicsVec);
     }
@@ -88,6 +106,7 @@ export function fromWire(msg) {
     parentIds: Array.isArray(metaIn.parentIds) ? metaIn.parentIds.slice() : [],
   };
   if (Number.isFinite(metaIn.fastestLap)) meta.fastestLap = Number(metaIn.fastestLap);
+  if(metaIn.learning?.context)meta.learning=cleanLearning(metaIn.learning);
   if (Array.isArray(metaIn.dynamicsVec)) {
     const dyn = arrayToF32(metaIn.dynamicsVec);
     if (dyn) meta.dynamicsVec = dyn;

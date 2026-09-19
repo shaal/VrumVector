@@ -31,6 +31,10 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="slider.css">
     <link rel="stylesheet" href="eli15/eli15.css">
+    <link rel="stylesheet" href="graphics/studio.css">
+    <link rel="stylesheet" href="multiplayer/live.css">
+    <link rel="stylesheet" href="driver/assist.css">
+    <link rel="stylesheet" href="learning/panel.css">
 
     <!-- Microsoft Clarity (session replay + heatmaps). Async loader; no
          render-blocking impact. Project ID: wybap3ape7. -->
@@ -47,6 +51,7 @@
     <div id="fullDisplay" class="panel-collapsed">
         <div id="canvasDiv">
             <canvas id="myCanvas"></canvas>
+            <button type="button" id="graphics-toggle" class="studio-launch">Switch to 3D graphics</button>
             <!-- P3.E A/B comparison canvas. Hidden by default; toggled on via
                  the "Compare A/B" switch in the Vector Memory panel. When
                  visible, canvasDiv switches to a vertical flex layout so A
@@ -147,6 +152,7 @@
     <script src="spatialGrid.js"></script>
     <script src="road.js"></script>
     <script src="controls.js"></script>
+    <script src="driver/profiles.js"></script>
     <script src="car.js"></script>
     <script src="buttonResponse.js"></script>
     <script src="brainExport.js"></script>
@@ -154,6 +160,9 @@
     <script src="crashMapCodec.js"></script>
     <script src="adaptiveGates.js"></script>
     <script src="main.js"></script>
+    <script type="module" src="graphics/studio.js"></script>
+    <script type="module" src="multiplayer/client.js"></script>
+    <script type="module" src="driver/assist.js"></script>
     <script src="lineage/viewer.js"></script>
     <script src="uiPanels.js"></script>
     <script src="trackPresets.js"></script>

@@ -148,10 +148,12 @@ function save(){
     localStorage.setItem("rvAnnotations", JSON.stringify(annArr));
 
     localStorage.setItem("oldBestBrain",(localStorage.getItem("bestBrain")));
+    localStorage.setItem("oldBestBrainLearningContext",localStorage.getItem("bestBrainLearningContext")||"null");
     // serializeBrain converts Float32Array weights/biases to plain arrays so
     // JSON.stringify produces clean output (Float32Array serialises as
     // {"0":x,"1":y,...} otherwise, which doesn't revive with .length).
     localStorage.setItem("bestBrain",JSON.stringify(serializeBrain(bestCar.brain)));
+    localStorage.setItem("bestBrainLearningContext",JSON.stringify(window.DriverLearning?.context||null));
 }
 
 // Spearman's-footrule shift over the union of top-K ids (mirrors the
@@ -174,6 +176,9 @@ function rankShiftForGraph(prev, curr){
 }
 function restoreOldBrain(){
     localStorage.setItem("bestBrain", localStorage.getItem("oldBestBrain"));
+    const context=localStorage.getItem("oldBestBrainLearningContext")||"null";
+    localStorage.setItem("bestBrainLearningContext",context);
+    try{window.DriverLearning?.useSaved(JSON.parse(context));}catch{}
     restartBatch();
 }
 
@@ -260,6 +265,7 @@ function brainSaveAs(){
         // serializeBrain is a global from main.js; its output is the shape
         // localStorage.bestBrain expects, so Load is a one-line copy.
         brain: serializeBrain(bestCar.brain),
+        learningContext: window.DriverLearning?.context||null,
     };
     localStorage.setItem(BRAIN_SAVE_PREFIX + name, JSON.stringify(slot));
     refreshBrainSavesDropdown(name);
@@ -288,6 +294,8 @@ function brainSaveLoad(){
     // Mirror restoreOldBrain: write to bestBrain, restart. The seeding
     // loop in main.js reads localStorage.bestBrain when the batch begins.
     localStorage.setItem("bestBrain", JSON.stringify(slot.brain));
+    localStorage.setItem("bestBrainLearningContext", JSON.stringify(slot.learningContext||null));
+    window.DriverLearning?.useSaved(slot.learningContext);
     if (typeof restartBatch === "function") restartBatch();
 }
 function brainSaveDelete(){
@@ -321,7 +329,7 @@ async function brainStartFresh(){
     // Wipe legacy localStorage trained state. Named saves
     // (vv_brainsave_*) are deliberately preserved so a fresh-start
     // doesn't lose the user's curated slots.
-    var legacyKeys = ["bestBrain", "oldBestBrain", "fastLap", "progress", "rvAnnotations"];
+    var legacyKeys = ["bestBrain", "oldBestBrain", "fastLap", "progress", "rvAnnotations", "vv.driverChampions", "bestBrainLearningContext", "oldBestBrainLearningContext"];
     for (var i = 0; i < legacyKeys.length; i++){
         try { localStorage.removeItem(legacyKeys[i]); } catch (_) {}
     }
@@ -496,7 +504,13 @@ function backPhase(){
     nextPhase();
 }
 function setN(value){
-    batchSize=value;
+    const n=Number(value);
+    if (!Number.isFinite(n)) return;
+    batchSize=Math.max(1,Math.min(2000,Math.round(n)));
+    const input=document.getElementById('batchSizeInput');
+    const output=document.getElementById('batchSizeOutput');
+    if(input)input.value=String(batchSize);
+    if(output)output.value='AI cars: '+batchSize;
 }
 function setSeconds(value){
     nextSeconds=value;
@@ -540,7 +554,7 @@ function applyTrainingPreset(name){
     }
     // Reflect values in the DOM so the user can see what changed.
     const bs = document.getElementById('batchSizeInput');
-    if (bs){ bs.value = p.N; document.getElementById('batchSizeOutput').value = 'Batch Size: ' + p.N; }
+    if (bs){ bs.value = p.N; document.getElementById('batchSizeOutput').value = 'AI cars: ' + p.N; }
     const se = document.getElementById('secondsInput');
     if (se){ se.value = p.seconds; document.getElementById('secondsOutput').value = 'Round Length: ' + p.seconds; }
     const mv = document.getElementById('mutateValueInput');
@@ -552,12 +566,18 @@ function applyTrainingPreset(name){
         if (co) co.value = 'Conservative Init: ' + p.conservativeInit;
     }
     const ss = document.getElementById('simSpeedInput');
-    if (ss){ ss.value = String(p.simSpeed); }
+    if (ss){ ss.value = String(simSpeed); }
 }
 
 function setSimSpeed(value){
     const n = Number(value);
-    simSpeed = (Number.isFinite(n) && n > 0) ? n : 1;
+    simSpeed = window.LiveSession?.enabled ? 1 : (Number.isFinite(n) && n > 0) ? n : 1;
+    const selector = document.getElementById("simSpeedInput");
+    if (selector){
+        selector.value = String(simSpeed);
+        selector.disabled = !!window.LiveSession?.enabled;
+        selector.title = selector.disabled ? "Multiplayer runs at 1×" : "Simulation speed";
+    }
     _simStepAccum = 0;
     _lastTickWall = performance.now();
     // Forward to the sim worker so its AI-car accumulator tracks the same

@@ -78,7 +78,7 @@ const STYLE = `
   align-items: center;
   justify-content: center;
   width: 100%;
-  color: #888;
+  color: #62666c;
   font-size: 11px;
 }
 .rv-obs-table {
@@ -103,7 +103,7 @@ const STYLE = `
 .rv-obs-footer {
   margin-top: .4em;
   font-size: 10.5px;
-  color: #777;
+  color: #62666c;
   display: flex;
   justify-content: space-between;
   align-items: center;

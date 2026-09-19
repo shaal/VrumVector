@@ -93,6 +93,9 @@ function pageAudit() {
   const results = [];
   const nodes = document.querySelectorAll('*');
   for (const el of nodes) {
+    // Include ancestor opacity and closed disclosures in the visibility gate.
+    // The collapsed training panel retains layout boxes while fully transparent.
+    if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
     // offsetParent is null for display:none and position:fixed items attached
     // to a display:none parent — close enough for a visibility gate. BODY/HTML
     // have no offsetParent by spec but we never evaluate text directly on them.
@@ -160,21 +163,35 @@ function pageAudit() {
 // Each scenario gets a fresh page so earlier state (drawer open, collapsed
 // panel) can't leak into the next assertion.
 const scenarios = [
+  {name:'driver-profiles',setup:async(page)=>{await page.locator('#driver-learning summary').click();}},
+  {name:'driver-profiles-3d',studio:true,setup:async(page)=>{await page.locator('#driver-learning summary').click();}},
+  {
+    name: 'multiplayer-panel',
+    studio: true,
+    setup: async (page) => {
+      await page.locator('.live-launch').click();
+      await page.waitForTimeout(200);
+    },
+  },
   {
     name: 'default',
-    setup: async () => {},
+    setup: async (page) => {
+      if (await page.locator('#panelToggle').getAttribute('aria-expanded') === 'false') await page.click('#panelToggle');
+      await page.waitForTimeout(300);
+    },
   },
   {
     name: 'panel-collapsed',
+    studio: true,
     setup: async (page) => {
-      await page.click('#panelToggle');
+      if (await page.locator('#panelToggle').getAttribute('aria-expanded') === 'true') await page.click('#panelToggle');
       await page.waitForTimeout(200);
     },
   },
   {
     name: 'eli15-drawer-open',
     setup: async (page) => {
-      await page.click('.eli15-fab');
+      await page.locator('.studio-header [data-action="learn"], .eli15-fab').filter({visible:true}).click();
       await page.waitForTimeout(300);
     },
   },
@@ -190,19 +207,43 @@ const scenarios = [
         await page.keyboard.press('Escape').catch(() => {});
         await page.waitForTimeout(150);
       }
-      await page.click('.eli15-tour-fab');
+      if (await page.locator('#studio-ui').isVisible()) {
+        await page.locator('[data-action="settings"]').first().click();
+        await page.locator('[data-action="tour"]').click();
+      } else await page.click('.eli15-tour-fab');
       await page.waitForTimeout(300);
     },
   },
   {
     name: 'phase1-track-edit',
     setup: async (page) => {
-      // .controlButton.secondary is the "Edit track" button in phase 1.
+      if (await page.locator('#panelToggle').getAttribute('aria-expanded') === 'false') await page.click('#panelToggle');
+      await page.waitForTimeout(300);
+      // Open the existing Customize Track control in the training panel.
       const btn = await page.$('.controlButton.secondary');
       if (btn) {
         await btn.click();
         await page.waitForTimeout(300);
       }
+    },
+  },
+  {
+    name: 'studio-options',
+    studio: true,
+    setup: async (page) => {
+      if (!(await page.locator('#studio-ui').isVisible())) return;
+      await page.locator('[data-action="night"]').click();
+      await page.locator('[data-action="vision"]').click();
+      await page.locator('[data-action="settings"]').first().click();
+      await page.waitForTimeout(300);
+    },
+  },
+  {
+    name: 'classic-controls',
+    setup: async (page) => {
+      await page.locator('#ai-drive-toggle').click();
+      if (await page.locator('#panelToggle').getAttribute('aria-expanded') === 'false') await page.click('#panelToggle');
+      await page.waitForTimeout(300);
     },
   },
 ];
@@ -232,6 +273,12 @@ async function main() {
           await page.goto(targetUrl, { waitUntil: 'networkidle', timeout: 15000 });
           // Give the app a moment to finish its own async boot (wasm, panels).
           await page.waitForTimeout(500);
+          await page.waitForFunction(() => window.CircuitStudio?.info && window.PlayerAssist?.info, {}, {timeout: 60000});
+          if (scenario.studio) {
+            await page.locator('#graphics-toggle').click();
+            await page.waitForFunction(() => window.CircuitStudio.active || window.CircuitStudio.failed, {}, {timeout: 60000});
+            if (!await page.evaluate(() => window.CircuitStudio.active)) throw new Error('3D graphics did not initialize');
+          }
           await scenario.setup(page);
           const fails = await page.evaluate(pageAudit);
           const passCount = '(audited)';

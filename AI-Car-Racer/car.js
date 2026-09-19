@@ -1,6 +1,7 @@
 class Car{
     constructor(x,y,width,height,controlType, maxSpeed=3, angle=0){
-        this.origin={x:x,y:y};
+        this.origin={x:x,y:y,angle:angle};
+        this.driverProfile="balanced";
         this.x=x;
         this.y=y;
         this.width=width;
@@ -9,6 +10,7 @@ class Car{
             this.invincible=invincible;
         }
         this.lapTimes='--';
+        this.driveFrames=0; // player simulation clock survives AI generation resets
 
         this.velocity={x:0,y:0};
         this.speed=0;
@@ -47,6 +49,7 @@ class Car{
     }
 
     update(roadBorders, checkPointList){
+        if(this.controlType !== "AI") this.driveFrames++;
         // Damaged AI cars contribute nothing for the rest of the generation —
         // skip sensor raycasts + NN inference entirely. At end-of-gen this is
         // usually >80% of the population, so it dominates total sim cost.
@@ -67,11 +70,12 @@ class Car{
                 if(this.checkPointsCount >= checkPointList.length && checkPoint == this.checkPointsPassed[0]){
                     this.checkPointsCount=1;
                     this.laps++;
+                    const elapsedFrames=this.controlType === "AI" ? frameCount : this.driveFrames;
                     if(this.laps == 1){
-                        this.lapTimes = [parseFloat((frameCount/60).toFixed(2))];
+                        this.lapTimes = [parseFloat((elapsedFrames/60).toFixed(2))];
                     }
                     else if (this.laps>1){
-                        this.lapTimes.push(parseFloat((frameCount/60-this.lapTimes.reduce((a, b) => a + b, 0)).toFixed(2)));
+                        this.lapTimes.push(parseFloat((elapsedFrames/60-this.lapTimes.reduce((a, b) => a + b, 0)).toFixed(2)));
                     }
                     this.checkPointsPassed = [this.checkPointsPassed[0]];
                 }
@@ -83,7 +87,7 @@ class Car{
             if(this.delayCounter==40){
                 this.x = this.origin.x;
                 this.y = this.origin.y;
-                this.angle=0;
+                this.angle=this.origin.angle;
                 this.speed=0;
                 this.velocity.x=0
                 this.velocity.y=0;
@@ -96,6 +100,7 @@ class Car{
             }
  
         }
+        if((this.useBrain||this.aiDriving)&&!this.damaged)globalThis.DriverProfiles?.record(this);
         if(this.sensor){
             // Perception LOD. At high simSpeed, non-privileged AI cars skip
             // sensor + NN and keep last-frame controls — they're fodder
@@ -153,12 +158,18 @@ class Car{
                 }
                 offsets.push(lf);
                 offsets.push(lr);
-                const outputs=NeuralNetwork.feedForward(offsets,this.brain);
+                const rawOutputs=NeuralNetwork.feedForward(offsets,this.brain);
+                const outputs=(this.useBrain||this.aiDriving)&&globalThis.DriverProfiles
+                    ? DriverProfiles.apply(this,rawOutputs) : rawOutputs;
                 if(this.useBrain){
                     this.controls.forward=outputs[0];
                     this.controls.left=outputs[1];
                     this.controls.right=outputs[2];
                     this.controls.reverse=outputs[3];
+                } else if(this.aiDriving){
+                    // A private copy of the live leader drives this car using
+                    // its own sensors; held keys override each control axis.
+                    this.controls.setAI(outputs);
                 }
             }
         }
@@ -266,19 +277,34 @@ class Car{
             this.speed=this.maxSpeed;
         }
         else if (this.speed < -this.maxSpeed/2){
-            const scalar=(this.maxSpeed/2)/Math.hypot(this.velocity.x,this.velocity.y);
+            const magnitude=Math.hypot(this.velocity.x,this.velocity.y);
             this.speed=-this.maxSpeed/2;
-            this.velocity.x*=scalar;
-            this.velocity.y*=scalar;
+            if(magnitude>0){
+                const scalar=(this.maxSpeed/2)/magnitude;
+                this.velocity.x*=scalar;
+                this.velocity.y*=scalar;
+            }else{
+                this.velocity.x=this.speed*Math.sin(this.angle);
+                this.velocity.y=this.speed*Math.cos(this.angle);
+            }
         }
 
         //what to do if sliding or not
         if(this.slide){
             this.velocity.x = lerp(this.velocity.x, this.speed*Math.sin(this.angle), (this.traction/2+.5)*this.maxSpeed/(Math.abs(this.speed)+.001)*.02);
             this.velocity.y = lerp(this.velocity.y, this.speed*Math.cos(this.angle), (this.traction/2+.5)*this.maxSpeed/(Math.abs(this.speed)+.001)*.02);
-            const scalar=Math.abs(this.speed)/Math.hypot(this.velocity.x,this.velocity.y);
-            this.velocity.x*=scalar;
-            this.velocity.y*=scalar;
+            const magnitude=Math.hypot(this.velocity.x,this.velocity.y);
+            // A held turn can keep slide=true after friction stops the car.
+            // Normalizing a zero vector then produced 0/0 and poisoned its
+            // position, sensors, learning statistics, and replay samples.
+            if(magnitude>0){
+                const scalar=Math.abs(this.speed)/magnitude;
+                this.velocity.x*=scalar;
+                this.velocity.y*=scalar;
+            }else{
+                this.velocity.x=this.speed*Math.sin(this.angle);
+                this.velocity.y=this.speed*Math.cos(this.angle);
+            }
         }
         else{
             this.velocity.x=this.speed*Math.sin(this.angle);

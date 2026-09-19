@@ -60,8 +60,10 @@ function _canonicalVecRows(mirror) {
 
 function _canonicalObsRows(observations) {
   const rows = [];
-  for (const [id, { weight, count }] of observations) {
-    rows.push({ id: String(id), weight: Number(weight) || 0, count: count | 0 });
+  for (const [id, { weight, count, baseline }] of observations) {
+    const row={ id: String(id), weight: Number(weight) || 0, count: count | 0 };
+    if(Number.isFinite(baseline))row.baseline=baseline;
+    rows.push(row);
   }
   return rows;
 }

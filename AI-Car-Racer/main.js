@@ -100,6 +100,7 @@ var invincible=false;
 var traction=0.5;
 
 var frameCount = 0;                // mirrors worker's frameCount via snapshots
+var presentationRunSerial = 0;     // also advances on manual same-generation restarts
 
 // === Phase A — track-aware fast lap =====================================
 // Three pieces of state, all globals because main.js is a classic script
@@ -750,6 +751,7 @@ var pendingBegin = null;
 
 simWorker.onmessage = (ev) => {
     const m = ev.data;
+    if ((m.type==='snapshot'||m.type==='genEnd')&&Number.isInteger(m.runSerial)&&m.runSerial!==presentationRunSerial)return;
     switch (m.type){
         case 'ready':
             workerReady = true;
@@ -766,6 +768,9 @@ simWorker.onmessage = (ev) => {
             break;
         case 'genEnd':
             handleGenEnd(m);
+            break;
+        case 'driverBrain':
+            if (m.runSerial === presentationRunSerial) window.PlayerAssist?.acceptBrain(m);
             break;
         case 'debug':
             if (hitchEnabled && m.event === 'beginBuilt' && m.ms > 30){
@@ -788,6 +793,21 @@ simWorker.onmessage = (ev) => {
 simWorker.onerror = (err) => {
     console.error('[sim-worker] error', err.message || err, err.filename, err.lineno);
 };
+
+function restartDriverLearning(){
+    window.__rvSessionBestFitness=0;
+    begin(true);
+}
+
+function resumePlayerDriving(){
+    // `pause` is a lexical binding; window.pause resolves the button with that
+    // id instead. Read the actual simulation state before resuming.
+    if (window.__awaitingStart || pause) pauseGame();
+}
+
+function requestPlayerBrain(requestId){
+    if (workerReady && workerInited) simWorker.postMessage({type:'driverBrain', requestId, runSerial:presentationRunSerial});
+}
 
 // bestCar identity epoch: the worker increments bestEpoch each time a new
 // car is promoted. Main creates a fresh proxy object on every change so the
@@ -915,6 +935,8 @@ function updateBestCarProxy(p, m){
 }
 
 function handleGenEnd(m){
+    try { window.CircuitStudio?.onGenerationEnd(m, generation); }
+    catch (error) { console.warn('[Circuit Studio] replay archive', error); }
     bestBrainFlat = m.bestBrain;
     _cachedBestBrainSeq++;
     if (bestCar){
@@ -1116,6 +1138,27 @@ function fillRandom(dst, dstOff, applyConservativeBias){
 }
 
 function buildBrainsBuffer(N){
+    if(window.DriverLearning){
+        let seeds=[],prior=null;
+        if(bridgeReady()){
+            try{
+                const bridge=window.__rvBridge;
+                bridge.setQueryDynamicsVec?.(window.__rvDynamics?.queryVector?.()||null);
+                seeds=bridge.recommendSeeds(window.currentTrackVec||null,10);
+            }catch(error){console.warn('[learning] memory retrieval failed',error);}
+        }
+        try{
+            const savedContext=JSON.parse(localStorage.getItem('bestBrainLearningContext')||'null');
+            const matches=savedContext?savedContext.profile===window.DriverLearning.profile:window.DriverLearning.profile==='balanced';
+            if(matches&&localStorage.getItem('brainSchemaVersion')===String(BRAIN_SCHEMA_VERSION)&&localStorage.getItem('bestBrain')){
+                prior=flattenBrainInline(reviveBrain(JSON.parse(localStorage.getItem('bestBrain'))));
+            }
+        }catch(error){console.warn('[learning] saved driver skipped',error);}
+        const batch=window.DriverLearning.build(N,seeds,prior,mutateValue,conservativeInit);
+        currentSeedIds=[...new Set(batch.parents.filter(Boolean))];
+        window.__rvBridge?.setLastSeedSources?.({...batch.counts,generation});
+        return batch.flat;
+    }
     const out = new Float32Array(N * FLAT_LENGTH);
     currentSeedIds = [];
     let seededFromBridge = false;
@@ -1222,7 +1265,7 @@ function buildBrainsBuffer(N){
 // -----------------------------------------------------------------------------
 // begin() / nextBatch() — lifecycle
 // -----------------------------------------------------------------------------
-function begin(){
+function begin(preservePause = false){
     seconds = nextSeconds;
     // Page-load gate: while awaiting an explicit Start click, do NOT build
     // the 500-car population or touch the worker. That work used to run on
@@ -1235,6 +1278,7 @@ function begin(){
         // Lightweight placeholders so phase-3 tooling still has objects if the
         // user hops into Customize Track before starting. AI swarm is deferred.
         try {
+            playerCar?.controls?.dispose?.();playerCar2?.controls?.dispose?.();
             playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
             playerCar2 = new Car(startInfo.x, startInfo.y, 30, 50, "WASD", maxSpeed, startInfo.heading);
         } catch (_) {}
@@ -1248,10 +1292,15 @@ function begin(){
         pendingBegin = null;
         return;
     }
-    pause = false;
+    if (!preservePause) pause = false;
     computeStartInfoInPlace(currentCheckpointList());
-    playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
-    playerCar2 = new Car(startInfo.x, startInfo.y, 30, 50, "WASD", maxSpeed, startInfo.heading);
+    // Automatic AI generations must not interrupt a human's live lap.
+    if (!(preservePause && (window.LiveSession?.enabled || window.PlayerAssist?.enabled) && playerCar && playerCar2)) {
+        playerCar?.controls?.dispose?.();playerCar2?.controls?.dispose?.();
+        playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
+        playerCar2 = new Car(startInfo.x, startInfo.y, 30, 50, "WASD", maxSpeed, startInfo.heading);
+        window.LiveSession?.resetRace();
+    }
     frameCount = 0;
     wallStart = performance.now();
     _simStepAccum = 1;
@@ -1270,6 +1319,7 @@ function begin(){
 }
 
 function performBegin(N){
+    presentationRunSerial++;
     if (!workerInited){
         // Copy borders + checkpoints to plain {x,y} objects so postMessage can
         // structured-clone them. The live Road objects contain references to
@@ -1285,6 +1335,7 @@ function performBegin(N){
         });
         workerInited = true;
     }
+    window.DriverLearning?.prepare({road,maxSpeed,traction,seconds});
     const brains = buildBrainsBuffer(N);
     // Keep worker speed aligned with main defaults. setSimSpeed() only posts
     // when the user moves the dropdown — without this, a default simSpeed≠1
@@ -1295,6 +1346,10 @@ function performBegin(N){
     simWorker.postMessage({
         type: 'begin',
         N, seconds, maxSpeed, traction,
+        runSerial:presentationRunSerial,driverProfile:window.DriverLearning?.profile||'balanced',
+        learningContext:window.DriverLearning?.context||null,
+        seedParents:window.DriverLearning?.batch?.parents||[],seedKinds:window.DriverLearning?.batch?.kinds||[],
+        recordPresentation: !!(window.CircuitStudio?.ready && window.CircuitStudio?.enabled),
         startInfo: { x: startInfo.x, y: startInfo.y, heading: startInfo.heading || 0 },
         poseJitter: Object.assign({ radiusPx: 0, angleDeg: 0, maxAttempts: 8 }, window.__poseJitter || {}),
         brains
@@ -1396,6 +1451,7 @@ function performNextBatch(genData){
     }
 
     const _tArchive = performance.now();
+    let archivedBrainId=null;
     if (bridgeReady() && bestBrainFlat){
         try {
             const fitness = genData.fitness;
@@ -1406,9 +1462,16 @@ function performNextBatch(genData){
             if (window.__rvDynamics){
                 try { dynamicsVec = window.__rvDynamics.finalizeVector(); } catch (_) {}
             }
+            // Credit descendants against the parent evaluation from before this run.
+            if (genData.seedOutcomes&&window.__rvBridge.observeOffspring){
+                window.__rvBridge.observeOffspring(genData.seedOutcomes,genData.learningContext);
+            }else if(currentSeedIds.length){
+                window.__rvBridge.observe(currentSeedIds,fitness);
+            }
             const brainObj = window.__rvUnflatten(bestBrainFlat);
-            window.__rvBridge.archiveBrain(
-                brainObj, fitness, trackVec, generation, currentSeedIds.slice(), batchFastest, dynamicsVec
+            archivedBrainId=window.__rvBridge.archiveBrain(
+                brainObj, fitness, trackVec, generation, genData.eliteParentId?[genData.eliteParentId]:[], batchFastest, dynamicsVec,
+                {context:genData.learningContext||window.DriverLearning?.context,styleScore:genData.styleScore,driving:genData.driving}
             );
             if (!window.__rvSessionBestFitness || fitness > window.__rvSessionBestFitness){
                 window.__rvSessionBestFitness = fitness;
@@ -1416,15 +1479,13 @@ function performNextBatch(genData){
             if (window.__rvDynamics){
                 try { window.__rvDynamics.reset(); } catch (_) {}
             }
-            if (currentSeedIds.length){
-                window.__rvBridge.observe(currentSeedIds, fitness);
-            }
             console.log('[ruvector] gen=' + generation + ' archived best fitness=' + fitness +
                 (currentSeedIds.length ? ' (observed ' + currentSeedIds.length + ' seeds)' : ''));
         } catch (e){
             console.warn('[ruvector] archive/observe failed', e);
         }
     }
+    window.DriverLearning?.record({...genData,generation},bestBrainFlat,archivedBrainId);
     _times.archive = performance.now() - _tArchive;
     generation += 1;
 
@@ -1435,7 +1496,9 @@ function performNextBatch(genData){
     _times.graph = performance.now() - _tGraph;
 
     const _tBegin = performance.now();
-    begin();
+    // A completed worker message can already be queued when the user clicks
+    // Pause. Carry that intent across the automatic generation transition.
+    begin(true);
     _times.begin = performance.now() - _tBegin;
 
     const totalMs = performance.now() - _genT0;
@@ -1481,13 +1544,22 @@ function animate(){
     var _perfDraw = 0;
     var _perfT0 = perfEnabled ? performance.now() : 0;
     const DP = window.DemoPresentation;
+    const presentationInfo = {
+        phase, road, snapshot: latestSnapshot, bestCar, generation,
+        runSerial: presentationRunSerial, paused: pause, simSpeed,
+        awaitingStart: !!window.__awaitingStart, startInfo,
+        players: [playerCar, playerCar2], maxSpeed, traction, invincible
+    };
+    window.LiveSession?.frame(presentationInfo);
+    window.PlayerAssist?.frame(presentationInfo);
+    const gpuActive = !!window.CircuitStudio?.frame(presentationInfo);
     // Presentation layer (road cache / follow-cam / 3D) owns the phase-4
     // frame setup. Outside training, fall back to the classic full redraw.
     let _pres = null;
-    if (phase === 4 && DP && typeof DP.beginFrame === 'function'){
+    if (!gpuActive && phase === 4 && DP && typeof DP.beginFrame === 'function'){
         _pres = DP.beginFrame(ctx, bestCar, latestSnapshot);
     }
-    if (!_pres || !_pres.drewRoad){
+    if (!gpuActive && (!_pres || !_pres.drewRoad)){
         road.draw(ctx);
     }
     if (perfEnabled) _perfDraw += performance.now() - _perfT0;
@@ -1543,7 +1615,7 @@ function animate(){
             let dt = (now - _lastTickWall) / 1000;
             _lastTickWall = now;
             if (dt > 0.25) dt = 0.25;
-            _simStepAccum += simSpeed * dt * 60;
+            _simStepAccum += (window.LiveSession?.enabled ? 1 : simSpeed) * dt * 60;
             let playerSteps = Math.floor(_simStepAccum);
             _simStepAccum -= playerSteps;
             if (playerSteps > MAX_STEPS_PER_RAF){ playerSteps = MAX_STEPS_PER_RAF; _simStepAccum = 0; }
@@ -1551,13 +1623,14 @@ function animate(){
             for (let s = 0; s < playerSteps; s++){
                 playerCar.update(road.borders, road.checkPointList);
                 playerCar2.update(road.borders, road.checkPointList);
+                window.LiveSession?.step(playerCar2, road.checkPointList);
             }
         }
 
         if (shouldDrawCars){
             const _perfDrawT0 = perfEnabled ? performance.now() : 0;
             const usePresSwarm = _pres && _pres.usePresentationSwarm && DP && typeof DP.drawSwarm === 'function';
-            if (latestSnapshot){
+            if (latestSnapshot && !gpuActive){
                 if (usePresSwarm) DP.drawSwarm(ctx, latestSnapshot);
                 else drawFromSnapshot(latestSnapshot);
             }
@@ -1567,22 +1640,25 @@ function animate(){
                 // reads .brainInputs / .brainOutputActivations (Task 2.D) to
                 // render the NN decision bars.
                 inputVisual(bestCar);
-                if (DP && typeof DP.drawChampion === 'function') DP.drawChampion(ctx, bestCar);
-                else drawBestCar(bestCar);
+                if (!gpuActive){
+                    if (DP && typeof DP.drawChampion === 'function') DP.drawChampion(ctx, bestCar);
+                    else drawBestCar(bestCar);
+                }
             }
             // Player cars are 2D-world quads — skip in pure 3D projection so
             // they don't ghost in flat screen space over the perspective scene.
-            const skipPlayers = DP && DP.state && DP.state.view3d;
+            const skipPlayers = gpuActive || (DP && DP.state && DP.state.view3d);
             if (!skipPlayers){
                 if (playerCar) playerCar.draw(ctx,"#E6194B",true);
                 if (playerCar2) playerCar2.draw(ctx,"#4FC3F7",true);
+                window.LiveSession?.drawClassic(ctx);
             }
             if (perfEnabled) _perfDraw += performance.now() - _perfDrawT0;
         }
         if (_pres && DP && typeof DP.endFrame === 'function'){
             DP.endFrame(ctx, _pres.camApplied);
         }
-        if (DP && typeof DP.tickHud === 'function'){
+        if (!gpuActive && DP && typeof DP.tickHud === 'function'){
             DP.tickHud({
                 generation: generation,
                 bestCar: bestCar,
@@ -1909,6 +1985,7 @@ window.__downloadCSV = function(label, rows){
             frameCount: 0,
             generation: 0,
             metricsLog: [],
+            coach: window.DriverLearning?.createCoach()||null,
             workerReady: false,
             workerInited: false,
             lastRow: null,
@@ -1928,11 +2005,17 @@ window.__downloadCSV = function(label, rows){
         return ctxB;
     }
 
-    // Cold-random init for B, deliberately skipping the P2.C conservative-init
-    // bias that the primary's fillRandom uses. The baseline's whole point is
-    // "no help from the main-thread extras" — injecting the conservative bias
-    // would muddy the delta.
+    // A real genetic baseline: same profile, conservative initialization,
+    // mutation policy, and elite preservation, with vector retrieval omitted.
     function buildBrainsBufferB(N){
+        if(window.DriverLearning&&bState){
+            if(!bState.coach)bState.coach=window.DriverLearning.createCoach();
+            bState.coach.setContext(window.DriverLearning.context||{});
+            var profile=DriverProfiles.get(window.DriverLearning.profile);
+            var plan=bState.coach.plan(mutateValue,window.DriverLearning.adaptive,profile.exploration);
+            var batch=window.DriverLearning.buildPopulation({N:N,incumbent:bState.coach.incumbent,plan:plan,conservative:conservativeInit});
+            bState.lastKinds=batch.kinds;return batch.flat;
+        }
         var out = new Float32Array(N * FLAT_LENGTH);
         for (var i = 0; i < N * FLAT_LENGTH; i++){
             out[i] = Math.random() * 2 - 1;
@@ -1962,6 +2045,8 @@ window.__downloadCSV = function(label, rows){
         simWorkerB.postMessage({
             type: 'begin',
             N: N,
+            driverProfile:window.DriverLearning?.profile||'balanced',
+            learningContext:window.DriverLearning?.context||null,
             seconds: seconds,
             maxSpeed: maxSpeed,
             traction: traction,
@@ -2007,6 +2092,7 @@ window.__downloadCSV = function(label, rows){
 
     function handleGenEndB(m){
         if (!bState) return;
+        bState.coach?.record(m,m.bestBrain);
         try {
             var row = computeRowB(m);
             if (row){
@@ -2262,6 +2348,9 @@ window.__downloadCSV = function(label, rows){
             frameCount: bState.frameCount,
             workerReady: bState.workerReady,
             workerInited: bState.workerInited,
+            learningRounds:bState.coach?.rounds||0,
+            learningBest:bState.coach?.incumbent?.fitness??null,
+            mutatedCars:bState.lastKinds?.filter(kind=>kind==='mutation').length||0,
             metricsLogLength: bState.metricsLog.length
         } : { enabled: abEnabled };
     };

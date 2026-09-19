@@ -33,6 +33,8 @@
 //   info()                           — merged {lora: …, sona: …} snapshot
 
 import initSona, { WasmEphemeralAgent } from '../../vendor/ruvector/sona/ruvector_sona.js';
+import {qualityFromFitness} from '../learning/policy.js';
+import {CircuitJournal} from './journal.js';
 import {
   loadAdapter as loadLora,
   isReady as loraReady,
@@ -82,6 +84,9 @@ let _agentId = 'car-racer';
 let _microUpdates = 0;      // synthesised: one per endTrajectory/step flush
 let _patternCount = 0;      // cached from last stats() call for UI stickiness
 let _traj = null;           // in-flight JS-side trajectory buffer
+const _journal = new CircuitJournal();
+let _replayedExamples = 0;
+let _savedLora = null;
 
 export function loadEngine() {
   if (_ready) return _ready;
@@ -121,14 +126,45 @@ export const adapt        = loraAdapt;
 export const reward       = loraReward;
 export const driftL2      = loraDrift;
 export const recentDrift  = loraRecentDrift;
-export const serialize    = loraSerialize;
-export const deserialize  = loraDeserialize;
+export function serialize() {
+  // Keep the two independent engines independent on disk as well. Retain an
+  // unavailable adapter's previous snapshot rather than overwriting its work.
+  const lora = loraSerialize() || _savedLora;
+  if (!lora && !_agent && !_journal.examples.length) return null;
+  return { engineVersion: 1, lora, sonaJournal: _journal.serialize() };
+}
+export function deserialize(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return false;
+  if (snapshot.engineVersion != null && snapshot.engineVersion !== 1) return false;
+  // Read legacy snapshots where the journal was attached to the LoRA object.
+  const lora = snapshot.engineVersion === 1 ? snapshot.lora : snapshot;
+  let restoredLora = false;
+  try { restoredLora = loraDeserialize(lora); } catch (_) { /* journal can still recover */ }
+  if (restoredLora || (!loraReady() && lora)) _savedLora = lora;
+  const journal = snapshot.sonaJournal;
+  const hasJournal = journal?.version === 1 && Array.isArray(journal.examples);
+  if (!hasJournal) return restoredLora;
+  _journal.restore(journal);_replayedExamples=0;
+  if(_agent){
+    try{
+      _agent.clear();_traj=null;_microUpdates=0;
+      for(const example of _journal.examples){
+        _agent.processTask(new Float32Array(example.vector),example.quality);_replayedExamples++;
+      }
+      if(_replayedExamples)_agent.forceLearn();
+      _patternCount=readPatternCount(_agent);
+    }catch(error){console.warn('[sona] circuit example replay failed',error);}
+  }
+  return restoredLora || hasJournal;
+}
 
 export function _debugReset() {
   loraDebugReset();
   _traj = null;
   _microUpdates = 0;
   _patternCount = 0;
+  _journal.clear();_replayedExamples=0;
+  _savedLora = null;
   // We don't reconstruct the SONA agent here — the wasm engines are cheap to
   // keep around, and tests that need a clean agent state can drop the
   // module's _agent reference manually. In the game we never hit debugReset
@@ -165,6 +201,9 @@ export function addStep(activations, _attention, stepReward) {
   const acts = coerceSonaVec(activations);
   if (!acts) return;
   _traj.steps.push({ activations: acts, reward: Number(stepReward) || 0 });
+  // Long unattended sessions remain bounded even when a caller forgets to
+  // close a trajectory. The normal game reviews every eight generations.
+  if(_traj.steps.length>128)_traj.steps.shift();
 }
 
 // Close the trajectory and crystallize patterns. We emit one processTask
@@ -187,6 +226,7 @@ export function endTrajectory(finalFitness) {
       _microUpdates += 1;
     }
     agent.processTask(tj.trackVec, normFinal);
+    _journal.remember(tj.trackVec,normFinal);
     _microUpdates += 1;
     // force_learn returns a string ("Forced learning: N trajectories -> M patterns…");
     // we discard it but the side-effect is the point.
@@ -272,6 +312,8 @@ export function info() {
       ewcLambda: SONA_CONFIG.ewc_lambda,
       trajectoryOpen: !!_traj,
       trajectorySteps: _traj ? _traj.steps.length : 0,
+      savedExamples: _journal.examples.length,
+      replayedExamples: _replayedExamples,
     };
   } else {
     sona = {
@@ -282,6 +324,8 @@ export function info() {
       ewcLambda: SONA_CONFIG.ewc_lambda,
       trajectoryOpen: false,
       trajectorySteps: 0,
+      savedExamples: _journal.examples.length,
+      replayedExamples: 0,
     };
   }
   return { lora, sona };
@@ -313,14 +357,10 @@ function toFloat32(v) {
   return new Float32Array(0);
 }
 
-// tanh-squash raw fitness into (-1, 1), then shift to (0, 1) so values below
-// the quality_threshold (0.15) are truly "bad runs" and not just "small
-// positive fitness on a short track". Using tanh(f/50) as the knee because
-// a typical phase-4 best-car fitness is 10–50.
+// No progress must have zero quality. The previous shifted sigmoid gave a
+// stationary, zero-checkpoint driver 0.5 quality and admitted it as a success.
 function normaliseQuality(fitness) {
-  const f = Number(fitness);
-  if (!Number.isFinite(f)) return 0;
-  return 0.5 * (1 + Math.tanh(f / 50));
+  return qualityFromFitness(Number(fitness));
 }
 
 function cosineSim(a, b) {

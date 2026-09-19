@@ -1,7 +1,7 @@
 name: Deploy to Cloudflare Pages
 
 # Triggers:
-#   - push to main            → production deploy (vectorvroom.shaal.dev)
+#   - push to main            → production deploy (vv.shaal.dev)
 #   - pull_request            → preview deploy at <branch>.vectorvroom.pages.dev
 #   - workflow_dispatch       → manual redeploy button in the Actions tab
 #
@@ -41,19 +41,49 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Deploy live multiplayer service
+        id: live
+        continue-on-error: true
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.103.0'
+          command: >-
+            deploy --config multiplayer/wrangler.jsonc
+            --name=${{ github.event_name == 'pull_request' && format('vectorvroom-live-pr-{0}', github.event.pull_request.number) || 'vectorvroom-live' }}
+
+      - name: Configure live endpoint and stage static site
+        env:
+          LIVE_ENDPOINT: ${{ steps.live.outputs.deployment-url }}
+        run: |
+          node --input-type=module -e '
+            import {writeFileSync} from "node:fs";
+            const endpoint = process.env.LIVE_ENDPOINT ? new URL(process.env.LIVE_ENDPOINT) : null;
+            if (endpoint && endpoint.protocol !== "https:") throw new Error("Invalid multiplayer endpoint");
+            writeFileSync("AI-Car-Racer/multiplayer/config.json", JSON.stringify({endpoint:endpoint?.origin ?? null}) + "\n");
+          '
+          mkdir -p .pages-upload
+          rsync -a --exclude='.git' --exclude='.github' --exclude='.pages-upload' --exclude='.wrangler' --exclude='node_modules' --exclude='test-results' --exclude='/multiplayer' --exclude='/tests' --exclude='/scripts' --exclude='/ruvector' ./ .pages-upload/
 
       - name: Deploy to Cloudflare Pages
         id: deploy
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          # The runner's checkout doesn't contain the root `ruvector`
-          # dev symlink (it's gitignored), so we don't need the rsync
-          # staging step that the local script uses — deploy . directly.
+          wranglerVersion: '4.103.0'
           command: >-
-            pages deploy .
+            pages deploy .pages-upload
             --project-name=vectorvroom
             --branch=${{ github.head_ref || github.ref_name }}
             --commit-hash=${{ github.sha }}
@@ -66,3 +96,9 @@ jobs:
           echo "- Branch: \`${{ github.head_ref || github.ref_name }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Deployment URL: ${{ steps.deploy.outputs.deployment-url }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Alias URL: ${{ steps.deploy.outputs.pages-deployment-alias-url }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report multiplayer deployment failure
+        if: steps.live.outcome == 'failure'
+        run: |
+          echo "::error::The static preview is deployed, but the live multiplayer service could not deploy. Check the service step above. Cloudflare Workers access is required; an optional CLOUDFLARE_WORKERS_API_TOKEN can be provided separately from the Pages token."
+          exit 1
