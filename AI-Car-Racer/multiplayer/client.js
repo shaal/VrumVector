@@ -1,4 +1,4 @@
-import {cleanCallsign,randomCallsign,validState,samplePeer,LapClock,COLORS} from './state.js';
+import {cleanCallsign,randomCallsign,validState,samplePeer,LapClock,COLORS,roomKey} from './state.js';
 import {trackKey} from '../graphics/state.js';
 
 class LiveSession {
@@ -27,7 +27,9 @@ class LiveSession {
         <form data-live-name><label for="live-callsign">Your callsign</label><div class="live-name-row"><input id="live-callsign" maxlength="24" autocomplete="off" spellcheck="false" required><button type="submit">Save</button></div></form>
         <label class="live-switch"><input type="checkbox" id="live-enabled"> Show live drivers <span>off by default</span></label>
         <p class="live-status" role="status" aria-live="polite"></p>
+        <p class="live-room live-note" hidden></p>
         <p class="live-note">Join to share your WASD car with drivers on the same track and vehicle settings. Hidden tabs leave the grid.</p>
+        <p class="live-note">Compare room codes with your friend. Different codes? Match the track, max speed, traction and invincibility settings.</p>
         <div class="live-standings" hidden><div class="live-table-heading"><strong>Best laps</strong><span>seconds</span></div><ol></ol><p class="live-lap-hint"></p></div>
         <p class="live-note">Multiplayer keeps the game at 1×. Cross the start line, then every gate in order. Live cars pass through each other.</p>
         <button data-live-chase>Chase my car · WASD</button>
@@ -35,7 +37,7 @@ class LiveSession {
     document.getElementById('canvasDiv').append(this.root);
     this.panel=this.root.querySelector('#live-panel');this.launch=this.root.querySelector('.live-launch');
     this.input=this.root.querySelector('#live-callsign');this.input.value=this.callsign;
-    this.checkbox=this.root.querySelector('#live-enabled');this.statusNode=this.root.querySelector('.live-status');
+    this.checkbox=this.root.querySelector('#live-enabled');this.statusNode=this.root.querySelector('.live-status');this.roomNode=this.root.querySelector('.live-room');
     const toggle=on=>{this.panel.hidden=!on;this.launch.setAttribute('aria-expanded',String(on));if(on){const profiles=document.getElementById('driver-learning');if(profiles)profiles.open=false;}};
     this.launch.onclick=()=>toggle(this.panel.hidden);
     this.root.querySelector('[data-live-close]').onclick=()=>{toggle(false);this.launch.focus();};
@@ -76,7 +78,7 @@ class LiveSession {
   step(car,gates){if(this.enabled&&!document.hidden)this.clock.step(car,gates);}
   resetRace(){this.clock=new LapClock();this.localAI=null;}
   disconnect(){
-    this.epoch++;const ws=this.ws;this.ws=null;this.connected=false;this.peers.clear();
+    this.epoch++;const ws=this.ws;this.ws=null;this.connected=false;this.room='';this.peers.clear();
     if(ws)try{ws.close(1000,'Left track');}catch{}
   }
   async connect(key){
@@ -94,6 +96,7 @@ class LiveSession {
       const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key));
       if(epoch!==this.epoch||!this.enabled||document.hidden||this.root.hidden)return;
       const room=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
+      this.room=room.slice(0,8).toUpperCase();
       const url=new URL(`/room/${room}`,this.endpoint);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.searchParams.set('name',this.callsign);
       const ws=new WebSocket(url);this.ws=ws;this.lastAck=performance.now();this.status='Connecting to the grid…';
       ws.onmessage=event=>{
@@ -122,7 +125,7 @@ class LiveSession {
   tick(){
     const info=this.info;
     if(!this.enabled||!info||this.root.hidden||document.hidden)return;
-    const key=JSON.stringify([1,trackKey(info.road),info.maxSpeed,info.traction,!!info.invincible]);
+    const key=roomKey(trackKey(info.road),info.maxSpeed,info.traction,info.invincible);
     if(key!==this.key){this.disconnect();this.key=key;this.resetRace();this.retryAt=0;}
     const now=performance.now();
     if(this.ws&&now-this.lastAck>8000){this.disconnect();this.retry();}
@@ -143,6 +146,9 @@ class LiveSession {
     const status=this.connected?(count===1?'You’re on the grid · waiting for rivals':`${count} drivers on this track`):this.status;
     if(this.launch.textContent!==label)this.launch.textContent=label;
     if(this.statusNode.textContent!==status)this.statusNode.textContent=status;
+    this.roomNode.hidden=!this.enabled||!this.room;
+    const roomText=this.room&&this.info?`Room ${this.room} · speed ${Number(this.info.maxSpeed)} · traction ${Number(this.info.traction)} · invincibility ${this.info.invincible?'on':'off'}`:'';
+    if(this.roomNode.textContent!==roomText)this.roomNode.textContent=roomText;
     const standings=this.root.querySelector('.live-standings');standings.hidden=!this.connected;
     if(this.panel.hidden||!this.connected)return;
     const rows=[{name:this.callsign+' (you)',color:this.color,bestLap:this.clock.bestLap,laps:this.clock.laps},
@@ -156,6 +162,9 @@ class LiveSession {
   drawClassic(ctx){
     if(!this.enabled)return;
     for(const p of this.drivers()){
+      if(window.DemoPresentation?.state.view3d){
+        window.DemoPresentation.drawDriver(ctx,p.pose,p.color,p.name);continue;
+      }
       const pose=p.pose;ctx.save();ctx.translate(pose.x,pose.y);ctx.rotate(-pose.angle);
       ctx.globalAlpha=pose.damaged?.4:.9;ctx.fillStyle=p.color;ctx.fillRect(-15,-25,30,50);ctx.fillStyle='#16302b';ctx.fillRect(-11,-12,22,12);ctx.restore();
       ctx.save();ctx.font='bold 20px system-ui';ctx.textAlign='center';ctx.lineWidth=5;ctx.strokeStyle='#142622';ctx.fillStyle='#fff';ctx.strokeText(p.name,pose.x,pose.y-42);ctx.fillText(p.name,pose.x,pose.y-42);ctx.restore();

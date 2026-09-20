@@ -2,9 +2,10 @@ import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
+import {createHash} from 'node:crypto';
 import {Miniflare} from 'miniflare';
 import {build} from 'esbuild';
-import {cleanCallsign,randomCallsign,validState,samplePeer,LapClock} from '../AI-Car-Racer/multiplayer/state.js';
+import {cleanCallsign,randomCallsign,validState,samplePeer,LapClock,roomKey} from '../AI-Car-Racer/multiplayer/state.js';
 
 const pose={x:100,y:100,angle:0,speed:2,damaged:false,paused:false,laps:0,bestLap:null};
 let mf;
@@ -60,6 +61,33 @@ test('real WebSocket rooms relay live cars and renames, isolate tracks, and remo
     assert.equal(c.messages.filter(m=>m.type==='driver').length,0);
     a.ws.close();await until(()=>b.messages.some(m=>m.type==='leave'&&m.id===a.welcome.id));
   }finally{for(const p of [a,b,c])if(p.ws.readyState<2)p.ws.close();}
+});
+test('fresh visitors and identical slider or legacy saved values meet in the same real room',async()=>{
+  const track='identical track geometry';
+  const room=(speed,grip,invincible=false)=>createHash('sha256').update(roomKey(track,speed,grip,invincible)).digest('hex');
+  assert.equal(roomKey(track,'15','0.50',false),JSON.stringify([1,track,15,0.5,false]),'Keep compatibility with existing numeric-default clients');
+  const fresh=await join('Fresh visitor',room(15,0.5));
+  const saved=await join('Saved physics',room('15','0.50'));
+  const faster=await join('Different speed',room(14,0.5));
+  const grip=await join('Different traction',room(15,0.6));
+  const invincible=await join('Different collisions',room(15,0.5,true));
+  try{
+    assert.equal(saved.welcome.players.length,1);
+    for(const other of [faster,grip,invincible])assert.equal(other.welcome.players.length,0);
+    fresh.send();
+    await until(()=>saved.messages.some(m=>m.type==='driver'&&m.id===fresh.welcome.id&&m.state?.x===pose.x));
+    saved.send({...pose,x:240});
+    await until(()=>fresh.messages.some(m=>m.type==='driver'&&m.id===saved.welcome.id&&m.state?.x===240));
+  }finally{for(const player of [fresh,saved,faster,grip,invincible])player.ws.close();}
+});
+
+test('physics sliders store numeric values and reject invalid settings before restarting',async()=>{
+  const context=vm.createContext({window:{},maxSpeed:15,traction:0.5,restarts:0,begin(){context.restarts++;}});
+  vm.runInContext(await readFile(new URL('../AI-Car-Racer/buttonResponse.js',import.meta.url),'utf8'),context);
+  context.setMaxSpeed('15');context.setTraction('0.50');
+  assert.equal(context.maxSpeed,15);assert.equal(context.traction,0.5);assert.equal(context.restarts,2);
+  for(const value of ['NaN',Infinity,-1]){context.setMaxSpeed(value);context.setTraction(value);}
+  assert.equal(context.maxSpeed,15);assert.equal(context.traction,0.5);assert.equal(context.restarts,2);
 });
 test('server rejects hostile origins and malformed state, and removes the invalid driver',async()=>{
   const denied=await mf.dispatchFetch(`http://local/room/${'c'.repeat(64)}?name=Fox`,{headers:{Upgrade:'websocket',Origin:'https://evil.example'}});

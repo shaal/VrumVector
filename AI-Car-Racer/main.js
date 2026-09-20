@@ -294,10 +294,12 @@ if (new URLSearchParams(location.search).get('edit') === '1') {
     nextPhase(); // → phase 4 (training)
 }
 if (localStorage.getItem("traction")){
-    traction=JSON.parse(localStorage.getItem("traction"));
+    const value=Number(JSON.parse(localStorage.getItem("traction")));
+    if(Number.isFinite(value)&&value>=0&&value<=1)traction=value;
 }
 if (localStorage.getItem("maxSpeed")){
-    maxSpeed=JSON.parse(localStorage.getItem("maxSpeed"));
+    const value=Number(JSON.parse(localStorage.getItem("maxSpeed")));
+    if(Number.isFinite(value)&&value>0)maxSpeed=value;
 }
 // Phase A: legacy `fastLap` localStorage key retired in the boot block
 // above; per-track values now live under vv_fastlap_<trackHash>. The
@@ -1606,7 +1608,7 @@ function animate(){
 
         // Still render the last snapshot while paused so the track isn't empty
         // after the user hits Pause / before first Start.
-        const shouldDrawCars = !pause || !!latestSnapshot;
+        const shouldDrawCars = !pause || !!latestSnapshot || !!window.LiveSession?.enabled;
         if(!pause){
             // Local player-car accumulator. Runs in parallel with the worker's;
             // exact lockstep isn't needed because player cars only matter when
@@ -1645,12 +1647,16 @@ function animate(){
                     else drawBestCar(bestCar);
                 }
             }
-            // Player cars are 2D-world quads — skip in pure 3D projection so
-            // they don't ghost in flat screen space over the perspective scene.
-            const skipPlayers = gpuActive || (DP && DP.state && DP.state.view3d);
-            if (!skipPlayers){
-                if (playerCar) playerCar.draw(ctx,"#E6194B",true);
-                if (playerCar2) playerCar2.draw(ctx,"#4FC3F7",true);
+            // Studio renders its own human cars. Classic Tilt needs projected
+            // cars and labels; the flat view keeps its usual world-space quads.
+            if (!gpuActive){
+                if (DP?.state.view3d){
+                    DP.drawDriver(ctx,playerCar,"#E6194B");
+                    DP.drawDriver(ctx,playerCar2,"#4FC3F7","You · WASD");
+                }else{
+                    if (playerCar) playerCar.draw(ctx,"#E6194B",true);
+                    if (playerCar2) playerCar2.draw(ctx,"#4FC3F7",true);
+                }
                 window.LiveSession?.drawClassic(ctx);
             }
             if (perfEnabled) _perfDraw += performance.now() - _perfDrawT0;

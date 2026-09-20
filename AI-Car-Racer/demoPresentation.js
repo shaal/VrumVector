@@ -552,6 +552,22 @@
     ctx.globalAlpha = 1;
   }
 
+  // Human cars need the same projection as the tilted road and AI swarm.
+  // Labels stay readable in screen space instead of being rotated with a car.
+  function drawDriver(ctx, pose, color, label) {
+    if (!pose) return;
+    ctx.save();
+    drawProjectedCar(ctx, pose.x, pose.y, pose.angle, color, pose.damaged ? 0.4 : 1, state.carHeight);
+    const p = label && project(pose.x, pose.y, state.carHeight + 30);
+    if (p) {
+      ctx.globalAlpha = 1;
+      ctx.font = 'bold 22px system-ui';ctx.textAlign = 'center';ctx.lineWidth = 5;
+      ctx.strokeStyle = '#142622';ctx.fillStyle = '#fff';
+      ctx.strokeText(label, p.x, p.y);ctx.fillText(label, p.x, p.y);
+    }
+    ctx.restore();
+  }
+
   // --------------------------------------------------------------- colors
   /** Rank t in [0,1] (0=best) → amber→lime→cyan */
   function rankColor(t, alpha) {
@@ -1094,6 +1110,7 @@
     endFrame,
     drawSwarm,
     drawChampion,
+    drawDriver,
     tickHud,
     onGenEnd,
     setFollow,
