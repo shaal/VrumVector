@@ -5,9 +5,10 @@ import vm from 'node:vm';
 import {createHash} from 'node:crypto';
 import {Miniflare} from 'miniflare';
 import {build} from 'esbuild';
-import {cleanCallsign,randomCallsign,validState,samplePeer,LapClock,roomKey} from '../AI-Car-Racer/multiplayer/state.js';
+import * as liveState from '../AI-Car-Racer/multiplayer/state.js';
+const {cleanCallsign,randomCallsign,validState,samplePeer,LapClock,roomKey,AWAY_TTL,ACTIVE_TTL,presenceTTL,driverLabel}=liveState;
 
-const pose={x:100,y:100,angle:0,speed:2,damaged:false,paused:false,laps:0,bestLap:null};
+const pose={x:100,y:100,angle:0,speed:2,damaged:false,paused:false,away:false,laps:0,bestLap:null};
 let mf;
 before(async()=>{
   const bundle=await build({entryPoints:['multiplayer/worker.js'],bundle:true,write:false,format:'esm',external:['cloudflare:workers']});
@@ -41,6 +42,65 @@ test('peer interpolation wraps angles, snaps respawns and expires stale poses',(
   assert.equal(samplePeer(peer,4000),null);
   assert.equal(samplePeer({...peer,current:{...pose,x:1000}},150).x,1000);
 });
+test('away cars stay parked through throttled timers, then expire; legacy states still work',()=>{
+  const {away,...legacy}=pose;
+  assert.deepEqual(validState(legacy),pose);
+  assert.equal(validState({...pose,away:'true'}),null);
+  const parked=validState({...pose,away:true});
+  assert.equal(parked.paused,true);assert.equal(parked.speed,0);
+  const peer={previous:{...pose,x:0},current:parked,received:1000,interval:60000};
+  assert.equal(samplePeer(peer,1000).x,pose.x,'An away car snaps directly to its parked position');
+  assert.deepEqual(samplePeer(peer,121000),parked,'Two delayed minute-long timer batches retain the parked car');
+  assert.equal(samplePeer(peer,1001+AWAY_TTL),null);
+  assert.equal(samplePeer({...peer,previous:parked,current:{...pose,x:120}},1000).x,120,'Returning drivers do not interpolate over the background interval');
+  assert.equal(presenceTTL(parked),AWAY_TTL);assert.equal(presenceTTL(pose),ACTIVE_TTL);
+  assert.equal(driverLabel('Fox',parked),'Fox · away');
+  assert.equal(driverLabel('Fox',{...pose,paused:true}),'Fox · paused');
+  assert.equal(driverLabel('Fox',pose),'Fox');
+});
+
+const clientSource=(await readFile(new URL('../AI-Car-Racer/multiplayer/client.js',import.meta.url),'utf8'))
+  .replace(/^import .*;\n/gm,'')
+  .replaceAll('import.meta.url',JSON.stringify('http://localhost/multiplayer/client.js'))
+  .replace('window.LiveSession=new LiveSession();','globalThis.Session=LiveSession;');
+function clientClock(){
+  let now=1000,closed=0,cleared=0;
+  const document=new EventTarget(),window=new EventTarget(),sent=[];
+  document.hidden=false;
+  const context=vm.createContext({...liveState,document,window,performance:{now:()=>now},setInterval(){},
+    localStorage:{getItem:()=> 'Test Driver',setItem(){}},trackKey:()=> 'test track',WebSocket:{OPEN:1}});
+  vm.runInContext(clientSource,context);
+  context.Session.prototype.createUI=function(){this.root={hidden:false};this.checkbox={};};
+  context.Session.prototype.renderUI=function(){};
+  const session=new context.Session();
+  session.info={players:[null,{...pose,controls:{clear(){cleared++;}}}],maxSpeed:15,traction:.5,invincible:false};
+  session.key=roomKey('test track',15,.5,false);session.enabled=true;session.connected=true;session.id='same-driver';session.lastAck=now;
+  const socket={readyState:1,bufferedAmount:0,send(data){sent.push(JSON.parse(data));},close(){closed++;}};
+  session.ws=socket;
+  return {session,document,window,socket,sent,get closed(){return closed;},get cleared(){return cleared;},
+    advance(ms){now+=ms;},visibility(hidden){document.hidden=hidden;document.dispatchEvent(new Event('visibilitychange'));}};
+}
+test('switching windows retains the socket through minute-long timer delays and resumes with acknowledgment grace',()=>{
+  const c=clientClock(),s=c.session;
+  s.tick();assert.equal(c.sent.at(-1).state.away,false);
+  s.clock.running=true;c.advance(1);c.visibility(true);
+  assert.equal(c.closed,0);assert.equal(s.clock.running,false);assert.equal(c.cleared,1);
+  c.advance(100);s.tick();assert.equal(c.sent.at(-1).state.away,true);
+  assert.equal(c.sent.at(-1).state.speed,0);assert.equal(c.sent.at(-1).state.paused,true);
+  const count=c.sent.length;c.advance(1000);s.tick();assert.equal(c.sent.length,count,'Background tabs send sparse heartbeats');
+  for(let i=0;i<2;i++){c.advance(60000);s.tick();assert.equal(s.ws,c.socket);}
+  c.advance(100);c.visibility(false);
+  assert.equal(s.ws,c.socket);assert.equal(c.closed,0);assert.equal(s.id,'same-driver');
+  assert.equal(c.sent.at(-1).state.away,false);assert.equal(c.cleared,2);
+  c.advance(8001);s.tick();assert.equal(c.closed,1,'A genuinely dead connection still times out after resume');
+});
+test('opting out and closing the page still remove background players immediately',()=>{
+  for(const action of ['off','close']){
+    const c=clientClock();c.visibility(true);
+    if(action==='off')c.session.setEnabled(false);else c.window.dispatchEvent(new Event('pagehide'));
+    assert.equal(c.closed,1);assert.equal(c.session.ws,null);assert.equal(c.session.connected,false);
+  }
+});
 test('lap clock requires every gate in order; pause and crash invalidate partial laps',()=>{
   const gates=[[{x:0,y:-10},{x:0,y:10}],[{x:10,y:-10},{x:10,y:10}],[{x:5,y:15},{x:15,y:15}],[{x:-10,y:10},{x:-10,y:20}]];
   const lap=new LapClock();
@@ -61,6 +121,19 @@ test('real WebSocket rooms relay live cars and renames, isolate tracks, and remo
     assert.equal(c.messages.filter(m=>m.type==='driver').length,0);
     a.ws.close();await until(()=>b.messages.some(m=>m.type==='leave'&&m.id===a.welcome.id));
   }finally{for(const p of [a,b,c])if(p.ws.readyState<2)p.ws.close();}
+});
+test('real WebSockets keep the same driver while away and resume normal poses',async()=>{
+  const a=await join('Background driver','e'.repeat(64)),b=await join('Watching driver','e'.repeat(64));
+  try{
+    a.send({...pose,away:true});
+    const parked=await until(()=>b.messages.find(m=>m.type==='driver'&&m.state?.away));
+    assert.equal(parked.id,a.welcome.id);assert.equal(parked.state.speed,0);assert.equal(parked.state.paused,true);
+    assert.equal(b.messages.some(m=>m.type==='leave'),false);
+    await delay(80);a.send({...pose,x:150},1);
+    const resumed=await until(()=>b.messages.find(m=>m.state?.x===150));
+    assert.equal(resumed.id,a.welcome.id);assert.equal(resumed.state.away,false);assert.equal(resumed.state.speed,2);
+    a.ws.close();await until(()=>b.messages.some(m=>m.type==='leave'&&m.id===a.welcome.id));
+  }finally{for(const p of [a,b])if(p.ws.readyState<2)p.ws.close();}
 });
 test('fresh visitors and identical slider or legacy saved values meet in the same real room',async()=>{
   const track='identical track geometry';

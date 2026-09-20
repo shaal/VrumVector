@@ -166,11 +166,30 @@ try{
   await a.waitForFunction(()=>window.LiveSession.peers.size===0&&window.CircuitStudio.liveCars.size===0);
   await b.locator('#live-enabled').check();
   await a.waitForFunction(()=>window.LiveSession.peers.size===1);
-  // Visibility changes run the same lifecycle handler used for real background tabs.
-  await b.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
-  await a.waitForFunction(()=>window.LiveSession.peers.size===0);
+  stage='background player stays visible, parked, and resumes the same connection';console.log(stage);
+  await b.waitForFunction(()=>window.LiveSession.connected);
+  // Visibility changes run the real lifecycle handler; isolated contexts above
+  // model normal/incognito storage without sharing callsigns or saved settings.
+  await b.evaluate(()=>{
+    window.__awaySocket=window.LiveSession.ws;window.__awayId=window.LiveSession.id;
+    window.__parkedPosition={x:playerCar2.x,y:playerCar2.y};
+    Object.defineProperty(document,'hidden',{configurable:true,value:true});
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await a.waitForFunction(()=>{
+    const drivers=window.LiveSession.drivers();
+    return drivers.length===1&&drivers[0].pose.away&&drivers[0].pose.paused&&drivers[0].pose.speed===0;
+  });
+  await a.waitForFunction(()=>[...window.CircuitStudio.liveCars.values()].some(car=>car.label.textContent==='Neon Lynx · away'));
+  assert.match(await a.locator('.live-standings').textContent(),/Neon Lynx · away/);
+  // Cross the former three-second pose expiry without waiting for a heartbeat.
+  await b.waitForTimeout(3500);
+  assert.equal(await a.evaluate(()=>window.LiveSession.drivers().length),1);
+  assert.deepEqual(await b.evaluate(()=>({x:playerCar2.x,y:playerCar2.y})),await b.evaluate(()=>window.__parkedPosition));
+  assert.equal(await b.evaluate(()=>window.LiveSession.ws===window.__awaySocket&&window.LiveSession.id===window.__awayId),true);
   await b.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
-  await a.waitForFunction(()=>window.LiveSession.peers.size===1);
+  await a.waitForFunction(()=>window.LiveSession.drivers().length===1&&!window.LiveSession.drivers()[0].pose.away);
+  assert.equal(await b.evaluate(()=>window.LiveSession.ws===window.__awaySocket&&window.LiveSession.id===window.__awayId),true);
   await b.reload();await b.waitForFunction(()=>!!window.LiveSession?.info);
   assert.equal(await b.evaluate(()=>window.LiveSession.callsign),'Neon Lynx');
   assert.equal(await b.evaluate(()=>window.LiveSession.enabled),false);
@@ -182,7 +201,7 @@ try{
   await a.reload();await a.waitForFunction(()=>!!window.PlayerAssist?.info&&!!window.CircuitStudio?.info);
   assert.equal(await a.evaluate(()=>window.PlayerAssist.enabled||window.CircuitStudio.enabled),false);
   assert.deepEqual(errors,[]);
-  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,checks:['2D default after saved 3D preference','graphics switch','multiplayer 1× lock','AI co-driver worker integration','steering/throttle override and release','AI off with held keys','default off','callsigns','legacy saved physics matching','numeric slider round-trip matching','visible room codes','cross-browser WASD','Tilt human cars and labels','generation continuity','AI 1–5','3D cars','mobile','room isolation','reconnect','hidden tab departure','reload persistence']},null,2));
+  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,checks:['2D default after saved 3D preference','graphics switch','multiplayer 1× lock','AI co-driver worker integration','steering/throttle override and release','AI off with held keys','default off','callsigns','legacy saved physics matching','numeric slider round-trip matching','visible room codes','cross-browser WASD','Tilt human cars and labels','generation continuity','AI 1–5','3D cars','mobile','room isolation','reconnect','background presence and parked car','away labels in standings and 3D','resume without reconnect','reload persistence']},null,2));
   console.log('Live multiplayer browser checks passed');
 }catch(error){
   const diagnostics=[];
