@@ -32,6 +32,12 @@
 .live-standings li {display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #ffffff18;}
 .live-standings li span {border-left:3px solid;padding-left:7px;overflow-wrap:anywhere;}
 .live-standings b {font:12px var(--font-mono,monospace);white-space:nowrap;}
+.live-other-races {border-top:1px solid #5a7065;padding-top:12px;margin-top:12px;}
+.live-other-races ul {list-style:none;padding:0;margin:0;}
+.live-other-races li {display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.live-other-races li span {overflow-wrap:anywhere;min-width:0;}
+.live-other-races button {flex-shrink:0;}
+[data-live-restore] {margin:8px 0;}
 .live-driver-labels {position:absolute;inset:0;z-index:13;pointer-events:none;overflow:hidden;}
 .live-driver-label {position:absolute;top:0;left:0;padding:3px 7px;border:1px solid;border-radius:5px;background:#142c27eb;color:#f5f6e8;font:600 10px system-ui;white-space:nowrap;}
 @media(max-width:600px){

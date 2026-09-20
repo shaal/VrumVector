@@ -16,7 +16,7 @@ try{
   await waitForServer(origin,server);
   await mf.ready;
   browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
-  const contexts=await Promise.all([browser.newContext({viewport:{width:1120,height:800}}),browser.newContext({viewport:{width:1120,height:800}})]);
+  const contexts=await Promise.all([browser.newContext({viewport:{width:1120,height:800}}),browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true})]);
   const [a,b]=await Promise.all(contexts.map(async (context,index)=>{
     const p=await context.newPage();p.setDefaultTimeout(30000);
     p.on('pageerror',e=>errors.push(e.message));
@@ -76,16 +76,24 @@ try{
   assert.equal(await b.evaluate(()=>window.LiveSession.connected),true,'Hiding rivals still shares your own car');
   await b.locator('#live-show-drivers').check();
   await Promise.all([a,b].map(p=>p.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.drivers().length===1)));
-  for(const p of [a,b])await p.locator('#startOverlayBtn').click();
+  for(const p of [a,b]){
+    await p.locator('[data-live-close]').click();await p.locator('#startOverlayBtn').click();await p.locator('.live-launch').click();
+  }
+  // Worker startup/software rendering can stall CI long enough for a socket
+  // to reconnect. Assert the ready state after starting both simulations,
+  // not just before clicking Start; a broken reconnect still times out here.
+  await Promise.all([a,b].map(p=>p.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.drivers().length===1&&/Room [A-F0-9]{8}/.test(document.querySelector('.live-room').textContent))));
   assert.deepEqual(await b.evaluate(()=>({maxSpeed,traction})),{maxSpeed:15,traction:0.5});
   const room=await a.locator('.live-room').textContent();
   assert.match(room,/Room [A-F0-9]{8}.*speed 15.*traction 0.5/);
   assert.equal(await b.locator('.live-room').textContent(),room);
   stage='slider round-trip keeps equal physics in the same room';console.log(stage);
   await b.evaluate(()=>{setMaxSpeed('14');});
-  await a.waitForFunction(()=>window.LiveSession.peers.size===0);
+  await a.waitForFunction(()=>window.LiveSession.peers.size===1&&window.LiveSession.drivers().length===0);
+  await a.getByRole('button',{name:'Join race with Neon Lynx',exact:true}).waitFor();
   await b.evaluate(()=>{setMaxSpeed('15');setTraction('0.50');});
   await Promise.all([a,b].map(p=>p.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.drivers().length===1)));
+  await b.waitForFunction(expected=>document.querySelector('.live-room').textContent===expected,room);
   assert.equal(await b.locator('.live-room').textContent(),room);
   await a.locator('.live-standings').getByText('Neon Lynx').waitFor();
   for(const p of [a,b]){
@@ -185,11 +193,11 @@ try{
   await a.waitForTimeout(500);await a.screenshot({path:`${out}/live-grid-mobile.png`});
   const bounds=await a.locator('#live-panel').boundingBox();assert.ok(bounds.x>=0&&bounds.x+bounds.width<=390);
   await a.setViewportSize({width:1120,height:800});
-  stage='room isolation, reconnect, and leaving';console.log(stage);
+  stage='setup mismatch stays discoverable, reconnect, and leaving';console.log(stage);
   await b.evaluate(()=>{maxSpeed+=1;});
-  await a.waitForFunction(()=>window.LiveSession.peers.size===0);
+  await a.waitForFunction(()=>window.LiveSession.peers.size===1&&window.LiveSession.drivers().length===0&&window.CircuitStudio.liveCars.size===0);
   await b.evaluate(()=>{maxSpeed-=1;});
-  await a.waitForFunction(()=>window.LiveSession.peers.size===1);
+  await a.waitForFunction(()=>window.LiveSession.drivers().length===1);
   await b.evaluate(()=>window.LiveSession.ws.close());
   await b.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.peers.size===1,{},{timeout:30000});
   await b.locator('#live-enabled').uncheck();

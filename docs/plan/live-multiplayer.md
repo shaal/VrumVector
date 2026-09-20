@@ -14,14 +14,20 @@ drivers are hidden. Open it for two independent controls:
 Both explicit choices and the editable random callsign are remembered locally.
 A saved opt-out stays off after reload; an explicit choice to show drivers stays
 on. Chrome and incognito keep their preferences independently. The panel explains
-that other players can see your car even when you hide theirs. Room matching and
-racing guidance are under **Room & racing details** to keep the main controls simple.
+that other players can see your car even when you hide theirs. The race code and physics are visible in the panel; extra racing guidance is under
+**Room & racing details**.
 
-Connected sessions join others with the same track geometry, max speed, traction, and invincibility
-setting. Equal numeric settings match even when loaded from older saved slider
-values. The panel shows a room code and current physics: friends with the same
-code are on the same grid. Different codes mean the track or vehicle settings
-differ. Preview PRs and production have separate services. No account is needed.
+All connected sessions join a shared lobby, including visitors with different saved
+tracks or car settings. With **Show other drivers** on, matching drivers appear on
+the track and in Best laps. Others appear under **Other races** with a **Join race**
+button. Joining temporarily copies their walls, checkpoints, max speed, traction
+and invincibility. It respawns the human cars, resets lap timing and local AI,
+keeps the current paused/Start Training state, and turns adaptive gates off to
+keep the shared course stable. **Restore my setup** restores the pre-join setup.
+Joining never overwrites saved track/physics; reloading loads your own saved setup.
+Equivalent numeric strings and point-property ordering match. Drivers with stale
+poses remain named as waiting for a car, rather than silently disappearing from
+standings. Preview PRs and production have separate services. No account is needed.
 
 Remote cars have colored bodies and callsign labels in Circuit Studio and Classic
 2D, including the **Tilt** view. They do not collide with other drivers. **Chase my car** uses the existing WASD
@@ -34,10 +40,10 @@ retry with bounded backoff. Silent foreground connections expire within 15–30
 seconds; their stale car poses disappear after three seconds. Away connections
 allow 150 seconds of silence (removal within 150–165 seconds), accommodating
 Chrome's delayed background timers. A frozen/discarded tab or sleeping device can
-still lose its connection; returning reconnects automatically. Rooms are limited
-to 32 drivers. Normal and incognito windows can join the same room: identity is
-assigned per connection, without login or shared cookies. Their saved track and
-vehicle settings still need to match.
+still lose its connection; returning reconnects automatically. The lobby is limited
+to 32 drivers. Normal and incognito windows discover each other: identity is
+assigned per connection, without login or shared cookies. Different settings
+require a Join race click to share the same course, not to discover each other.
 
 Automatic joining or enabling multiplayer sets the game and AI training to 1× and locks the speed
 selector while connected or reconnecting. Turning multiplayer off unlocks the
@@ -57,8 +63,13 @@ slider supports keyboard adjustment and has a visible accessible label.
 ## Service and deployment
 
 `multiplayer/worker.js` runs a Cloudflare Worker with one SQLite-backed Durable
-Object per track/rules hash. WebSocket hibernation attachments retain only active
-session state; there is no race-history database. Clients send ten updates per
+Object for the public `/lobby`. Legacy `/room/<hash>` routes remain available for
+older pages during rollout; both devices must reload to use the shared lobby.
+WebSocket hibernation attachments retain small active-session state. Bounded
+geometry is stored separately per connection so complex tracks do not overflow
+attachment limits; it is deleted on departure. There is no race-history database.
+Setup metadata is sent on change, on welcome and periodically for recovery,
+not with every pose. Clients send ten updates per
 second in the foreground and sparse parked states in the background. The service
 caps accepted updates, bounds message size,
 validates the wire shape and numeric ranges, assigns connection IDs, and allows
@@ -90,13 +101,19 @@ Miniflare, including relay, isolation, departure, away/resume states, input
 rejection, interpolation, and lap validity. Simulated-clock client checks cover
 minute-long timer delays and acknowledgment grace on resume.
 `npm run test:multiplayer:browser` runs independent browser
-contexts against that service, covering automatic joining without starting training,
+contexts (desktop and mobile emulation from first load) against that service,
+covering automatic joining without starting training,
 hidden-by-default drivers, independent visibility, saved choices and opt-out,
 callsigns, actual WASD motion,
 1–5-car worker cohorts, generation continuity, 3D cars, mobile layout, isolation,
 reconnection, visibility lifecycle, and reload behavior. The visibility event is
 simulated in this headless test; parked car rendering and retention of the same
 live socket across away/resume are checked against the real local service.
+`node tests/multiplayer-discovery-browser.mjs` additionally loads independent
+desktop/mobile profiles with different saved tracks and physics, checks discovery,
+taps Join race, verifies geometry/physics synchronization and preservation of
+saved settings, restores the original setup, and checks real WASD pose delivery.
+Mobile emulation is not a physical-phone test.
 The existing WebGPU/WebGL and contrast workflows continue to run.
 
 ## AI driving

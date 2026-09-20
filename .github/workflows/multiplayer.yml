@@ -18,6 +18,7 @@ jobs:
       - run: npm ci
       - run: npm run test:multiplayer
       - run: npx playwright install --with-deps chromium
+      - run: node tests/multiplayer-discovery-browser.mjs
       - run: npm run test:multiplayer:browser
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
