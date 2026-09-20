@@ -79,6 +79,10 @@ try{
   for(const p of [a,b]){
     await p.locator('[data-live-close]').click();await p.locator('#startOverlayBtn').click();await p.locator('.live-launch').click();
   }
+  // Worker startup/software rendering can stall CI long enough for a socket
+  // to reconnect. Assert the ready state after starting both simulations,
+  // not just before clicking Start; a broken reconnect still times out here.
+  await Promise.all([a,b].map(p=>p.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.drivers().length===1&&/Room [A-F0-9]{8}/.test(document.querySelector('.live-room').textContent))));
   assert.deepEqual(await b.evaluate(()=>({maxSpeed,traction})),{maxSpeed:15,traction:0.5});
   const room=await a.locator('.live-room').textContent();
   assert.match(room,/Room [A-F0-9]{8}.*speed 15.*traction 0.5/);
