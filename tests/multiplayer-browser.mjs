@@ -65,7 +65,7 @@ try{
   await b.evaluate(()=>{setMaxSpeed('15');setTraction('0.50');});
   await Promise.all([a,b].map(p=>p.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.drivers().length===1)));
   assert.equal(await b.locator('.live-room').textContent(),room);
-  assert.match(await a.locator('.live-standings').textContent(),/Neon Lynx/);
+  await a.locator('.live-standings').getByText('Neon Lynx').waitFor();
   for(const p of [a,b]){
     assert.equal(await p.evaluate(()=>simSpeed),1);
     assert.equal(await p.locator('#simSpeedInput').inputValue(),'1');
@@ -181,7 +181,7 @@ try{
     return drivers.length===1&&drivers[0].pose.away&&drivers[0].pose.paused&&drivers[0].pose.speed===0;
   });
   await a.waitForFunction(()=>[...window.CircuitStudio.liveCars.values()].some(car=>car.label.textContent==='Neon Lynx · away'));
-  assert.match(await a.locator('.live-standings').textContent(),/Neon Lynx · away/);
+  await a.locator('.live-standings').getByText('Neon Lynx · away',{exact:true}).waitFor();
   // Cross the former three-second pose expiry without waiting for a heartbeat.
   await b.waitForTimeout(3500);
   assert.equal(await a.evaluate(()=>window.LiveSession.drivers().length),1);
