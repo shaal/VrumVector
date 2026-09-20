@@ -6,6 +6,7 @@ import {contextKey} from './learning/policy.js';
 import {GRAPH_DIM,GRAPH_SCHEMA,graphExample,validExample,heldOut} from './learning/graph-features.js';
 let _ready=null,_module=null,_model=null,_saved=null;
 let _replay=[],_cursor=0,_pending=new Map();
+let _selections=new WeakMap();
 const emptyStats=()=>({trained:0,heldOut:0,modelError:0,emaError:0});
 let _stats=emptyStats();
 const create=()=>new _module.WasmGraphRanker(GRAPH_DIM,8,20260919);
@@ -35,10 +36,21 @@ export function gnnScore(memory,candidates,context){
 // a descendant outcome has changed its fitness or lineage metadata.
 export function rememberSelection(seeds,memory,candidates,context,emaFor=()=>0){
   if(!_model||!context)return;
+  const samples=[];
   for(const seed of seeds){
     const sample=graphExample(seed.id,memory,candidates,context);if(!sample)continue;
-    const key=sample.context+'::'+seed.id;
-    _pending.set(key,{...sample,prediction:predict(sample),ema:Math.max(-1,Math.min(1,emaFor(seed.id)||0))});
+    samples.push({id:seed.id,...sample});
+  }
+  _selections.set(seeds,samples);
+  rememberCachedSelection(seeds,emaFor);
+}
+// A cache hit is another selection with its own future outcome. Reuse the
+// frozen node/parent features, and predict before observing that new outcome.
+export function rememberCachedSelection(seeds,emaFor=()=>0){
+  if(!_model)return;
+  for(const sample of _selections.get(seeds)||[]){
+    const key=sample.context+'::'+sample.id;
+    _pending.set(key,{...sample,prediction:predict(sample),ema:Math.max(-1,Math.min(1,emaFor(sample.id)||0))});
   }
   while(_pending.size>100)_pending.delete(_pending.keys().next().value);
 }
@@ -82,5 +94,5 @@ export function deserialize(s){
   }catch(error){candidate?.free();console.warn('[gnn] checkpoint rejected; retaining current model',error);return false;}
 }
 export function _debugReset(){
-  _model?.free();_model=_module?create():null;_saved=null;_replay=[];_cursor=0;_stats=emptyStats();_pending.clear();
+  _model?.free();_model=_module?create():null;_saved=null;_replay=[];_cursor=0;_stats=emptyStats();_pending.clear();_selections=new WeakMap();
 }

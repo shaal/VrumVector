@@ -217,6 +217,15 @@ try{
     for(let i=0;i<160;i++){
       b.recommendSeeds(basis,2);b.observeOffspring([{id:'graph-a',meanFitness:7,count:3},{id:'graph-b',meanFitness:1,count:3}],context);
     }
+    b.setConsistencyMode('eventual');
+    const cached=b.recommendSeeds(basis,2),trained=graph.info().trained;
+    b.observeOffspring([{id:'graph-a',meanFitness:7,count:3},{id:'graph-b',meanFitness:1,count:3}],context);
+    for(let i=0;i<3;i++){
+      if(b.recommendSeeds(basis,2)!==cached)throw Error('Expected cached driver selection');
+      b.observeOffspring([{id:'graph-a',meanFitness:7,count:3},{id:'graph-b',meanFitness:1,count:3}],context);
+    }
+    if(graph.info().trained!==trained+8)throw Error('Cached selections lost graph learning outcomes');
+    b.setConsistencyMode('fresh');
     b.recommendSeeds(basis,2);if(b.info().reranker!=='ema')throw Error('Auto prematurely promoted GNN');
     b.setRerankerMode('gnn');const ranked=b.recommendSeeds(basis,2);
     if(b.info().reranker!=='gnn'||ranked[0].id!=='graph-a')throw Error('Trained graph did not learn descendant ranking');

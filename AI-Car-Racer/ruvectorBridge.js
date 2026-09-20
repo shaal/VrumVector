@@ -15,7 +15,7 @@
 import initVec, { VectorDB } from '../vendor/ruvector/ruvector_wasm/ruvector_wasm.js?v=hnsw-wasm-20260424b';
 import initCnn, { CnnEmbedder } from '../vendor/ruvector/ruvector_cnn_wasm/index.js';
 import { flatten, unflatten, FLAT_LENGTH, TOPOLOGY, BRAIN_SCHEMA_VERSION } from './brainCodec.js';
-import {loadGnn,isReady as gnnIsReady,gnnScore,rememberSelection,observeGraph,
+import {loadGnn,isReady as gnnIsReady,gnnScore,rememberSelection,rememberCachedSelection,observeGraph,
   info as gnnInfo,serialize as gnnSerialize,deserialize as gnnDeserialize,_debugReset as gnnReset} from './gnnReranker.js';
 // P3.A — hyperbolic HNSW swap. `loadHyperbolic` boots the wasm side; the
 // adapter mimics the slice of VectorDB the bridge actually calls (insert /
@@ -827,7 +827,10 @@ export function recommendSeeds(trackVec, k = 5) {
     : null;
   if (consistencyMode === 'eventual') {
     const cached = _consistencyGetCachedResult(cacheKey);
-    if (cached.hit) return cached.value;
+    if (cached.hit) {
+      rememberCachedSelection(cached.value,learnedWeight);
+      return cached.value;
+    }
   }
   const memory=contextualArchive();
   const frozenSnap = (consistencyMode === 'frozen') ? _consistencyStats() : null;

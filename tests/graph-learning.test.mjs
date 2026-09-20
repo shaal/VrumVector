@@ -34,6 +34,22 @@ test('held-out contexts never update model or replay and use pre-outcome predict
  assert.equal(graph.serialize().model,before.model);assert.deepEqual(graph.serialize().replay,before.replay);
  assert.equal(graph.info().heldOut,stats.heldOut+2);assert.ok(graph.info().modelMSE>=0);
 });
+test('cached selections learn each new outcome while keeping frozen parent features',()=>{
+ const initial=graphExample('b',memory,candidates,training),count=graph.info().trained;
+ graph.rememberSelection(seeds,memory,candidates,training);
+ graph.observeGraph('b',training,.2);
+ const fitness=memory.get('a').meta.fitness;
+ try{
+  memory.get('a').meta.fitness=999;
+  for(let i=0;i<3;i++){
+   graph.rememberCachedSelection(seeds);
+   assert.equal(graph.observeGraph('b',training,-.4),true);
+   const latest=graph.serialize().replay.at(-1);
+   assert.deepEqual(latest.node,initial.node);assert.deepEqual(latest.neighbors,initial.neighbors);
+  }
+ }finally{memory.get('a').meta.fitness=fitness;}
+ assert.equal(graph.info().trained,count+4);
+});
 test('complete graph checkpoint restores rankings and continued optimizer updates; corrupt saves are atomic',()=>{
  const saved=graph.serialize(),scores=[...graph.gnnScore(memory,candidates,training)];
  graph._debugReset();assert.equal(graph.deserialize(saved),true);assert.deepEqual([...graph.gnnScore(memory,candidates,training)],scores);
