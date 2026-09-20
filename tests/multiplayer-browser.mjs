@@ -93,6 +93,7 @@ try{
   await a.getByRole('button',{name:'Join race with Neon Lynx',exact:true}).waitFor();
   await b.evaluate(()=>{setMaxSpeed('15');setTraction('0.50');});
   await Promise.all([a,b].map(p=>p.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.drivers().length===1)));
+  await b.waitForFunction(expected=>document.querySelector('.live-room').textContent===expected,room);
   assert.equal(await b.locator('.live-room').textContent(),room);
   await a.locator('.live-standings').getByText('Neon Lynx').waitFor();
   for(const p of [a,b]){

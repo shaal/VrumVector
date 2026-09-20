@@ -128,7 +128,10 @@ class LiveSession {
   }
   async updateRaceCode(key){
     const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key));
-    if(this.key===key)this.room=[...new Uint8Array(digest)].slice(0,4).map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+    if(this.key===key){
+      this.room=[...new Uint8Array(digest)].slice(0,4).map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+      this.renderUI();
+    }
   }
   disconnect(){
     this.epoch++;const ws=this.ws;this.ws=null;this.connected=false;this.room='';this.peers.clear();
@@ -181,7 +184,7 @@ class LiveSession {
     const setup=validSetup({inner:info.road?.innerList,outer:info.road?.outerList,gates:info.road?.checkPointList,maxSpeed:info.maxSpeed,traction:info.traction,invincible:!!info.invincible});
     if(!setup){if(this.ws)this.disconnect();this.status='This track is too large or incomplete for multiplayer.';this.renderUI();return;}
     const key=setupKey(setup);
-    if(key!==this.key){this.key=key;this.setup=setup;this.sentSetup=false;this.setupSeq=null;this.nextSend=0;this.resetRace();this.retryAt=0;this.updateRaceCode(key);}
+    if(key!==this.key){this.key=key;this.setup=setup;this.room='';this.sentSetup=false;this.setupSeq=null;this.nextSend=0;this.resetRace();this.retryAt=0;this.updateRaceCode(key);}
     const now=performance.now();
     if(this.ws&&now-Math.max(this.lastAck,this.resumedAt||0)>(document.hidden?AWAY_TTL:8000)){this.disconnect();this.retry();}
     if(!this.ws&&!this.connecting&&now>=(this.retryAt||0))this.connect(key);
@@ -219,7 +222,7 @@ class LiveSession {
     this.root.querySelector('#live-visibility-help').textContent=!this.enabled?'Turn on multiplayer to see other drivers.':this.showDrivers?'Drivers in your race appear on track. Join another race below.':'Their cars, callsigns and lap times are hidden.';
     if(this.statusNode.textContent!==status)this.statusNode.textContent=status;
     this.roomNode.hidden=!this.enabled||!this.room;
-    const roomText=this.room&&this.info?`Room ${this.room} · speed ${Number(this.info.maxSpeed)} · traction ${Number(this.info.traction)} · invincibility ${this.info.invincible?'on':'off'}`:'';
+    const roomText=this.room&&this.setup?`Room ${this.room} · speed ${this.setup.maxSpeed} · traction ${this.setup.traction} · invincibility ${this.setup.invincible?'on':'off'}`:'';
     if(this.roomNode.textContent!==roomText)this.roomNode.textContent=roomText;
     const standings=this.root.querySelector('.live-standings');standings.hidden=!this.connected||!this.showDrivers;
     const others=this.root.querySelector('.live-other-races');
