@@ -592,7 +592,9 @@ function restartBatch(){
     begin();
 }
 function setMaxSpeed(value){
-    maxSpeed = value;
+    const speed = Number(value);
+    if (!Number.isFinite(speed) || speed <= 0) return;
+    maxSpeed = speed;
     begin();
 }
 function makeInvincible(){
@@ -602,7 +604,9 @@ function makeInvincible(){
     document.getElementById('hide').innerText = playerCar.invincible?"Invincible Off":"Invincible On";
 }
 function setTraction(value){
-    traction = value;
+    const grip = Number(value);
+    if (!Number.isFinite(grip) || grip < 0 || grip > 1) return;
+    traction = grip;
     begin();
 }
 

@@ -1,5 +1,11 @@
 // Shared, deliberately small wire format. Never accept arbitrary car objects.
 export const COLORS = ['#79dec6','#f3bc76','#bca4f5','#f49cab','#8acaf5','#d5e58c'];
+// Range inputs (and older saved physics) supply strings. Equal driving rules
+// must produce the same room as the numeric defaults used by a fresh visitor.
+// Keep protocol 1's numeric key so existing default clients can still join.
+export function roomKey(track, maxSpeed, traction, invincible) {
+  return JSON.stringify([1,track,Number(maxSpeed),Number(traction),!!invincible]);
+}
 export function cleanCallsign(value) {
   return typeof value === 'string' ? value.normalize('NFKC').replace(/[^\p{L}\p{N} _-]/gu,'').trim().replace(/\s+/g,' ').slice(0,24) : '';
 }

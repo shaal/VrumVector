@@ -4,10 +4,13 @@ Open **Multiplayer**, edit the random callsign, then enable **Show live drivers*
 It starts off on every page load. The callsign alone is remembered locally.
 Enabling the option shares the WASD car and joins other visible, opted-in browser
 sessions with the same track geometry, max speed, traction, and invincibility
-setting. Preview PRs and production have separate services. No account is needed.
+setting. Equal numeric settings match even when loaded from older saved slider
+values. The panel shows a room code and current physics: friends with the same
+code are on the same grid. Different codes mean the track or vehicle settings
+differ. Preview PRs and production have separate services. No account is needed.
 
 Remote cars have colored bodies and callsign labels in Circuit Studio and Classic
-2D. They do not collide with other drivers. **Chase my car** uses the existing WASD
+2D, including the **Tilt** view. They do not collide with other drivers. **Chase my car** uses the existing WASD
 camera. Replays hide live cars until playback ends. Hidden tabs, editor/A-B views,
 closed pages, and switching multiplayer off leave the room. Failed connections
 retry with bounded backoff. Silent connections expire within 15–30 seconds;

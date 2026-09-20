@@ -17,12 +17,17 @@ try{
   await mf.ready;
   browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   const contexts=await Promise.all([browser.newContext({viewport:{width:1120,height:800}}),browser.newContext({viewport:{width:1120,height:800}})]);
-  const [a,b]=await Promise.all(contexts.map(async context=>{
+  const [a,b]=await Promise.all(contexts.map(async (context,index)=>{
     const p=await context.newPage();p.setDefaultTimeout(30000);
     p.on('pageerror',e=>errors.push(e.message));
     await p.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
     await p.route('**/multiplayer/config.json',route=>route.fulfill({json:{endpoint:'http://127.0.0.1:8878'}}));
     await p.addInitScript(()=>localStorage.setItem('vv.circuitStudio',JSON.stringify({enabled:true})));
+    if(index===1)await p.addInitScript(()=>{
+      // A returning player who used the old physics sliders stores strings.
+      localStorage.setItem('maxSpeed',JSON.stringify('15'));
+      localStorage.setItem('traction',JSON.stringify('0.50'));
+    });
     await p.goto(`${origin}/AI-Car-Racer/?rv=0`);
     await p.waitForFunction(()=>!!window.LiveSession?.info&&!!window.PlayerAssist?.info&&!!window.CircuitStudio?.info);
     await p.evaluate(()=>{setN(2);setSeconds(4);setSimSpeed(20);});
@@ -50,6 +55,16 @@ try{
   assert.equal(await a.evaluate(()=>playerCar2.controls.forward||playerCar2.controls.left||playerCar2.controls.reverse),false);
   await a.locator('#live-enabled').check();await b.locator('#live-enabled').check();
   await Promise.all([a,b].map(p=>p.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.drivers().length===1)));
+  assert.deepEqual(await b.evaluate(()=>({maxSpeed,traction})),{maxSpeed:15,traction:0.5});
+  const room=await a.locator('.live-room').textContent();
+  assert.match(room,/Room [A-F0-9]{8}.*speed 15.*traction 0.5/);
+  assert.equal(await b.locator('.live-room').textContent(),room);
+  stage='slider round-trip keeps equal physics in the same room';console.log(stage);
+  await b.evaluate(()=>{setMaxSpeed('14');});
+  await a.waitForFunction(()=>window.LiveSession.peers.size===0);
+  await b.evaluate(()=>{setMaxSpeed('15');setTraction('0.50');});
+  await Promise.all([a,b].map(p=>p.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.drivers().length===1)));
+  assert.equal(await b.locator('.live-room').textContent(),room);
   assert.match(await a.locator('.live-standings').textContent(),/Neon Lynx/);
   for(const p of [a,b]){
     assert.equal(await p.evaluate(()=>simSpeed),1);
@@ -69,6 +84,16 @@ try{
     await a.waitForFunction(start=>playerCar2.controls.forward&&Math.hypot(playerCar2.x-start.x,playerCar2.y-start.y)>10,start);
     await b.waitForFunction(start=>{const p=window.LiveSession.drivers()[0];return p&&Math.hypot(p.pose.x-start.x,p.pose.y-start.y)>1;},start);
   }finally{await a.keyboard.up('w');}
+  stage='human cars and remote callsigns render in Tilt';console.log(stage);
+  await a.evaluate(()=>{
+    window.__tiltLabels=[];
+    const fillText=ctx.fillText.bind(ctx);
+    ctx.fillText=(text,...args)=>{if(window.DemoPresentation.state.view3d)window.__tiltLabels.push(text);return fillText(text,...args);};
+  });
+  await a.getByRole('button',{name:'Tilt',exact:true}).click();
+  await a.waitForFunction(()=>window.__tiltLabels.includes('Neon Lynx')&&window.__tiltLabels.includes('You · WASD'));
+  await a.screenshot({path:`${out}/live-grid-tilt.png`});
+  await a.getByRole('button',{name:'Tilt',exact:true}).click();
   stage='AI co-driver and manual overrides';console.log(stage);
   await a.evaluate(()=>{setSeconds(60);begin(true);});
   await a.locator('#ai-drive-toggle').click();
@@ -157,7 +182,7 @@ try{
   await a.reload();await a.waitForFunction(()=>!!window.PlayerAssist?.info&&!!window.CircuitStudio?.info);
   assert.equal(await a.evaluate(()=>window.PlayerAssist.enabled||window.CircuitStudio.enabled),false);
   assert.deepEqual(errors,[]);
-  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,checks:['2D default after saved 3D preference','graphics switch','multiplayer 1× lock','AI co-driver worker integration','steering/throttle override and release','AI off with held keys','default off','callsigns','cross-browser WASD','generation continuity','AI 1–5','3D cars','mobile','room isolation','reconnect','hidden tab departure','reload persistence']},null,2));
+  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,checks:['2D default after saved 3D preference','graphics switch','multiplayer 1× lock','AI co-driver worker integration','steering/throttle override and release','AI off with held keys','default off','callsigns','legacy saved physics matching','numeric slider round-trip matching','visible room codes','cross-browser WASD','Tilt human cars and labels','generation continuity','AI 1–5','3D cars','mobile','room isolation','reconnect','hidden tab departure','reload persistence']},null,2));
   console.log('Live multiplayer browser checks passed');
 }catch(error){
   const diagnostics=[];
