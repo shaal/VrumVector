@@ -2,13 +2,14 @@ import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
-import {createHash} from 'node:crypto';
+import {createHash,webcrypto} from 'node:crypto';
 import {Miniflare} from 'miniflare';
 import {build} from 'esbuild';
 import * as liveState from '../AI-Car-Racer/multiplayer/state.js';
 const {cleanCallsign,randomCallsign,validState,samplePeer,LapClock,roomKey,AWAY_TTL,ACTIVE_TTL,presenceTTL,driverLabel}=liveState;
 
 const pose={x:100,y:100,angle:0,speed:2,damaged:false,paused:false,away:false,laps:0,bestLap:null};
+const setup={inner:[{x:100,y:100},{x:200,y:100},{x:200,y:200}],outer:[{x:0,y:0},{x:300,y:0},{x:300,y:300}],gates:[[{x:100,y:100},{x:0,y:0}],[{x:200,y:200},{x:300,y:300}]],maxSpeed:15,traction:.5,invincible:false};
 let mf;
 before(async()=>{
   const bundle=await build({entryPoints:['multiplayer/worker.js'],bundle:true,write:false,format:'esm',external:['cloudflare:workers']});
@@ -19,7 +20,7 @@ after(async()=>{await mf?.dispose();});
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn){for(let i=0;i<100;i++){const v=fn();if(v)return v;await delay(20);}throw new Error('Timed out waiting for a room event');}
 async function join(name,room='a'.repeat(64)){
-  const response=await mf.dispatchFetch(`http://local/room/${room}?name=${encodeURIComponent(name)}`,{headers:{Upgrade:'websocket',Origin:'http://127.0.0.1:8877'}});
+  const response=await mf.dispatchFetch(`http://local/${room==='lobby'?'lobby':'room/'+room}?name=${encodeURIComponent(name)}`,{headers:{Upgrade:'websocket',Origin:'http://127.0.0.1:8877'}});
   assert.equal(response.status,101);
   const ws=response.webSocket,messages=[];
   ws.addEventListener('message',e=>messages.push(JSON.parse(e.data)));ws.accept();
@@ -68,14 +69,14 @@ function clientClock(){
   const document=new EventTarget(),window=new EventTarget(),sent=[],storage=new Map([['vv.callsign','Test Driver']]),speeds=[];
   document.hidden=false;document.getElementById=()=>({classList:{contains:()=>false}});
   window.setSimSpeed=value=>speeds.push(value);
-  const context=vm.createContext({...liveState,document,window,performance:{now:()=>now},setInterval(){},
+  const context=vm.createContext({...liveState,document,window,crypto:webcrypto,TextEncoder,performance:{now:()=>now},setInterval(){},
     localStorage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)},trackKey:()=> 'test track',WebSocket:{OPEN:1}});
   vm.runInContext(clientSource,context);
   context.Session.prototype.createUI=function(){this.root={hidden:false};this.checkbox={};};
   context.Session.prototype.renderUI=function(){};
   const session=new context.Session();
-  session.info={players:[null,{...pose,controls:{clear(){cleared++;}}}],maxSpeed:15,traction:.5,invincible:false};
-  session.key=roomKey('test track',15,.5,false);session.enabled=true;session.connected=true;session.id='same-driver';session.lastAck=now;
+  session.info={road:{innerList:setup.inner,outerList:setup.outer,checkPointList:setup.gates},players:[null,{...pose,controls:{clear(){cleared++;}}}],maxSpeed:15,traction:.5,invincible:false};
+  session.setup=setup;session.key=liveState.setupKey(setup);session.enabled=true;session.connected=true;session.id='same-driver';session.lastAck=now;
   const socket={readyState:1,bufferedAmount:0,send(data){sent.push(JSON.parse(data));},close(){closed++;}};
   session.ws=socket;
   return {session,document,window,socket,sent,storage,speeds,newSession:()=>new context.Session(),get closed(){return closed;},get cleared(){return cleared;},
@@ -92,7 +93,7 @@ test('new visitors join automatically at 1× with drivers hidden, without starti
 });
 test('visibility changes keep sharing and the same socket; opt-out and explicit choices persist',()=>{
   const c=clientClock(),s=c.session;
-  s.receive({id:'rival',name:'Other driver',color:liveState.COLORS[1],state:pose});
+  s.receive({id:'rival',name:'Other driver',color:liveState.COLORS[1],state:pose,setup});
   assert.equal(s.peers.size,1);assert.equal(s.drivers().length,0);
   s.drawClassic(new Proxy({},{get(){throw new Error('Hidden drivers must not draw in Classic or Tilt');}}));
   s.tick();assert.equal(c.sent.length,1,'Hidden rivals do not stop your own car being shared');
@@ -113,6 +114,52 @@ test('invalid saved multiplayer preferences fall back to connected and hidden',(
     c.storage.set('vv.multiplayer',raw);const s=c.newSession();
     assert.equal(s.enabled,true);assert.equal(s.showDrivers,false);
   }
+});
+test('canonical setups match saved key order and numeric strings while rejecting invalid geometry',()=>{
+  const reordered={...setup,inner:setup.inner.map(p=>({y:p.y,x:p.x,selected:true})),maxSpeed:'15',traction:'0.50'};
+  assert.deepEqual(liveState.validSetup(reordered),setup);
+  assert.equal(liveState.setupKey(liveState.validSetup(reordered)),liveState.setupKey(setup));
+  for(const changed of [{inner:[]},{outer:Array(257).fill({x:1,y:2})},{gates:[]},{gates:[[{x:0,y:0},{x:0,y:0}],setup.gates[1]]},{inner:[{x:Infinity,y:0},...setup.inner]},{traction:2},{invincible:'false'},{maxSpeed:101}])assert.equal(liveState.validSetup({...setup,...changed}),null);
+});
+test('different setups remain discoverable; joining and restoring keeps the socket and saved preferences',()=>{
+  const c=clientClock(),s=c.session,other={...setup,maxSpeed:14};
+  s.setShowDrivers(true);
+  s.receive({id:'phone',name:'Phone',color:liveState.COLORS[1],state:pose,setup:other});
+  assert.equal(s.peers.size,1);assert.equal(s.drivers().length,0);
+  s.receive({id:'phone',name:'Phone',color:liveState.COLORS[1],state:{...pose,x:120}});
+  assert.equal(s.peers.get('phone').setup.maxSpeed,14,'Small pose updates retain race metadata');
+  const saved=[...c.storage];
+  c.window.applyMultiplayerSetup=value=>({...s.info,maxSpeed:value.maxSpeed,traction:value.traction,invincible:value.invincible,road:{innerList:value.inner,outerList:value.outer,checkPointList:value.gates}});
+  s.joinDriver('phone');
+  assert.equal(s.drivers().length,1);assert.equal(s.ws,c.socket);assert.equal(s.originalSetup.setup.maxSpeed,15);
+  assert.equal(c.sent.at(-1).setup.maxSpeed,14);
+  s.restoreSetup();assert.equal(s.drivers().length,0);assert.equal(s.setup.maxSpeed,15);assert.equal(s.originalSetup,null);
+  assert.equal(s.ws,c.socket);assert.equal(c.closed,0);assert.deepEqual([...c.storage],saved);
+});
+test('lobby discovers Phone and Brave despite different physics, preserves metadata, and accepts large tracks',async()=>{
+  const a=await join('Phone','lobby'),b=await join('Brave','lobby');let c;
+  const send=(p,value,seq=0)=>p.ws.send(JSON.stringify({type:'state',name:p===a?'Phone':'Brave',state:pose,seq,setup:value}));
+  try{
+    send(a,setup);send(b,{...setup,maxSpeed:14});
+    const seen=await until(()=>a.messages.find(m=>m.name==='Brave'&&m.setup));
+    assert.equal(seen.setup.maxSpeed,14);assert.deepEqual(seen.state,pose);
+    await until(()=>b.messages.find(m=>m.name==='Phone'&&m.setup));
+    await delay(80);b.send({...pose,x:125},1,'Brave');
+    const poseOnly=await until(()=>a.messages.find(m=>m.name==='Brave'&&m.state?.x===125));
+    assert.equal(poseOnly.setup,undefined,'Do not resend geometry with every pose');
+    c=await join('Late arrival','lobby');
+    assert.equal(c.welcome.players.find(p=>p.name==='Brave').setup.maxSpeed,14);
+    const large={...setup,inner:Array.from({length:256},(_,i)=>({x:i+.123456789012,y:i+.987654321098})),outer:Array.from({length:256},(_,i)=>({x:i+500.123456789,y:i+500.987654321})),gates:Array.from({length:256},(_,i)=>[{x:i+.123456789,y:i+.987654321},{x:i+500.123456789,y:i+500.987654321}])};
+    assert.ok(JSON.stringify(large).length>16384);
+    await delay(80);send(b,large,2);
+    const largeUpdate=await until(()=>a.messages.find(m=>m.setup?.inner.length===256));
+    assert.equal(largeUpdate.setup.gates.length,256);
+  }finally{for(const p of [a,b,c])p?.ws.close();}
+});
+test('lobby requires a valid setup before relaying state',async()=>{
+  const a=await join('Invalid setup','lobby'),b=await join('Observer','lobby');
+  try{a.send();await until(()=>b.messages.some(m=>m.type==='leave'&&m.id===a.welcome.id));}
+  finally{a.ws.close();b.ws.close();}
 });
 test('switching windows retains the socket through minute-long timer delays and resumes with acknowledgment grace',()=>{
   const c=clientClock(),s=c.session;

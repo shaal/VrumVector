@@ -12,6 +12,25 @@ export const driverLabel = (name,state) => name+(state?.away?' · away':state?.p
 export function roomKey(track, maxSpeed, traction, invincible) {
   return JSON.stringify([1,track,Number(maxSpeed),Number(traction),!!invincible]);
 }
+// Share only bounded geometry and driving rules, never arbitrary editor/car
+// objects. Canonical {x,y} order also matches older saves with extra metadata.
+export function validSetup(value) {
+  if (!value || typeof value.invincible!=='boolean') return null;
+  const point=p=>p&&['x','y'].every(k=>typeof p[k]==='number'&&Number.isFinite(p[k])&&Math.abs(p[k])<=20000)?{x:p.x,y:p.y}:null;
+  const wall=list=>Array.isArray(list)&&list.length>=3&&list.length<=256?list.map(point):null;
+  const inner=wall(value.inner),outer=wall(value.outer);
+  if (!inner || !outer || inner.includes(null) || outer.includes(null)) return null;
+  if (!Array.isArray(value.gates)||value.gates.length<2||value.gates.length>256) return null;
+  const gates=value.gates.map(g=>Array.isArray(g)&&g.length===2?g.map(point):null);
+  if(gates.some(g=>!g||g.includes(null)||(g[0].x===g[1].x&&g[0].y===g[1].y)))return null;
+  const maxSpeed=Number(value.maxSpeed),traction=Number(value.traction);
+  if(!['number','string'].includes(typeof value.maxSpeed)||!['number','string'].includes(typeof value.traction)||
+     !Number.isFinite(maxSpeed)||maxSpeed<=0||maxSpeed>100||!Number.isFinite(traction)||traction<0||traction>1)return null;
+  return {inner,outer,gates,maxSpeed,traction,invincible:value.invincible};
+}
+export function setupKey(setup) {
+  return roomKey(JSON.stringify([setup.inner,setup.outer,setup.gates]),setup.maxSpeed,setup.traction,setup.invincible);
+}
 export function cleanCallsign(value) {
   return typeof value === 'string' ? value.normalize('NFKC').replace(/[^\p{L}\p{N} _-]/gu,'').trim().replace(/\s+/g,' ').slice(0,24) : '';
 }

@@ -1271,7 +1271,7 @@ function buildBrainsBuffer(N){
 // -----------------------------------------------------------------------------
 // begin() / nextBatch() — lifecycle
 // -----------------------------------------------------------------------------
-function begin(preservePause = false){
+function begin(preservePause = false, resetPlayers = false){
     seconds = nextSeconds;
     // Page-load gate: while awaiting an explicit Start click, do NOT build
     // the 500-car population or touch the worker. That work used to run on
@@ -1301,7 +1301,7 @@ function begin(preservePause = false){
     if (!preservePause) pause = false;
     computeStartInfoInPlace(currentCheckpointList());
     // Automatic AI generations must not interrupt a human's live lap.
-    if (!(preservePause && (window.LiveSession?.enabled || window.PlayerAssist?.enabled) && playerCar && playerCar2)) {
+    if (resetPlayers || !(preservePause && (window.LiveSession?.enabled || window.PlayerAssist?.enabled) && playerCar && playerCar2)) {
         playerCar?.controls?.dispose?.();playerCar2?.controls?.dispose?.();
         playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
         playerCar2 = new Car(startInfo.x, startInfo.y, 30, 50, "WASD", maxSpeed, startInfo.heading);
@@ -1380,6 +1380,25 @@ function invalidateWorkerInit(){
     workerInited = false;
     if (typeof window.__abInvalidateInit === 'function') window.__abInvalidateInit();
 }
+
+// The multiplayer client validates the bounded wire setup before calling.
+// Joining is temporary: never call saveTrack/savePhysics/loadTrackPreset here.
+window.applyMultiplayerSetup = function(setup){
+    const clone=p=>({x:p.x,y:p.y});
+    window.AdaptiveGates?.setEnabled(false);
+    road.roadEditor.points=setup.inner.map(clone);
+    road.roadEditor.points2=setup.outer.map(clone);
+    road.roadEditor.checkPointListEditor=setup.gates.map(g=>g.map(clone));
+    maxSpeed=setup.maxSpeed;traction=setup.traction;invincible=setup.invincible;
+    road.getTrack();
+    computeStartInfoInPlace(currentCheckpointList());
+    invalidateWorkerInit();
+    window.DemoPresentation?.invalidateRoad?.();
+    window.AdaptiveGates?.onTrackChange();
+    if(typeof embedCurrentTrack==='function')embedCurrentTrack();
+    begin(true,true);
+    return {road,players:[playerCar,playerCar2],maxSpeed,traction,invincible,paused:pause,awaitingStart:window.__awaitingStart,snapshot:null};
+};
 
 // In-memory track switch for benchmarking — preserves SONA patterns and other
 // window-level state that page reload would wipe. Caller is responsible for

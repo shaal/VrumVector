@@ -1,5 +1,4 @@
-import {cleanCallsign,randomCallsign,validState,samplePeer,LapClock,COLORS,roomKey,AWAY_TTL,presenceTTL,driverLabel} from './state.js';
-import {trackKey} from '../graphics/state.js';
+import {cleanCallsign,randomCallsign,validState,validSetup,setupKey,samplePeer,LapClock,COLORS,AWAY_TTL,presenceTTL,driverLabel} from './state.js';
 
 class LiveSession {
   constructor(){
@@ -39,9 +38,11 @@ class LiveSession {
         <p class="live-status" role="status" aria-live="polite"></p>
         <form data-live-name><label for="live-callsign">Your callsign</label><div class="live-name-row"><input id="live-callsign" maxlength="24" autocomplete="off" spellcheck="false" required><button type="submit">Save</button></div></form>
         <div class="live-standings" hidden><div class="live-table-heading"><strong>Best laps</strong><span>seconds</span></div><ol></ol><p class="live-lap-hint"></p></div>
+        <div class="live-other-races" hidden><strong>Other races</strong><p class="live-note">These drivers have a different track or car settings. Join to match their setup and see their car.</p><ul></ul></div>
+        <button data-live-restore hidden>Restore my setup</button>
+        <p class="live-room live-note" hidden></p>
         <details class="live-help"><summary>Room & racing details</summary>
-          <p class="live-room live-note" hidden></p>
-          <p class="live-note">Friends need matching room codes. Use the same track, max speed, traction and invincibility settings.</p>
+          <p class="live-note">All online drivers are listed when you show drivers. Join race matches their track and car settings for this visit; your saved setup stays safe. Lap times are compared only within the same race.</p>
           <p class="live-note">Multiplayer runs at 1×. Switching windows parks your car and marks you away. Live cars pass through each other; AI cars train locally.</p>
           <p class="live-note">For a timed lap, cross the start line and every gate in order.</p>
         </details>
@@ -65,6 +66,7 @@ class LiveSession {
     this.input.onfocus=()=>this.clearControls();
     this.checkbox.onchange=()=>this.setEnabled(this.checkbox.checked);
     this.visibilityCheckbox.onchange=()=>this.setShowDrivers(this.visibilityCheckbox.checked);
+    this.root.querySelector('[data-live-restore]').onclick=()=>this.restoreSetup();
     this.root.querySelector('[data-live-chase]').onclick=()=>{
       window.CircuitStudio?.enable(true);window.CircuitStudio?.setFollowTarget('player');toggle(false);
       window.CircuitStudio?.canvas?.focus({preventScroll:true});
@@ -100,11 +102,36 @@ class LiveSession {
   }
   step(car,gates){if(this.enabled&&!document.hidden)this.clock.step(car,gates);}
   resetRace(){this.clock=new LapClock();this.localAI=null;}
+  applySetup(setup){
+    this.clearControls();
+    const info=window.applyMultiplayerSetup?.(setup);
+    if(!info)return false;
+    this.info={...this.info,...info};this.resetRace();this.tick();return true;
+  }
+  joinDriver(id){
+    const setup=validSetup(this.peers.get(id)?.setup);
+    if(!this.enabled||!setup||!this.setup)return;
+    const original=this.originalSetup||{setup:this.setup,adaptive:window.AdaptiveGates?.isEnabled()};
+    if(this.applySetup(setup))this.originalSetup=original;
+    this.renderUI();
+  }
+  restoreSetup(){
+    if(!this.originalSetup)return;
+    const original=this.originalSetup;
+    if(this.applySetup(original.setup)){
+      this.originalSetup=null;window.AdaptiveGates?.setEnabled(!!original.adaptive);
+    }
+    this.renderUI();
+  }
+  async updateRaceCode(key){
+    const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key));
+    if(this.key===key)this.room=[...new Uint8Array(digest)].slice(0,4).map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+  }
   disconnect(){
     this.epoch++;const ws=this.ws;this.ws=null;this.connected=false;this.room='';this.peers.clear();
     if(ws)try{ws.close(1000,'Left track');}catch{}
   }
-  async connect(key){
+  async connect(){
     const epoch=++this.epoch;this.connecting=true;
     try{
       if(!this.endpoint){
@@ -116,12 +143,10 @@ class LiveSession {
         if(endpoint.protocol!=='https:'&&!(local&&endpoint.protocol==='http:'))throw new Error('A secure live service is required.');
         this.endpoint=endpoint.origin;
       }
-      const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key));
       if(epoch!==this.epoch||!this.enabled||this.root.hidden)return;
-      const room=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
-      this.room=room.slice(0,8).toUpperCase();
-      const url=new URL(`/room/${room}`,this.endpoint);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.searchParams.set('name',this.callsign);
-      const ws=new WebSocket(url);this.ws=ws;this.lastAck=performance.now();this.resumedAt=0;this.lastSent=-Infinity;this.nextSend=0;this.status='Connecting to the grid…';
+      const url=new URL('/lobby',this.endpoint);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.searchParams.set('name',this.callsign);
+      const ws=new WebSocket(url);this.ws=ws;this.sentSetup=false;this.lastAck=performance.now();this.resumedAt=0;this.lastSent=-Infinity;this.nextSend=0;this.status='Connecting to the grid…';
+      this.updateRaceCode(this.key);
       ws.onmessage=event=>{
         if(this.ws!==ws)return;
         let m;try{m=JSON.parse(event.data);}catch{return;}
@@ -143,13 +168,16 @@ class LiveSession {
     if(typeof p.id!=='string'||p.id===this.id||!COLORS.includes(p.color))return;
     const old=this.peers.get(p.id),now=performance.now();
     const current=validState(p.state);
-    this.peers.set(p.id,{id:p.id,name:cleanCallsign(p.name)||'Driver',color:p.color,current,previous:old?.current,received:now,interval:old?now-old.received:100});
+    const setup=p.setup===undefined?old?.setup:validSetup(p.setup),key=setup?setupKey(setup):null;
+    this.peers.set(p.id,{id:p.id,name:cleanCallsign(p.name)||'Driver',color:p.color,setup,key,current,previous:key===old?.key?old?.current:null,received:now,interval:old?now-old.received:100});
   }
   tick(){
     const info=this.info;
     if(!this.enabled||!info||this.root.hidden)return;
-    const key=roomKey(trackKey(info.road),info.maxSpeed,info.traction,info.invincible);
-    if(key!==this.key){this.disconnect();this.key=key;this.resetRace();this.retryAt=0;}
+    const setup=validSetup({inner:info.road?.innerList,outer:info.road?.outerList,gates:info.road?.checkPointList,maxSpeed:info.maxSpeed,traction:info.traction,invincible:!!info.invincible});
+    if(!setup){if(this.ws)this.disconnect();this.status='This track is too large or incomplete for multiplayer.';this.renderUI();return;}
+    const key=setupKey(setup);
+    if(key!==this.key){this.key=key;this.setup=setup;this.sentSetup=false;this.nextSend=0;this.resetRace();this.retryAt=0;this.updateRaceCode(key);}
     const now=performance.now();
     if(this.ws&&now-Math.max(this.lastAck,this.resumedAt||0)>(document.hidden?AWAY_TTL:8000)){this.disconnect();this.retry();}
     if(!this.ws&&!this.connecting&&now>=(this.retryAt||0))this.connect(key);
@@ -157,7 +185,8 @@ class LiveSession {
     if(this.connected&&car&&this.ws?.readyState===WebSocket.OPEN&&now>=(this.nextSend||0)&&now-(this.lastSent??-Infinity)>=100){
       const state=validState({x:car.x,y:car.y,angle:car.angle,speed:car.speed,damaged:car.damaged,paused:info.paused||info.awaitingStart,away:document.hidden,laps:this.clock.laps,bestLap:this.clock.bestLap});
       if(state&&this.ws.bufferedAmount<4096){
-        this.ws.send(JSON.stringify({type:'state',seq:this.seq++,name:this.callsign,state}));
+        this.ws.send(JSON.stringify({type:'state',seq:this.seq++,name:this.callsign,state,...(!this.sentSetup?{setup:this.setup}:{})}));
+        this.sentSetup=true;
         this.lastSent=now;this.nextSend=now+(document.hidden?10000:100);
       }
     }
@@ -166,29 +195,47 @@ class LiveSession {
   }
   drivers(now=performance.now()){
     if(!this.enabled||!this.showDrivers)return [];
-    return [...this.peers.values()].map(p=>({...p,pose:samplePeer(p,now)})).filter(p=>p.pose);
+    return [...this.peers.values()].filter(p=>p.key===this.key).map(p=>({...p,pose:samplePeer(p,now)})).filter(p=>p.pose);
   }
   renderUI(){
     if(!this.root)return;
     const count=this.peers.size;
     const label=this.enabled?`Multiplayer · ${this.connected?'on':this.unavailable?'unavailable':'connecting'}`:'Multiplayer · off';
     const detail=!this.enabled?'Your car is not shared':this.showDrivers?'Other drivers shown':'Other drivers hidden';
-    const status=this.connected?(document.hidden?'Connected · your car is parked while away':count===0?'Connected · waiting for other drivers':`${count} other driver${count===1?'':'s'} on this track`):this.status;
+    const status=this.connected?(document.hidden?'Connected · your car is parked while away':count===0?'Connected · waiting for other drivers':`${count} other driver${count===1?'':'s'} online`):this.status;
     if(this.launchTitle.textContent!==label)this.launchTitle.textContent=label;
     if(this.launchDetail.textContent!==detail)this.launchDetail.textContent=detail;
     this.checkbox.checked=this.enabled;this.visibilityCheckbox.checked=this.showDrivers;this.visibilityCheckbox.disabled=!this.enabled;
     this.root.querySelector('[data-live-enabled-state]').textContent=this.enabled?'On':'Off';
     this.root.querySelector('[data-live-visibility-state]').textContent=this.showDrivers?'On':'Off';
     this.root.querySelector('#live-sharing-help').textContent=this.enabled?'Others can see your car, even when you hide theirs.':'Your car is not shared. Play privately.';
-    this.root.querySelector('#live-visibility-help').textContent=!this.enabled?'Turn on multiplayer to see other drivers.':this.showDrivers?'Their cars, callsigns and lap times are visible.':'Their cars, callsigns and lap times are hidden.';
+    this.root.querySelector('#live-visibility-help').textContent=!this.enabled?'Turn on multiplayer to see other drivers.':this.showDrivers?'Drivers in your race appear on track. Join another race below.':'Their cars, callsigns and lap times are hidden.';
     if(this.statusNode.textContent!==status)this.statusNode.textContent=status;
     this.roomNode.hidden=!this.enabled||!this.room;
     const roomText=this.room&&this.info?`Room ${this.room} · speed ${Number(this.info.maxSpeed)} · traction ${Number(this.info.traction)} · invincibility ${this.info.invincible?'on':'off'}`:'';
     if(this.roomNode.textContent!==roomText)this.roomNode.textContent=roomText;
     const standings=this.root.querySelector('.live-standings');standings.hidden=!this.connected||!this.showDrivers;
+    const others=this.root.querySelector('.live-other-races');
+    const different=[...this.peers.values()].filter(p=>p.key!==this.key);
+    others.hidden=standings.hidden||!different.length;
+    this.root.querySelector('[data-live-restore]').hidden=!this.originalSetup;
     if(this.panel.hidden||standings.hidden)return;
+    // Keep Join buttons stable while poses stream in, so touch/click and
+    // keyboard focus survive the ten-per-second standings refresh.
+    const signature=JSON.stringify(different.map(p=>[p.id,p.name,p.key]));
+    if(signature!==this.otherSignature){
+      this.otherSignature=signature;const list=others.querySelector('ul');list.replaceChildren();
+      for(const p of different){
+        const li=document.createElement('li'),name=document.createElement('span'),button=document.createElement('button');
+        name.textContent=p.name;button.textContent=p.setup?'Join race':'Connecting…';button.disabled=!p.setup;
+        button.setAttribute('aria-label',`Join race with ${p.name}`);button.onclick=()=>this.joinDriver(p.id);li.append(name,button);list.append(li);
+      }
+    }
     const rows=[{name:this.callsign+' (you)',color:this.color,bestLap:this.clock.bestLap,laps:this.clock.laps},
-      ...this.drivers().map(p=>({name:driverLabel(p.name,p.pose),color:p.color,...p.pose})),
+      ...[...this.peers.values()].filter(p=>p.key===this.key).map(p=>{
+        const pose=samplePeer(p,performance.now());
+        return {...p.current,name:pose?driverLabel(p.name,pose):p.name+' · waiting for car',color:p.color};
+      }),
       {name:'AI leader (local)',color:'#f3bc76',bestLap:this.localAI}];
     rows.sort((a,b)=>(a.bestLap??Infinity)-(b.bestLap??Infinity));
     const list=this.root.querySelector('ol');list.replaceChildren();
