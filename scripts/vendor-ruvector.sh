@@ -89,7 +89,8 @@ cleanup() {
   # they were the caller's pre-existing state). Then wipe the in-crate
   # pkg/ dir so the upstream tree stays tidy.
   if [[ -n "$UPSTREAM_ROOT" ]]; then
-    for p in "${APPLIED_PATCHES[@]}"; do
+    for (( i=${#APPLIED_PATCHES[@]}-1; i>=0; i-- )); do
+      p="${APPLIED_PATCHES[i]}"
       git -C "$UPSTREAM_ROOT" apply -R "$p" 2>/dev/null || true
     done
   fi

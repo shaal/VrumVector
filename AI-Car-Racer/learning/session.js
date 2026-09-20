@@ -100,7 +100,8 @@ class DriverLearning {
     for(const seed of (this.seeds||[]).slice(0,3)){const item=document.createElement('li');item.textContent=`${seed.matchLabel||'Saved driver'} · ${Number(seed.meta?.fitness||0).toFixed(0)} gates`;memories.append(item);}
     const sona=window.__rvBridge?.info?.().sona;
     const review=this.consolidations?`${this.consolidations} memory reviews · ${sona?.patterns??0} learned patterns.`:'Memories are reviewed every 8 generations.';
-    this.root.querySelector('[data-learning-consolidation]').textContent=review+(sona?.savedExamples?` ${sona.savedExamples} successful circuit examples saved${sona.replayedExamples?`; ${sona.replayedExamples} relearned after reload`:''}.`:'');
+    const restored=sona?.restoration==='exact'?' Full learning checkpoint restored.':sona?.restoration==='unavailable'?' Saved checkpoint retained until the learning engine is available.':sona?.replayedExamples?` ${sona.replayedExamples} circuit examples recovered from an older save.`:'';
+    this.root.querySelector('[data-learning-consolidation]').textContent=review+restored+(sona?.savedExamples?` ${sona.savedExamples} successful circuit examples saved.`:'');
   }
 }
 export const learning=window.DriverLearning=new DriverLearning();

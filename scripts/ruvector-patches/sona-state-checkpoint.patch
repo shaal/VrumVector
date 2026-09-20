@@ -1,0 +1,573 @@
+diff --git a/crates/sona/src/checkpoint.rs b/crates/sona/src/checkpoint.rs
+new file mode 100644
+index 0000000..76405ac
+--- /dev/null
++++ b/crates/sona/src/checkpoint.rs
+@@ -0,0 +1,234 @@
++//! Versioned, quiescent browser checkpoints. No replay, training, or lossy
++//! projection happens during export/import. Call while inference is stopped;
++//! the WASM binding holds exclusive access to its agent for this operation.
++use crate::{SonaConfig, MicroLoRA, BaseLoRA, EwcPlusPlus, ReasoningBank, QueryTrajectory};
++use crate::training::{EphemeralAgent, TrajectoryExport};
++use crate::trajectory::TrajectoryIdGen;
++use serde::{Serialize, Deserialize};
++use std::sync::atomic::Ordering::Relaxed;
++use std::time::Duration;
++
++const MAX_BYTES: usize = 64 * 1024 * 1024;
++#[derive(Serialize, Deserialize)]
++#[serde(deny_unknown_fields)]
++struct Checkpoint {
++    schema: u32,
++    config: SonaConfig,
++    agent_id: String,
++    start_time: u64,
++    trajectories: Vec<TrajectoryExport>,
++    quality_samples: Vec<f32>,
++    enabled: bool,
++    instant_enabled: bool,
++    background_enabled: bool,
++    micro: MicroLoRA,
++    // MicroLoRA's ordinary serde deliberately skips these optimizer fields.
++    grad_down: Vec<f32>,
++    grad_up: Vec<f32>,
++    update_count: usize,
++    base: BaseLoRA,
++    ewc: EwcPlusPlus,
++    bank: ReasoningBank,
++    pending: Vec<QueryTrajectory>,
++    dropped: u64,
++    total_seen: u64,
++    next_id: u64,
++    pending_signals: u64,
++    metrics: [u64; 4],
++    background_elapsed_ms: u64,
++}
++fn ensure(ok: bool, name: &str) -> Result<(), String> {
++    if ok { Ok(()) } else { Err(format!("Invalid checkpoint: {name}")) }
++}
++fn vector(v: &[f32], len: usize) -> bool {
++    v.len() == len && v.iter().all(|x| x.is_finite() && x.abs() <= 1e12)
++}
++fn finite(v: f32) -> bool { v.is_finite() && v.abs() <= 1e12 }
++fn same<T: Serialize>(a: &T, b: &T) -> bool {
++    serde_json::to_value(a).ok() == serde_json::to_value(b).ok()
++}
++impl Checkpoint {
++    fn validate(&self, target: &EphemeralAgent) -> Result<(), String> {
++        let c = &target.engine.config;
++        ensure(self.schema == 1 && same(&self.config, c), "schema/configuration")?;
++        ensure(c.hidden_dim > 0 && c.embedding_dim > 0, "dimensions")?;
++        ensure(self.agent_id == target.agent_id && self.agent_id.len() <= 256, "agent identity")?;
++        let m = c.hidden_dim * c.micro_lora_rank;
++        ensure(self.micro.hidden_dim == c.hidden_dim && self.micro.rank == c.micro_lora_rank
++            && vector(&self.micro.down_proj,m) && vector(&self.micro.up_proj,m)
++            && vector(&self.grad_down,m) && vector(&self.grad_up,m)
++            && finite(self.micro.scale) && self.micro.scale > 0.0
++            && self.update_count < 100 && self.pending_signals == self.update_count as u64, "micro optimizer")?;
++        let b = c.hidden_dim * c.base_lora_rank;
++        ensure(self.base.hidden_dim == c.hidden_dim && self.base.rank == c.base_lora_rank
++            && self.base.layers.len() == 12 && finite(self.base.alpha), "base dimensions")?;
++        for (i, layer) in self.base.layers.iter().enumerate() {
++            ensure(layer.layer_idx == i && vector(&layer.down_proj,b) && vector(&layer.up_proj,b), "base weights")?;
++        }
++        let e = &self.ewc;
++        let expected = target.engine.coordinator.ewc.read();
++        ensure(same(&e.config, &expected.config), "EWC configuration")?;
++        let n = e.config.param_count;
++        for v in [&e.current_fisher, &e.current_weights, &e.gradient_mean, &e.gradient_var] {
++            ensure(vector(v,n), "EWC state dimensions/values")?;
++        }
++        ensure(e.current_fisher.iter().all(|x| *x>=0.) && e.gradient_var.iter().all(|x| *x>=0.)
++            && e.task_memory.len()<=e.config.max_tasks && e.gradient_history.len()<=e.config.gradient_history_size
++            && finite(e.lambda) && e.lambda>=0., "EWC bounds")?;
++        for t in &e.task_memory {
++            ensure(vector(&t.fisher,n) && t.fisher.iter().all(|x| *x>=0.)
++                && vector(&t.optimal_weights,n) && finite(t.importance) && t.importance>=0.
++                && t.task_id < e.current_task_id, "EWC task")?;
++        }
++        for v in &e.gradient_history { ensure(vector(v,n), "EWC gradient history")?; }
++        let bank = &self.bank;
++        ensure(same(&bank.config, &target.engine.coordinator.reasoning_bank.read().config)
++            && bank.trajectories.len() <= bank.config.max_trajectories
++            && bank.patterns.len() <= 100000 && bank.pattern_index.len() == bank.patterns.len(), "pattern configuration/capacity")?;
++        for t in &bank.trajectories {
++            ensure(vector(&t.embedding,c.embedding_dim) && finite(t.quality)
++                && t.cluster.map_or(true, |x| x < c.pattern_clusters), "pattern trajectory")?;
++        }
++        let mut ids = std::collections::HashSet::new();
++        for (centroid, id) in &bank.pattern_index {
++            let p = bank.patterns.get(id).ok_or("Missing indexed pattern")?;
++            ensure(ids.insert(*id) && p.id == *id && *id < bank.next_pattern_id
++                && vector(centroid,c.embedding_dim) && *centroid == p.centroid
++                && finite(p.total_weight) && finite(p.avg_quality), "pattern index/values")?;
++        }
++        ensure(self.pending.len() <= c.trajectory_capacity && self.dropped <= self.total_seen
++            && self.pending.len() as u64 <= self.total_seen-self.dropped
++            && self.next_id < u64::MAX && self.background_elapsed_ms <= c.background_interval_ms, "buffer counters")?;
++        for t in &self.pending {
++            ensure(t.id < self.next_id && vector(&t.query_embedding,c.embedding_dim)
++                && finite(t.final_quality) && t.steps.len() <= 10000, "pending trajectory")?;
++            for s in &t.steps {
++                ensure(vector(&s.activations,c.hidden_dim) && s.attention_weights.iter().all(|x|finite(*x))
++                    && finite(s.reward), "trajectory step")?;
++            }
++        }
++        ensure(self.trajectories.len()==self.quality_samples.len() && self.trajectories.len()<=100000, "agent history")?;
++        for (t,q) in self.trajectories.iter().zip(&self.quality_samples) {
++            ensure(vector(&t.embedding,c.embedding_dim) && finite(t.quality) && *q==t.quality, "agent sample")?;
++        }
++        Ok(())
++    }
++}
++impl EphemeralAgent {
++    pub fn export_checkpoint(&mut self) -> Result<String,String> {
++        let c = &self.engine.coordinator;
++        let i = &c.instant;
++        let buffer = &i.trajectory_buffer;
++        let pending = buffer.drain();
++        // Restore raw queue entries: record() would count each one twice.
++        for t in &pending { buffer.buffer.push(t.clone()).map_err(|_| "Concurrent checkpoint access")?; }
++        let micro = i.micro_lora.read().clone();
++        let checkpoint = Checkpoint {
++            schema:1, config:self.engine.config.clone(), agent_id:self.agent_id.clone(),
++            start_time:self.start_time, trajectories:self.trajectories.clone(), quality_samples:self.quality_samples.clone(),
++            enabled:self.engine.enabled, instant_enabled:c.instant_enabled, background_enabled:c.background_enabled,
++            grad_down:micro.grad_down.clone(), grad_up:micro.grad_up.clone(), update_count:micro.update_count, micro,
++            base:c.base_lora.read().clone(), ewc:c.ewc.read().clone(), bank:c.reasoning_bank.read().clone(), pending,
++            dropped:buffer.dropped.load(Relaxed), total_seen:buffer.total_seen.load(Relaxed), next_id:i.id_gen.current(),
++            pending_signals:i.pending_signals.load(Relaxed),
++            metrics:[i.metrics.trajectories_processed.load(Relaxed),i.metrics.signals_accumulated.load(Relaxed),
++                i.metrics.flushes_performed.load(Relaxed),i.metrics.updates_applied.load(Relaxed)],
++            background_elapsed_ms:(c.background.last_extraction.read().elapsed()+*c.background.restored_elapsed.read())
++                .as_millis().min(self.engine.config.background_interval_ms as u128) as u64,
++        };
++        checkpoint.validate(self)?;
++        let json = serde_json::to_string(&checkpoint).map_err(|e|e.to_string())?;
++        ensure(json.len()<=MAX_BYTES,"size")?;
++        Ok(json)
++    }
++    pub fn import_checkpoint(&mut self, json: &str) -> Result<(),String> {
++        ensure(json.len()<=MAX_BYTES,"size")?;
++        let mut s:Checkpoint = serde_json::from_str(json).map_err(|e|e.to_string())?;
++        s.validate(self)?;
++        // Build independently. Invalid input cannot partially replace live state.
++        let mut restored = EphemeralAgent::new(self.agent_id.clone(),self.engine.config.clone());
++        restored.start_time=s.start_time;
++        restored.trajectories=s.trajectories;
++        restored.quality_samples=s.quality_samples;
++        restored.engine.enabled=s.enabled;
++        let c=&mut restored.engine.coordinator;
++        c.instant_enabled=s.instant_enabled; c.background_enabled=s.background_enabled;
++        s.micro.grad_down=s.grad_down; s.micro.grad_up=s.grad_up; s.micro.update_count=s.update_count;
++        *c.instant.micro_lora.write()=s.micro;
++        *c.base_lora.write()=s.base; *c.ewc.write()=s.ewc; *c.reasoning_bank.write()=s.bank;
++        let i=&mut c.instant;
++        for t in s.pending { i.trajectory_buffer.buffer.push(t).map_err(|_|"Checkpoint buffer overflow")?; }
++        i.trajectory_buffer.dropped.store(s.dropped,Relaxed);
++        i.trajectory_buffer.total_seen.store(s.total_seen,Relaxed);
++        i.id_gen=TrajectoryIdGen::with_start(s.next_id);
++        i.pending_signals.store(s.pending_signals,Relaxed);
++        i.metrics.trajectories_processed.store(s.metrics[0],Relaxed);
++        i.metrics.signals_accumulated.store(s.metrics[1],Relaxed);
++        i.metrics.flushes_performed.store(s.metrics[2],Relaxed);
++        i.metrics.updates_applied.store(s.metrics[3],Relaxed);
++        *c.background.restored_elapsed.write()=Duration::from_millis(s.background_elapsed_ms);
++        *self=restored;
++        Ok(())
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    fn agent() -> EphemeralAgent {
++        EphemeralAgent::new("checkpoint-test",SonaConfig {hidden_dim:8,embedding_dim:8,
++            base_lora_rank:4,micro_lora_rank:2,pattern_clusters:3,..Default::default()})
++    }
++    #[test]
++    fn checkpoint_preserves_patterns_pending_optimizer_and_nonzero_ewc() {
++        let mut a=agent();
++        for n in 0..31 {
++            // A real multi-step trajectory has a nonzero reward advantage;
++            // process_task's single-step baseline deliberately cancels out.
++            let mut t=a.engine.begin_trajectory(vec![(n as f32+1.)/32.;8]);
++            t.add_step(vec![0.1;8],vec![],0.2); t.add_step(vec![0.8;8],vec![],0.9);
++            a.engine.end_trajectory(t,0.8);
++        }
++        a.force_learn();
++        {
++            let mut e=a.engine.coordinator.ewc.write();
++            e.update_fisher(&vec![0.3;64]); e.set_optimal_weights(&vec![0.7;64]); e.start_new_task();
++            e.update_fisher(&vec![0.4;64]);
++        }
++        a.process_task(vec![0.2;8],0.9); // buffered and below the 100-step flush
++        let json=a.export_checkpoint().unwrap();
++        let mut b=agent(); b.import_checkpoint(&json).unwrap();
++        let va:serde_json::Value=serde_json::from_str(&json).unwrap();
++        let vb:serde_json::Value=serde_json::from_str(&b.export_checkpoint().unwrap()).unwrap();
++        for key in ["micro","grad_down","grad_up","update_count","ewc","bank","base","pending","next_id","metrics"] {
++            assert_eq!(va[key],vb[key],"{key}");
++        }
++        assert!(va["ewc"]["task_memory"][0]["fisher"][0].as_f64().unwrap()>0.);
++        assert!(va["grad_up"].as_array().unwrap().iter().any(|x|x.as_f64().unwrap()!=0.));
++        assert_eq!(serde_json::to_value(a.find_patterns(&vec![0.2;8],3)).unwrap(),
++            serde_json::to_value(b.find_patterns(&vec![0.2;8],3)).unwrap());
++        for _ in 0..80 { a.process_task(vec![0.4;8],0.7); b.process_task(vec![0.4;8],0.7); }
++        assert_eq!(a.engine.coordinator.get_micro_lora_weights(),b.engine.coordinator.get_micro_lora_weights());
++        assert_eq!(a.engine.coordinator.get_micro_lora_weights().1.iter().any(|x|*x!=0.),true);
++    }
++    #[test]
++    fn checkpoint_rejection_is_atomic() {
++        let mut a=agent(); a.process_task(vec![0.2;8],0.7); a.force_learn();
++        let original=a.export_checkpoint().unwrap();
++        for mutation in 0..5 {
++            let mut v:serde_json::Value=serde_json::from_str(&original).unwrap();
++            match mutation {
++                0=>v["schema"]=2.into(),
++                1=>v["config"]["hidden_dim"]=9.into(),
++                2=>v["ewc"]["current_fisher"]=serde_json::json!([0]),
++                3=>v["grad_up"][0]=serde_json::Value::Null,
++                _=>v["bank"]["pattern_index"][0][1]=9999.into(),
++            }
++            assert!(a.import_checkpoint(&v.to_string()).is_err());
++            let after:serde_json::Value=serde_json::from_str(&a.export_checkpoint().unwrap()).unwrap();
++            let before:serde_json::Value=serde_json::from_str(&original).unwrap();
++            for key in ["micro","ewc","bank","pending","grad_up"] {assert_eq!(before[key],after[key]);}
++        }
++        assert!(a.import_checkpoint("{\"schema\":NaN}").is_err());
++    }
++}
+diff --git a/crates/sona/src/engine.rs b/crates/sona/src/engine.rs
+index 9589ef3..ef49227 100644
+--- a/crates/sona/src/engine.rs
++++ b/crates/sona/src/engine.rs
+@@ -7,11 +7,11 @@ use crate::types::{QueryTrajectory, SonaConfig};
+ /// Main SONA engine integrating all components
+ pub struct SonaEngine {
+     /// Loop coordinator
+-    coordinator: LoopCoordinator,
++    pub(crate) coordinator: LoopCoordinator,
+     /// Configuration
+-    config: SonaConfig,
++    pub(crate) config: SonaConfig,
+     /// Whether engine is enabled
+-    enabled: bool,
++    pub(crate) enabled: bool,
+ }
+ 
+ impl std::fmt::Debug for SonaEngine {
+diff --git a/crates/sona/src/ewc.rs b/crates/sona/src/ewc.rs
+index 7197c33..581c5c7 100644
+--- a/crates/sona/src/ewc.rs
++++ b/crates/sona/src/ewc.rs
+@@ -65,25 +65,25 @@ pub struct TaskFisher {
+ #[derive(Clone, Debug, Serialize, Deserialize)]
+ pub struct EwcPlusPlus {
+     /// Configuration
+-    config: EwcConfig,
++    pub(crate) config: EwcConfig,
+     /// Current Fisher information (online estimate)
+-    current_fisher: Vec<f32>,
++    pub(crate) current_fisher: Vec<f32>,
+     /// Current optimal weights
+-    current_weights: Vec<f32>,
++    pub(crate) current_weights: Vec<f32>,
+     /// Task memory (circular buffer)
+-    task_memory: VecDeque<TaskFisher>,
++    pub(crate) task_memory: VecDeque<TaskFisher>,
+     /// Current task ID
+-    current_task_id: usize,
++    pub(crate) current_task_id: usize,
+     /// Current lambda
+-    lambda: f32,
++    pub(crate) lambda: f32,
+     /// Gradient history for boundary detection
+-    gradient_history: VecDeque<Vec<f32>>,
++    pub(crate) gradient_history: VecDeque<Vec<f32>>,
+     /// Running gradient mean
+-    gradient_mean: Vec<f32>,
++    pub(crate) gradient_mean: Vec<f32>,
+     /// Running gradient variance
+-    gradient_var: Vec<f32>,
++    pub(crate) gradient_var: Vec<f32>,
+     /// Samples seen for current task
+-    samples_seen: u64,
++    pub(crate) samples_seen: u64,
+ }
+ 
+ impl EwcPlusPlus {
+diff --git a/crates/sona/src/lib.rs b/crates/sona/src/lib.rs
+index e7b8228..c268fe3 100644
+--- a/crates/sona/src/lib.rs
++++ b/crates/sona/src/lib.rs
+@@ -45,6 +45,9 @@
+ 
+ #![allow(missing_docs)]
+ 
++#[cfg(feature = "serde-support")]
++pub mod checkpoint;
++
+ pub mod engine;
+ pub mod ewc;
+ pub mod loops;
+diff --git a/crates/sona/src/loops/background.rs b/crates/sona/src/loops/background.rs
+index 3e29167..a65cc85 100644
+--- a/crates/sona/src/loops/background.rs
++++ b/crates/sona/src/loops/background.rs
+@@ -71,15 +71,16 @@ impl BackgroundResult {
+ /// Background learning loop (Loop B)
+ pub struct BackgroundLoop {
+     /// Configuration
+-    config: BackgroundLoopConfig,
++    pub(crate) config: BackgroundLoopConfig,
+     /// ReasoningBank for pattern storage
+-    reasoning_bank: Arc<RwLock<ReasoningBank>>,
++    pub(crate) reasoning_bank: Arc<RwLock<ReasoningBank>>,
+     /// EWC++ for forgetting prevention
+-    ewc: Arc<RwLock<EwcPlusPlus>>,
++    pub(crate) ewc: Arc<RwLock<EwcPlusPlus>>,
+     /// Base LoRA
+-    base_lora: Arc<RwLock<BaseLoRA>>,
++    pub(crate) base_lora: Arc<RwLock<BaseLoRA>>,
+     /// Last extraction time
+-    last_extraction: RwLock<Instant>,
++    pub(crate) last_extraction: RwLock<Instant>,
++    pub(crate) restored_elapsed: RwLock<Duration>,
+ }
+ 
+ impl BackgroundLoop {
+@@ -96,12 +97,13 @@ impl BackgroundLoop {
+             ewc,
+             base_lora,
+             last_extraction: RwLock::new(Instant::now()),
++            restored_elapsed: RwLock::new(Duration::ZERO),
+         }
+     }
+ 
+     /// Check if it's time for background cycle
+     pub fn should_run(&self) -> bool {
+-        self.last_extraction.read().elapsed() >= self.config.extraction_interval
++        self.last_extraction.read().elapsed() + *self.restored_elapsed.read() >= self.config.extraction_interval
+     }
+ 
+     /// Run background learning cycle
+@@ -167,6 +169,7 @@ impl BackgroundLoop {
+ 
+         // Update last extraction time
+         *self.last_extraction.write() = Instant::now();
++        *self.restored_elapsed.write() = Duration::ZERO;
+ 
+         BackgroundResult {
+             trajectories_processed: trajectories.len(),
+diff --git a/crates/sona/src/loops/coordinator.rs b/crates/sona/src/loops/coordinator.rs
+index e412b9a..b2244c9 100644
+--- a/crates/sona/src/loops/coordinator.rs
++++ b/crates/sona/src/loops/coordinator.rs
+@@ -12,18 +12,18 @@ use std::sync::Arc;
+ /// Loop coordinator managing all learning loops
+ pub struct LoopCoordinator {
+     /// Configuration
+-    _config: SonaConfig,
++    pub(crate) _config: SonaConfig,
+     /// Instant loop (Loop A)
+-    instant: InstantLoop,
++    pub(crate) instant: InstantLoop,
+     /// Background loop (Loop B)
+-    background: BackgroundLoop,
++    pub(crate) background: BackgroundLoop,
+     /// Shared components
+-    reasoning_bank: Arc<RwLock<ReasoningBank>>,
+-    ewc: Arc<RwLock<EwcPlusPlus>>,
+-    base_lora: Arc<RwLock<BaseLoRA>>,
++    pub(crate) reasoning_bank: Arc<RwLock<ReasoningBank>>,
++    pub(crate) ewc: Arc<RwLock<EwcPlusPlus>>,
++    pub(crate) base_lora: Arc<RwLock<BaseLoRA>>,
+     /// Enabled flags
+-    instant_enabled: bool,
+-    background_enabled: bool,
++    pub(crate) instant_enabled: bool,
++    pub(crate) background_enabled: bool,
+ }
+ 
+ impl LoopCoordinator {
+diff --git a/crates/sona/src/loops/instant.rs b/crates/sona/src/loops/instant.rs
+index fb40f31..f628c87 100644
+--- a/crates/sona/src/loops/instant.rs
++++ b/crates/sona/src/loops/instant.rs
+@@ -60,15 +60,15 @@ pub struct InstantLoopMetrics {
+ /// Instant learning loop (Loop A)
+ pub struct InstantLoop {
+     /// Configuration
+-    config: InstantLoopConfig,
++    pub(crate) config: InstantLoopConfig,
+     /// Trajectory buffer
+-    trajectory_buffer: Arc<TrajectoryBuffer>,
++    pub(crate) trajectory_buffer: Arc<TrajectoryBuffer>,
+     /// Micro-LoRA adapter
+-    micro_lora: Arc<RwLock<MicroLoRA>>,
++    pub(crate) micro_lora: Arc<RwLock<MicroLoRA>>,
+     /// ID generator
+-    id_gen: TrajectoryIdGen,
++    pub(crate) id_gen: TrajectoryIdGen,
+     /// Pending signal count
+-    pending_signals: AtomicU64,
++    pub(crate) pending_signals: AtomicU64,
+     /// Metrics
+     pub metrics: InstantLoopMetrics,
+ }
+diff --git a/crates/sona/src/lora.rs b/crates/sona/src/lora.rs
+index 87aac54..56df347 100644
+--- a/crates/sona/src/lora.rs
++++ b/crates/sona/src/lora.rs
+@@ -22,24 +22,24 @@ pub const OPTIMAL_BATCH_SIZE: usize = 32;
+ #[derive(Clone, Debug, Serialize, Deserialize)]
+ pub struct MicroLoRA {
+     /// Down projection (hidden_dim -> rank)
+-    down_proj: Vec<f32>,
++    pub(crate) down_proj: Vec<f32>,
+     /// Up projection (rank -> hidden_dim)
+-    up_proj: Vec<f32>,
++    pub(crate) up_proj: Vec<f32>,
+     /// Rank (1-2 for micro updates)
+-    rank: usize,
++    pub(crate) rank: usize,
+     /// Hidden dimension
+-    hidden_dim: usize,
++    pub(crate) hidden_dim: usize,
+     /// Accumulated gradients for down
+     #[serde(skip)]
+-    grad_down: Vec<f32>,
++    pub(crate) grad_down: Vec<f32>,
+     /// Accumulated gradients for up
+     #[serde(skip)]
+-    grad_up: Vec<f32>,
++    pub(crate) grad_up: Vec<f32>,
+     /// Update count for averaging
+     #[serde(skip)]
+-    update_count: usize,
++    pub(crate) update_count: usize,
+     /// Scaling factor
+-    scale: f32,
++    pub(crate) scale: f32,
+ }
+ 
+ impl MicroLoRA {
+diff --git a/crates/sona/src/reasoning_bank.rs b/crates/sona/src/reasoning_bank.rs
+index c117f59..c3b74b7 100644
+--- a/crates/sona/src/reasoning_bank.rs
++++ b/crates/sona/src/reasoning_bank.rs
+@@ -44,31 +44,31 @@ impl Default for PatternConfig {
+ }
+ 
+ /// ReasoningBank for pattern storage and extraction
+-#[derive(Clone, Debug)]
++#[derive(Clone, Debug, Serialize, Deserialize)]
+ pub struct ReasoningBank {
+     /// Configuration
+-    config: PatternConfig,
++    pub(crate) config: PatternConfig,
+     /// Stored trajectories
+-    trajectories: Vec<TrajectoryEntry>,
++    pub(crate) trajectories: Vec<TrajectoryEntry>,
+     /// Extracted patterns
+-    patterns: HashMap<u64, LearnedPattern>,
++    pub(crate) patterns: HashMap<u64, LearnedPattern>,
+     /// Next pattern ID
+-    next_pattern_id: u64,
++    pub(crate) next_pattern_id: u64,
+     /// Pattern index (embedding -> pattern_id)
+-    pattern_index: Vec<(Vec<f32>, u64)>,
++    pub(crate) pattern_index: Vec<(Vec<f32>, u64)>,
+ }
+ 
+ /// Internal trajectory entry with embedding
+-#[derive(Clone, Debug)]
+-struct TrajectoryEntry {
++#[derive(Clone, Debug, Serialize, Deserialize)]
++pub(crate) struct TrajectoryEntry {
+     /// Trajectory embedding (query + avg activations)
+-    embedding: Vec<f32>,
++    pub(crate) embedding: Vec<f32>,
+     /// Quality score
+-    quality: f32,
++    pub(crate) quality: f32,
+     /// Cluster assignment
+-    cluster: Option<usize>,
++    pub(crate) cluster: Option<usize>,
+     /// Original trajectory ID
+-    _trajectory_id: u64,
++    pub(crate) _trajectory_id: u64,
+ }
+ 
+ impl ReasoningBank {
+diff --git a/crates/sona/src/training/federated.rs b/crates/sona/src/training/federated.rs
+index a95943f..8fa0cea 100644
+--- a/crates/sona/src/training/federated.rs
++++ b/crates/sona/src/training/federated.rs
+@@ -72,15 +72,15 @@ pub struct AgentExportStats {
+ /// Collects trajectories during its session and exports state before termination.
+ pub struct EphemeralAgent {
+     /// Agent identifier
+-    agent_id: String,
++    pub(crate) agent_id: String,
+     /// SONA engine
+-    engine: SonaEngine,
++    pub(crate) engine: SonaEngine,
+     /// Collected trajectories
+-    trajectories: Vec<TrajectoryExport>,
++    pub(crate) trajectories: Vec<TrajectoryExport>,
+     /// Session start time
+-    start_time: u64,
++    pub(crate) start_time: u64,
+     /// Quality samples
+-    quality_samples: Vec<f32>,
++    pub(crate) quality_samples: Vec<f32>,
+ }
+ 
+ impl EphemeralAgent {
+diff --git a/crates/sona/src/trajectory.rs b/crates/sona/src/trajectory.rs
+index a6f4fe4..4576d3b 100644
+--- a/crates/sona/src/trajectory.rs
++++ b/crates/sona/src/trajectory.rs
+@@ -10,13 +10,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
+ /// Lock-free trajectory buffer using crossbeam ArrayQueue
+ pub struct TrajectoryBuffer {
+     /// Internal queue
+-    buffer: ArrayQueue<QueryTrajectory>,
++    pub(crate) buffer: ArrayQueue<QueryTrajectory>,
+     /// Capacity
+-    capacity: usize,
++    pub(crate) capacity: usize,
+     /// Count of dropped trajectories
+-    dropped: AtomicU64,
++    pub(crate) dropped: AtomicU64,
+     /// Total trajectories seen
+-    total_seen: AtomicU64,
++    pub(crate) total_seen: AtomicU64,
+ }
+ 
+ impl TrajectoryBuffer {
+diff --git a/crates/sona/src/wasm.rs b/crates/sona/src/wasm.rs
+index d665842..7792d82 100644
+--- a/crates/sona/src/wasm.rs
++++ b/crates/sona/src/wasm.rs
+@@ -477,6 +477,18 @@ impl WasmEphemeralAgent {
+         serde_wasm_bindgen::to_value(&export).unwrap_or(JsValue::NULL)
+     }
+ 
++    /// Full, versioned learning checkpoint; unlike exportState, does not train.
++    #[wasm_bindgen(js_name = exportCheckpoint)]
++    pub fn export_checkpoint(&mut self) -> Result<String, JsValue> {
++        self.inner.export_checkpoint().map_err(|e| JsValue::from_str(&e))
++    }
++
++    /// Validate the complete checkpoint before replacing any live state.
++    #[wasm_bindgen(js_name = importCheckpoint)]
++    pub fn import_checkpoint(&mut self, json: &str) -> Result<(), JsValue> {
++        self.inner.import_checkpoint(json).map_err(|e| JsValue::from_str(&e))
++    }
++
+     /// Get agent statistics
+     ///
+     /// # Returns

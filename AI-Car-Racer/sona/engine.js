@@ -87,6 +87,30 @@ let _traj = null;           // in-flight JS-side trajectory buffer
 const _journal = new CircuitJournal();
 let _replayedExamples = 0;
 let _savedLora = null;
+let _savedSona = null;
+let _checkpoint = null;
+let _checkpointDirty = true;
+let _restoration = 'fresh';
+const MAX_CHECKPOINT_BYTES = 64 * 1024 * 1024;
+const makeAgent = () => WasmEphemeralAgent.withConfig(_agentId, JSON.stringify(SONA_CONFIG));
+function replaceAgent(agent) {
+  const old = _agent; _agent = agent;
+  try { old?.free(); } catch (_) { /* old build without explicit disposal */ }
+}
+function restoreTrajectory(value) {
+  if (value == null) return null;
+  const valid = v => Array.isArray(v) && v.length === SONA_HIDDEN_DIM && v.every(x => Number.isFinite(x) && Math.abs(x) <= 1e12);
+  if (!valid(value.trackVec) || !Array.isArray(value.steps) || value.steps.length > 128
+      || !Number.isFinite(value.startedAt) || !value.steps.every(s => valid(s.activations) && Number.isFinite(s.reward))) {
+    throw new Error('Invalid pending SONA trajectory');
+  }
+  return {trackVec:new Float32Array(value.trackVec), startedAt:value.startedAt,
+    steps:value.steps.map(s => ({activations:new Float32Array(s.activations), reward:s.reward}))};
+}
+function savedTrajectory() {
+  return _traj && {trackVec:Array.from(_traj.trackVec), startedAt:_traj.startedAt,
+    steps:_traj.steps.map(s => ({activations:Array.from(s.activations), reward:s.reward}))};
+}
 
 export function loadEngine() {
   if (_ready) return _ready;
@@ -103,7 +127,7 @@ export function loadEngine() {
         // (see crates/sona/src/wasm.rs lines 700–718 — it defines its own
         // serde_wasm_bindgen shim that only accepts JsValue::from_str). Pass
         // a string or the deserialise call throws "Expected JSON string".
-        return WasmEphemeralAgent.withConfig(_agentId, JSON.stringify(SONA_CONFIG));
+        return makeAgent();
       })(),
     ]);
     if (sonaRes.status === 'fulfilled') {
@@ -127,51 +151,76 @@ export const reward       = loraReward;
 export const driftL2      = loraDrift;
 export const recentDrift  = loraRecentDrift;
 export function serialize() {
-  // Keep the two independent engines independent on disk as well. Retain an
-  // unavailable adapter's previous snapshot rather than overwriting its work.
   const lora = loraSerialize() || _savedLora;
-  if (!lora && !_agent && !_journal.examples.length) return null;
-  return { engineVersion: 1, lora, sonaJournal: _journal.serialize() };
+  if (_agent?.exportCheckpoint && _checkpointDirty) {
+    try { _checkpoint = _agent.exportCheckpoint(); _checkpointDirty = false; }
+    catch (error) {
+      // A previous checkpoint cannot represent newly learned examples or
+      // counters. Omit it so reload explicitly recovers the latest journal.
+      _checkpoint = null;
+      console.warn('[sona] checkpoint export failed; saving circuit examples for recovery',error);
+    }
+  }
+  const sona = _agent ? {checkpoint:_checkpoint, trajectory:savedTrajectory(), microUpdates:_microUpdates} : _savedSona;
+  if (!lora && !sona && !_journal.examples.length) return null;
+  return {engineVersion:2, lora, sona, sonaJournal:_journal.serialize()};
 }
 export function deserialize(snapshot) {
   if (!snapshot || typeof snapshot !== 'object') return false;
-  if (snapshot.engineVersion != null && snapshot.engineVersion !== 1) return false;
-  // Read legacy snapshots where the journal was attached to the LoRA object.
-  const lora = snapshot.engineVersion === 1 ? snapshot.lora : snapshot;
+  if (snapshot.engineVersion != null && ![1,2].includes(snapshot.engineVersion)) return false;
+  const lora = snapshot.engineVersion ? snapshot.lora : snapshot;
   let restoredLora = false;
-  try { restoredLora = loraDeserialize(lora); } catch (_) { /* journal can still recover */ }
+  try { restoredLora = loraDeserialize(lora); } catch (_) { /* SONA remains independent */ }
   if (restoredLora || (!loraReady() && lora)) _savedLora = lora;
   const journal = snapshot.sonaJournal;
   const hasJournal = journal?.version === 1 && Array.isArray(journal.examples);
-  if (!hasJournal) return restoredLora;
-  _journal.restore(journal);_replayedExamples=0;
-  if(_agent){
-    try{
-      _agent.clear();_traj=null;_microUpdates=0;
-      for(const example of _journal.examples){
-        _agent.processTask(new Float32Array(example.vector),example.quality);_replayedExamples++;
+  if (hasJournal) _journal.restore(journal);
+  _replayedExamples = 0;
+  const sona = snapshot.engineVersion === 2 ? snapshot.sona : null;
+  if (sona && typeof sona.checkpoint === 'string' && sona.checkpoint.length <= MAX_CHECKPOINT_BYTES) {
+    let candidate;
+    try {
+      const pending = restoreTrajectory(sona.trajectory);
+      if (!Number.isSafeInteger(sona.microUpdates) || sona.microUpdates < 0) throw new Error('Invalid SONA update count');
+      if (!_agent) {
+        _savedSona = sona; _restoration = 'unavailable';
+        return true; // optional WASM failed; preserve its checkpoint for a later visit
       }
-      if(_replayedExamples)_agent.forceLearn();
-      _patternCount=readPatternCount(_agent);
-    }catch(error){console.warn('[sona] circuit example replay failed',error);}
+      candidate = makeAgent();
+      candidate.importCheckpoint(sona.checkpoint);
+      replaceAgent(candidate); candidate = null;
+      _checkpoint = sona.checkpoint; _checkpointDirty = false; _savedSona = sona;
+      _traj = pending; _microUpdates = sona.microUpdates;
+      _patternCount = readPatternCount(_agent); _restoration = 'exact';
+      return true;
+    } catch (error) {
+      candidate?.free();
+      console.warn('[sona] checkpoint rejected; recovering saved circuit examples',error);
+    }
+  }
+  if (hasJournal && _agent) {
+    try {
+      // clear() only clears federation history upstream; a fresh agent is
+      // necessary to avoid doubling existing patterns during fallback replay.
+      const fresh = makeAgent();
+      for (const example of _journal.examples) fresh.processTask(new Float32Array(example.vector),example.quality);
+      if (_journal.examples.length) fresh.forceLearn();
+      replaceAgent(fresh); _traj = null; _microUpdates = 0;
+      _replayedExamples = _journal.examples.length;
+      _patternCount = readPatternCount(_agent); _restoration = 'examples';
+      _checkpoint = null; _checkpointDirty = true; _savedSona = null;
+    } catch (error) { console.warn('[sona] circuit example replay failed',error); }
   }
   return restoredLora || hasJournal;
 }
 
 export function _debugReset() {
   loraDebugReset();
-  _traj = null;
-  _microUpdates = 0;
-  _patternCount = 0;
-  _journal.clear();_replayedExamples=0;
-  _savedLora = null;
-  // We don't reconstruct the SONA agent here — the wasm engines are cheap to
-  // keep around, and tests that need a clean agent state can drop the
-  // module's _agent reference manually. In the game we never hit debugReset
-  // except via the dev console.
-  if (_agent) {
-    try { _agent.clear(); } catch (_) { /* best-effort */ }
-  }
+  _traj = null; _microUpdates = 0; _patternCount = 0;
+  _journal.clear(); _replayedExamples = 0;
+  _savedLora = null; _savedSona = null; _checkpoint = null;
+  _checkpointDirty = true; _restoration = 'fresh';
+  if (_agent) replaceAgent(makeAgent());
 }
 
 // ─── SONA trajectory API ───────────────────────────────────────────────────
@@ -185,7 +234,7 @@ export function beginTrajectory(trackVec) {
   const query = coerceSonaVec(trackVec);
   if (!query) return null;
   _traj = {
-    trackVec: query,
+    trackVec: query.slice(),
     steps: [], // [{activations: Float32Array(512), reward: number}]
     startedAt: Date.now(),
   };
@@ -200,7 +249,7 @@ export function addStep(activations, _attention, stepReward) {
   if (!_traj || !sonaReady()) return;
   const acts = coerceSonaVec(activations);
   if (!acts) return;
-  _traj.steps.push({ activations: acts, reward: Number(stepReward) || 0 });
+  _traj.steps.push({ activations: acts.slice(), reward: Number.isFinite(Number(stepReward)) ? Number(stepReward) : 0 });
   // Long unattended sessions remain bounded even when a caller forgets to
   // close a trajectory. The normal game reviews every eight generations.
   if(_traj.steps.length>128)_traj.steps.shift();
@@ -217,6 +266,7 @@ export function addStep(activations, _attention, stepReward) {
 export function endTrajectory(finalFitness) {
   if (!_traj || !sonaReady()) { _traj = null; return null; }
   const agent = _agent;
+  _checkpointDirty = true;
   const tj = _traj;
   _traj = null;
   const normFinal = normaliseQuality(finalFitness);
@@ -314,6 +364,8 @@ export function info() {
       trajectorySteps: _traj ? _traj.steps.length : 0,
       savedExamples: _journal.examples.length,
       replayedExamples: _replayedExamples,
+      restoration: _restoration,
+      exactCheckpoint: typeof _agent.exportCheckpoint === 'function',
     };
   } else {
     sona = {
@@ -326,6 +378,8 @@ export function info() {
       trajectorySteps: 0,
       savedExamples: _journal.examples.length,
       replayedExamples: 0,
+      restoration: _savedSona ? 'unavailable' : 'fresh',
+      exactCheckpoint: false,
     };
   }
   return { lora, sona };
@@ -336,7 +390,7 @@ export function info() {
 function coerceSonaVec(vec) {
   if (!vec) return null;
   const f32 = toFloat32(vec);
-  if (f32.length === 0) return null;
+  if (f32.length === 0 || !f32.every(x => Number.isFinite(x) && Math.abs(x) <= 1e12)) return null;
   // SONA's hidden_dim is fixed at construction. Pad with zeros or truncate so
   // arbitrary-sized activation vectors (e.g. the 8-unit hidden layer) still
   // embed into the agent's 512-dim space. Pad rather than re-project because

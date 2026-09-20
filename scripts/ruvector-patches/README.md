@@ -24,6 +24,22 @@ this file is just the quick reference.
 |------|---------|-------------------------------------------|
 | `sona-find-patterns.patch` | `crates/sona/src/training/federated.rs`, `crates/sona/src/wasm.rs` | `EphemeralAgent::get_patterns()` called `find_patterns(&[], 0)` which always returned empty — clearly stub scaffolding. Adds real `get_all_patterns()` delegation + a new `find_patterns(query, k)` method with its `wasm_bindgen(js_name = findPatterns)` binding. Used by `AI-Car-Racer/sona/engine.js :: findPatterns`. Needs an upstream PR; tracked in `docs/plan/ruvector-upstream-patches.md`. |
 
+## Exact browser checkpoint (#11)
+
+`sona-state-checkpoint.patch` adds versioned `exportCheckpoint` / `importCheckpoint`
+bindings. It preserves ReasoningBank trajectories and indexes, both LoRA layers,
+pending gradients, EWC Fisher/task/gradient state, buffered trajectories, IDs,
+metrics, and the remaining background timer. Import validates configuration,
+dimensions, finite bounded values, capacities, and index consistency before an
+atomic replacement. Export requires quiescent access (enforced by the synchronous
+browser wrapper). Offline time does not advance the background learning timer.
+
+Rebuild with `bash scripts/build-learning-wasm.sh`. The dedicated CI workflow
+runs native continuation/rejection tests and actual WASM tests before committing
+generated bindings. The pinned upstream SHA, Rust, wasm-pack, Cargo lockfile,
+patch hashes, and binary hash are recorded. Legacy saves recover from the circuit
+journal; unsupported/corrupt checkpoints never require deleting the brain archive.
+
 ## Adding a new patch
 
 1. Apply your fix in the local ruvector tree (`~/code/utilities/ruvector/`).
