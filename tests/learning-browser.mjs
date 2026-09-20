@@ -20,6 +20,8 @@ try{
   page=await browser.newPage({viewport:{width:1120,height:800}});page.setDefaultTimeout(30000);
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+  // These checks exercise accelerated solo training; live racing has a separate suite.
+  await page.addInitScript(()=>localStorage.setItem('vv.multiplayer',JSON.stringify({enabled:false,showDrivers:false})));
   await page.goto(`${origin}/AI-Car-Racer/`);await ready();
   mark('profile choice before starting');
   assert.equal(await page.evaluate(()=>window.CircuitStudio.enabled||window.PlayerAssist.enabled),false);
