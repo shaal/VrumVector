@@ -203,6 +203,44 @@ try{
   assert.ok(retrieval.metas.every(m=>m?.track==='fixture-track'));
   assert.deepEqual(retrieval.dedup,{id:'careful-seed',careful:4,wild:5,restored:4,evaluations:2,selfParent:false});
   assert.deepEqual(retrieval.identity,{count:2,freshIsUnique:true,oldFitness:4});
+  mark('trainable graph uses descendant feedback and survives real browser reload');
+  const graphSaved=await page.evaluate(async()=>{
+    const graph=await import('/AI-Car-Racer/gnnReranker.js'),features=await import('/AI-Car-Racer/learning/graph-features.js');
+    graph._debugReset();const b=window.__rvBridge,basis=new Float32Array(512);basis[0]=1;
+    let context;for(let i=0;;i++){context={track:'graph-browser-'+i,profile:'balanced',maxSpeed:15,traction:.5,seconds:6};if(!features.heldOut(context))break;}
+    const a=Array.from({length:244},(_,i)=>Math.sin(i)*.2),z=Array.from({length:244},(_,i)=>Math.cos(i)*.2);
+    b.hydrateFromFixture({tracks:[{id:'graph-track',vec:Array.from(basis),meta:{}}],brains:[
+      {id:'graph-a',vec:a,meta:{fitness:4,generation:1,trackId:'graph-track',learningContext:context,parentIds:[]}},
+      {id:'graph-b',vec:z,meta:{fitness:4,generation:30,trackId:'graph-track',learningContext:context,parentIds:['graph-a']}}
+    ],observations:[]});
+    b.setLearningContext(context);b.setConsistencyMode('fresh');b.setRerankerMode('auto');b.setBypassLora(true);b.setUseDynamics(false);
+    for(let i=0;i<160;i++){
+      b.recommendSeeds(basis,2);b.observeOffspring([{id:'graph-a',meanFitness:7,count:3},{id:'graph-b',meanFitness:1,count:3}],context);
+    }
+    b.setConsistencyMode('eventual');
+    const cached=b.recommendSeeds(basis,2),trained=graph.info().trained;
+    b.observeOffspring([{id:'graph-a',meanFitness:7,count:3},{id:'graph-b',meanFitness:1,count:3}],context);
+    for(let i=0;i<3;i++){
+      if(b.recommendSeeds(basis,2)!==cached)throw Error('Expected cached driver selection');
+      b.observeOffspring([{id:'graph-a',meanFitness:7,count:3},{id:'graph-b',meanFitness:1,count:3}],context);
+    }
+    if(graph.info().trained!==trained+8)throw Error('Cached selections lost graph learning outcomes');
+    b.setConsistencyMode('fresh');
+    b.recommendSeeds(basis,2);if(b.info().reranker!=='ema')throw Error('Auto prematurely promoted GNN');
+    b.setRerankerMode('gnn');const ranked=b.recommendSeeds(basis,2);
+    if(b.info().reranker!=='gnn'||ranked[0].id!=='graph-a')throw Error('Trained graph did not learn descendant ranking');
+    const before=graph.serialize();await b.persist();
+    return {checkpoint:before,updates:b.info().graphLearning.updates};
+  });
+  assert.ok(graphSaved.updates>0);
+  await page.reload();await ready();
+  assert.deepEqual(await page.evaluate(async()=>(await import('/AI-Car-Racer/gnnReranker.js')).serialize()),graphSaved.checkpoint);
+  await page.route('**/ruvector_gnn_trainable_wasm_bg.wasm',route=>route.abort());
+  await page.reload();await ready();
+  assert.equal(await page.evaluate(()=>window.__rvBridge.info().gnnLoaded),false);
+  await page.evaluate(()=>window.__rvBridge.persist());
+  await page.unroute('**/ruvector_gnn_trainable_wasm_bg.wasm');await page.reload();await ready();
+  assert.deepEqual(await page.evaluate(async()=>(await import('/AI-Car-Racer/gnnReranker.js')).serialize()),graphSaved.checkpoint);
   mark('learning controls in 3D');
   await page.evaluate(()=>{window.CircuitStudio.setQuality('low');window.CircuitStudio.forceWebGL=true;});
   await page.locator('#graphics-toggle').click({timeout:90000});await page.waitForFunction(()=>window.CircuitStudio.active,{},{timeout:90000});

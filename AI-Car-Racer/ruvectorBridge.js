@@ -15,7 +15,8 @@
 import initVec, { VectorDB } from '../vendor/ruvector/ruvector_wasm/ruvector_wasm.js?v=hnsw-wasm-20260424b';
 import initCnn, { CnnEmbedder } from '../vendor/ruvector/ruvector_cnn_wasm/index.js';
 import { flatten, unflatten, FLAT_LENGTH, TOPOLOGY, BRAIN_SCHEMA_VERSION } from './brainCodec.js';
-import { loadGnn, isReady as gnnIsReady, gnnScore } from './gnnReranker.js';
+import {loadGnn,isReady as gnnIsReady,gnnScore,rememberSelection,rememberCachedSelection,observeGraph,
+  info as gnnInfo,serialize as gnnSerialize,deserialize as gnnDeserialize,_debugReset as gnnReset} from './gnnReranker.js';
 // P3.A — hyperbolic HNSW swap. `loadHyperbolic` boots the wasm side; the
 // adapter mimics the slice of VectorDB the bridge actually calls (insert /
 // search / len / isEmpty) so the swap is a one-line constructor change.
@@ -133,10 +134,8 @@ const TRACK_DEDUPE_MAX_DIST = 0.005; // ≈ 0.9975 cosine similarity
 const EMA_ALPHA = 0.3;
 const PERSIST_DEBOUNCE_MS = 250;
 
-// Minimum archive size before we switch from EMA to GNN. Rationale: a GNN
-// needs a non-trivial graph to be meaningful — with <10 brains the lineage DAG
-// is typically a chain of 1–2 nodes and message passing degenerates to identity.
-const GNN_MIN_ARCHIVE = 10;
+// Trainable GNN is explicit opt-in. Archive size alone is not evidence that
+// its weights generalize better than contextual EMA feedback.
 
 let _learningContext=null;
 let _lastLearningFeedback=[];
@@ -151,8 +150,8 @@ function decorateSeeds(candidates,k){
   if(!_learningContext)return candidates.slice().sort((a,b)=>b.score-a.score).slice(0,Math.max(1,k|0));
   const decorated=candidates.map(candidate=>{
     const match=matchContext(candidate.meta,_learningContext);
-    // Feedback applies with either structural GNN ranking or EMA ranking.
-    return {...candidate,score:candidate.score*match.factor*(1+.3*learnedWeight(candidate.id)),
+    // A trained graph replaces the EMA term; do not apply feedback twice.
+    return {...candidate,score:candidate.score*match.factor*(_rerankerMode==='ema'?1+.3*learnedWeight(candidate.id):1),
       matchLabel:match.label,exactContext:match.exact};
   });
   return selectDiverse(decorated,k);
@@ -192,10 +191,10 @@ export function setLastSeedSources(obj) {
 // setBypassLora) for backwards compatibility.
 //
 // Reranker policy (what the toggle picks, vs. what recommendSeeds ends up doing):
-//   'auto' — original behaviour: gnn if wasm loaded AND archive ≥ GNN_MIN_ARCHIVE, else ema
+//   'auto' — deterministic EMA; trained GNN is an explicit experiment
 //   'none' — skip the reranker term entirely (rerankTerm = 1, pure trackSim × fitness)
 //   'ema'  — force EMA path
-//   'gnn'  — force GNN path when wasm loaded (ignores archive-size threshold)
+//   'gnn'  — opt into trained graph ranking; EMA until eight outcomes are learned
 let _rerankerPolicy = 'auto';
 const VALID_RERANKER_MODES = ['auto', 'none', 'ema', 'gnn'];
 export function setRerankerMode(mode) {
@@ -828,7 +827,10 @@ export function recommendSeeds(trackVec, k = 5) {
     : null;
   if (consistencyMode === 'eventual') {
     const cached = _consistencyGetCachedResult(cacheKey);
-    if (cached.hit) return cached.value;
+    if (cached.hit) {
+      rememberCachedSelection(cached.value,learnedWeight);
+      return cached.value;
+    }
   }
   const memory=contextualArchive();
   const frozenSnap = (consistencyMode === 'frozen') ? _consistencyStats() : null;
@@ -923,7 +925,7 @@ export function recommendSeeds(trackVec, k = 5) {
   } else if (_rerankerPolicy === 'gnn') {
     useGnn = gnnIsReady();
   } else { // 'auto'
-    useGnn = gnnIsReady() && memory.size >= GNN_MIN_ARCHIVE;
+    useGnn = false; // keep EMA as the default until held-out racing evidence supports promotion
   }
   // Phase 3A — F7. Rerank timer. We time the GNN path when it runs AND
   // the EMA fallback path (skipRerank=true records nothing because it's
@@ -931,7 +933,7 @@ export function recommendSeeds(trackVec, k = 5) {
   let gnnMap = null;
   if (useGnn) {
     _obsStart('rerank');
-    try { gnnMap = gnnScore(memory, candidates); }
+    try { gnnMap = gnnScore(memory, candidates, _learningContext); }
     finally { _obsEnd('rerank'); }
   } else if (!skipRerank) {
     // EMA fallback: the "work" is the emaBoost lookup per candidate in
@@ -1009,6 +1011,7 @@ export function recommendSeeds(trackVec, k = 5) {
   }
   scored.sort((a, b) => b.score - a.score);
   const out = decorateSeeds(scored,k);
+  rememberSelection(out,memory,candidates,_learningContext,learnedWeight);
   // 1C — F4. In eventual mode, stash the result so the next TTL calls
   // under the same trackVec key short-circuit at the top of this fn.
   // The stored reference IS the returned array — callers MUST treat
@@ -1136,8 +1139,8 @@ function _recommendSeedsFederated({ queryVec, trackVec, k, frozenIds, trackSimBy
   else if (_rerankerPolicy === 'none') skipRerank = true;
   else if (_rerankerPolicy === 'ema') useGnn = false;
   else if (_rerankerPolicy === 'gnn') useGnn = gnnIsReady();
-  else useGnn = gnnIsReady() && memory.size >= GNN_MIN_ARCHIVE;
-  const gnnMap = (useGnn && candidatesMap.size > 0) ? gnnScore(memory, candidatesMap) : null;
+  else useGnn = false; // keep EMA as the default until held-out racing evidence supports promotion
+  const gnnMap = (useGnn && candidatesMap.size > 0) ? gnnScore(memory, candidatesMap, _learningContext) : null;
   if (skipRerank) _rerankerMode = 'none';
   else if (useGnn && gnnMap) _rerankerMode = 'gnn';
   else _rerankerMode = candidatesMap.size > 0 ? 'ema' : 'none';
@@ -1200,6 +1203,7 @@ function _recommendSeedsFederated({ queryVec, trackVec, k, frozenIds, trackSimBy
     };
   }),kk);
 
+  rememberSelection(out,memory,candidatesMap,_learningContext,learnedWeight);
   _federationStats.enabled = true;
   _federationStats.shards = shards.length;
   _federationStats.lastKPrime = kp;
@@ -1420,6 +1424,7 @@ export function observeOffspring(outcomes,context){
     const feedback=offspringFeedback(outcome,baseline);
     if(!Number.isFinite(outcome.meanFitness)||!Number.isFinite(outcome.count)||outcome.count<1)continue;
     const weight=feedback==null?(previous?.weight||0):EMA_ALPHA*feedback+(1-EMA_ALPHA)*(previous?.weight||0);
+    observeGraph(outcome.id,context,feedback);
     _observations.set(key,{weight,count:(previous?.count||0)+1,baseline:outcome.meanFitness});
     _lastLearningFeedback.push({id:outcome.id,count:outcome.count,meanFitness:outcome.meanFitness,feedback,weight});
   }
@@ -1438,8 +1443,8 @@ export function info() {
   for (const o of _observations.values()) events += (o.count | 0);
   // `reranker` reflects the mode used on the most recent recommendSeeds() call
   // ('gnn' | 'ema' | 'none'). `gnn` is a derived convenience flag for legacy
-  // callers. `gnnLoaded` is "is the GNN wasm module actually available"; we
-  // still fall back to EMA if the archive is below GNN_MIN_ARCHIVE.
+  // callers. `gnnLoaded` is "is the GNN wasm module actually available"; it
+  // falls back to EMA until eight training outcomes are available.
   // LoRA snapshot — `lora.ready` is the canonical "should the UI show
   // adapter-related widgets" flag. `lora.drift` is the L2 distance between the
   // most recent adapt() input and output; `lora.driftRecent` is a short
@@ -1459,8 +1464,9 @@ export function info() {
     ready: !!_brainDB,
     gnn: _rerankerMode === 'gnn',
     gnnLoaded: gnnIsReady(),
+    graphLearning: gnnInfo(),
     reranker: _rerankerMode,
-    rerankerThreshold: GNN_MIN_ARCHIVE,
+    rerankerThreshold: 8, // minimum observed training outcomes, not archive size
     topology: TOPOLOGY.slice(),
     lora,
     // P2.A — SONA stats exposed to the UI panel. `trajectories` grows with
@@ -1755,6 +1761,7 @@ async function hydrateLoraSnapshot() {
     });
     if (row && row.snapshot) {
       const ok = loraDeserialize(row.snapshot);
+      if(row.snapshot.gnn)gnnDeserialize(row.snapshot.gnn);
       if (!ok) console.warn('[lora] hydrate snapshot rejected (shape mismatch)');
     }
   } catch (e) {
@@ -1841,7 +1848,9 @@ export async function persist() {
       // Snapshot the adapter state. Skipped silently when the wasm module
       // didn't load — we never persist a vacuous snapshot, which would
       // overwrite a real one on the next boot.
-      const snapshot = loraSerialize();
+      const graph = gnnSerialize();
+      const snapshot = loraSerialize() || (graph ? {engineVersion:2} : null);
+      if(snapshot && graph)snapshot.gnn=graph;
       if (snapshot) lora.put({ id: LORA_KEY, snapshot });
       await txPromise(tx);
     } finally {
@@ -2138,7 +2147,7 @@ export async function _debugReset() {
   _federationStats.lastKPrime = 0;
   _federationStats.lastUnionSize = 0;
   _federationStats.lastDedupeHits = 0;
-  sonaEngineDebugReset();
+  sonaEngineDebugReset();gnnReset();
   try { dagDebugReset(); } catch (_) { /* safe to ignore */ }
   if (typeof indexedDB !== 'undefined') {
     await new Promise((resolve) => {

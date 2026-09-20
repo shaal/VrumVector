@@ -135,7 +135,7 @@
     '      <button type="button" class="rv-abbtn" data-rv="ab-reranker-opt" data-value="auto" role="radio" aria-checked="false">auto</button>',
     '      <button type="button" class="rv-abbtn" data-rv="ab-reranker-opt" data-value="none" role="radio" aria-checked="false">none</button>',
     '      <button type="button" class="rv-abbtn" data-rv="ab-reranker-opt" data-value="ema" role="radio" aria-checked="false">ema</button>',
-    '      <button type="button" class="rv-abbtn" data-rv="ab-reranker-opt" data-value="gnn" role="radio" aria-checked="false">gnn</button>',
+    '      <button type="button" class="rv-abbtn" data-rv="ab-reranker-opt" data-value="gnn" role="radio" aria-checked="false">gnn · experimental</button>',
     '    </div>',
     '    <span data-eli15="ema-reranker" role="button" tabindex="0" aria-label="Learn: reranker modes"></span>',
     '    <span data-eli15="gnn" role="button" tabindex="0" aria-label="Learn: GNN reranker"></span>',
@@ -1119,7 +1119,7 @@
     el.abRerankerBtns.forEach(function (btn) {
       if (btn.getAttribute('data-value') === 'gnn') {
         btn.classList.toggle('rv-abbtn-unavailable', !gnnLoaded);
-        btn.title = gnnLoaded ? '' : 'GNN wasm did not load — this option falls back to EMA';
+        btn.title = gnnLoaded ? 'Experimental learned graph ranking. Auto keeps EMA; at least 8 training outcomes are needed.' : 'GNN wasm did not load — this option falls back to EMA';
       }
     });
     // Sona availability mirror: if sonaReady is false, mark the sona adapter

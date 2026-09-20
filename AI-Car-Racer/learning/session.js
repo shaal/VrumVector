@@ -98,7 +98,8 @@ class DriverLearning {
     chart.setAttribute('aria-label',history.length?`Checkpoint progress over ${history.length} generations. Latest ${last.fitness}, best ${this.coach.incumbent.fitness}.`:'No completed generations yet');
     const memories=this.root.querySelector('[data-learning-memories]');memories.replaceChildren();
     for(const seed of (this.seeds||[]).slice(0,3)){const item=document.createElement('li');item.textContent=`${seed.matchLabel||'Saved driver'} · ${Number(seed.meta?.fitness||0).toFixed(0)} gates`;memories.append(item);}
-    const sona=window.__rvBridge?.info?.().sona;
+    const info=window.__rvBridge?.info?.(),sona=info?.sona,graph=info?.graphLearning;
+    this.root.querySelector('[data-learning-graph]').textContent=graph?.ready?`Experimental graph: ${graph.trained} training outcomes · ${graph.heldOut} held-out checks. Auto uses EMA.`:'Graph learning unavailable · EMA ranking stays available.';
     const review=this.consolidations?`${this.consolidations} memory reviews · ${sona?.patterns??0} learned patterns.`:'Memories are reviewed every 8 generations.';
     const restored=sona?.restoration==='exact'?' Full learning checkpoint restored.':sona?.restoration==='unavailable'?' Saved checkpoint retained until the learning engine is available.':sona?.replayedExamples?` ${sona.replayedExamples} circuit examples recovered from an older save.`:'';
     this.root.querySelector('[data-learning-consolidation]').textContent=review+restored+(sona?.savedExamples?` ${sona.savedExamples} successful circuit examples saved.`:'');
@@ -121,7 +122,7 @@ export function attachLearningControls(host){
       <div class="learning-stats"><span>BEST GATES<b data-learning-best>—</b></span><span>SURVIVED<b data-learning-survival>—</b></span><span>MUTATION<b data-learning-mutation>—</b></span></div>
       <div class="learning-chart" data-learning-chart role="img"></div>
       <p data-learning-sources></p><ol data-learning-memories></ol>
-      <button type="button" data-learning-review>Review learned memories</button><p class="learning-note" data-learning-consolidation></p>
+      <p class="learning-note" data-learning-graph></p><button type="button" data-learning-review>Review learned memories</button><p class="learning-note" data-learning-consolidation></p>
     </section>`;
   host.append(root);learning.root=root;
   root.querySelector('select').onchange=event=>learning.setProfile(event.target.value);

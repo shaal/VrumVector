@@ -41,7 +41,7 @@ Archive identity is checked against the restored mirror, with exact genome compa
 
 SONA buffers are bounded to 128 steps. Zero-checkpoint fitness has zero quality; it is not treated as a successful example. Periodic consolidation means patterns can form during a long unattended session instead of waiting until the user leaves the track.
 
-A bounded journal retains up to 32 successful circuit embeddings in the existing IndexedDB adapter snapshot. On reload they are replayed through SONA to relearn patterns. It validates dimensions, finite values, and minimum quality; duplicate circuits retain their best quality. The panel reports saved and replayed examples. This is example replay, not an exact restoration of the agent's optimizer or EWC state, and it does not reapply MicroLoRA rewards.
+The existing IndexedDB adapter snapshot now contains a versioned full SONA checkpoint: patterns and their index, buffered trajectories, LoRA weights and pending gradients, EWC state, counters, and the pending browser trajectory. Import validates the complete state before replacing the agent. A bounded 32-circuit journal remains available for legacy or corrupt-save recovery; the panel distinguishes exact restoration from example replay. Temporarily unavailable learning engines retain their saved state without deleting driving networks.
 
 The A/B baseline now uses a real genetic loop with the same profile, initialization, mutation policy, and elite preservation, without vector retrieval. Previously it generated a completely random population every generation. A single visual comparison is still not statistical proof of a universal learning improvement.
 
@@ -55,8 +55,8 @@ A regression test covers stopping mid-drift while holding steering. The former z
 
 ## Further work and current binding limits
 
-- [Trainable GNN bindings](https://github.com/shaal/VrumVector/issues/10): the current WASM layer exposes forward inference, but not weight training or checkpoint APIs. Outcome feedback now affects ranking alongside the structural GNN; it does not train the GNN's weights.
-- [Exact SONA/EWC restoration](https://github.com/shaal/VrumVector/issues/11): the ephemeral agent can export, but its browser API cannot restore an exact checkpoint. MicroLoRA and driving networks persist; exact ephemeral-agent state needs an upstream binding change.
+- [Trainable GNN evaluation](https://github.com/shaal/VrumVector/issues/10): graph message and readout weights now train on actual descendant feedback and persist with optimizer state. Entire contexts are held out of training. The first real-physics evaluation favored EMA, so Auto uses EMA and GNN is explicitly experimental. See [the full results](../validation/gnn-learning.md).
+- [Exact SONA/EWC restoration](https://github.com/shaal/VrumVector/issues/11) is implemented with rebuilt, pinned browser bindings and native/WASM/browser continuation tests. [EWC gradient alignment](https://github.com/shaal/VrumVector/issues/12) is a separate upstream learning-algorithm problem: correctly restoring its state is not evidence of an anti-forgetting benefit.
 - **Mixed-style rival grids:** run separate small populations and champions per profile, then race their leaders together. This preserves each profile's learning goal while making the opposition more varied.
 - **Multi-track curriculum:** alternate simple turns and complex circuits, with a held-out evaluation before replacing a champion. Retain a previous champion when transfer harms an already learned track.
 - **Sector practice:** use the existing crash-map vectors to identify repeated trouble spots, show them to the player, and train those sections before returning to a full lap.

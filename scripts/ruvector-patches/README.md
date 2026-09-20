@@ -53,3 +53,12 @@ journal; unsupported/corrupt checkpoints never require deleting the brain archiv
    append the applied-patch list to the crate's `VENDORED.md`.
 5. When a patch lands upstream, delete the file and bump the vendored
    commit; the VENDORED.md footer will automatically stop listing it.
+
+## Trainable graph companion (#10)
+
+`gnn-online-training.patch` adds a supervised graph layer with explicit seeded
+initialization, weight setters, gradient updates, and optimizer checkpoints to
+the upstream GNN source and browser bindings. `scripts/build-gnn-wasm.sh` builds
+the two new modules as a lightweight companion WASM package; existing attention
+bindings are retained. See `docs/validation/gnn-learning.md` for measured results
+and why automatic ranking continues to use EMA.
