@@ -1,6 +1,7 @@
 import * as T from '../../vendor/three-0.186.0/three.js';
 import { StudioUI } from './ui.js';
 import { StudioAudio } from './audio.js';
+import { driverLabel } from '../multiplayer/state.js';
 import { buildWorld, createCar, createRain, disposeTree } from './world.js';
 import { SnapshotBuffer, ReplayArchive, sampleRun, trackKey, worldX, worldZ, SCALE, clamp, finitePose } from './state.js';
 
@@ -262,7 +263,7 @@ class CircuitStudio {
         item={car,label};this.liveCars.set(driver.id,item);
       }
       this.placeCar(item.car,driver.pose,dt);
-      item.label.textContent=driver.name+(driver.pose.paused?' · paused':'');item.label.style.borderColor=driver.color;
+      item.label.textContent=driverLabel(driver.name,driver.pose);item.label.style.borderColor=driver.color;
       point.copy(item.car.position);point.y+=1.9;point.project(this.camera);
       item.label.hidden=point.z< -1||point.z>1||Math.abs(point.x)>1||Math.abs(point.y)>1;
       item.label.style.transform=`translate(${(point.x+1)*width/2}px,${(1-point.y)*height/2}px) translate(-50%,-100%)`;

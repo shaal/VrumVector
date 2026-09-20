@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
-import { cleanCallsign, validState, COLORS } from '../AI-Car-Racer/multiplayer/state.js';
+import { cleanCallsign, validState, COLORS, ACTIVE_TTL, presenceTTL } from '../AI-Car-Racer/multiplayer/state.js';
 
-const TTL=15000, MAX_PLAYERS=32;
+const TTL=ACTIVE_TTL, MAX_PLAYERS=32;
 export default {
   async fetch(request,env){
     const url=new URL(request.url);
@@ -36,7 +36,7 @@ export class LiveRoom extends DurableObject {
     this.sessions.delete(ws);try{ws.close(1000,'Left track');}catch{}
     this.broadcast({type:'leave',id:s.id});
   }
-  prune(){for(const [ws,s] of this.sessions)if(Date.now()-s.seen>TTL)this.remove(ws);}
+  prune(){for(const [ws,s] of this.sessions)if(Date.now()-s.seen>presenceTTL(s.state))this.remove(ws);}
   async fetch(request){
     this.prune();
     if(this.sessions.size>=MAX_PLAYERS)return new Response('Track full (32 drivers)',{status:503});

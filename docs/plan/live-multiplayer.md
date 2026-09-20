@@ -2,7 +2,7 @@
 
 Open **Multiplayer**, edit the random callsign, then enable **Show live drivers**.
 It starts off on every page load. The callsign alone is remembered locally.
-Enabling the option shares the WASD car and joins other visible, opted-in browser
+Enabling the option shares the WASD car and joins other opted-in browser
 sessions with the same track geometry, max speed, traction, and invincibility
 setting. Equal numeric settings match even when loaded from older saved slider
 values. The panel shows a room code and current physics: friends with the same
@@ -11,10 +11,19 @@ differ. Preview PRs and production have separate services. No account is needed.
 
 Remote cars have colored bodies and callsign labels in Circuit Studio and Classic
 2D, including the **Tilt** view. They do not collide with other drivers. **Chase my car** uses the existing WASD
-camera. Replays hide live cars until playback ends. Hidden tabs, editor/A-B views,
+camera. Replays hide live cars until playback ends. Switching windows or hiding a
+tab keeps its player connected: the car parks, receives an **away** label, and
+sends a heartbeat every ten seconds when the browser allows it. Returning resumes
+the same connection and clears held controls and the partial lap. Editor/A-B views,
 closed pages, and switching multiplayer off leave the room. Failed connections
-retry with bounded backoff. Silent connections expire within 15–30 seconds;
-stale car poses disappear after three seconds. Rooms are limited to 32 drivers.
+retry with bounded backoff. Silent foreground connections expire within 15–30
+seconds; their stale car poses disappear after three seconds. Away connections
+allow 150 seconds of silence (removal within 150–165 seconds), accommodating
+Chrome's delayed background timers. A frozen/discarded tab or sleeping device can
+still lose its connection; returning reconnects automatically. Rooms are limited
+to 32 drivers. Normal and incognito windows can join the same room: identity is
+assigned per connection, without login or shared cookies. Their saved track and
+vehicle settings still need to match.
 
 Enabling multiplayer sets the game and AI training to 1× and locks the speed
 selector while connected or reconnecting. Turning multiplayer off unlocks the
@@ -35,8 +44,9 @@ slider supports keyboard adjustment and has a visible accessible label.
 
 `multiplayer/worker.js` runs a Cloudflare Worker with one SQLite-backed Durable
 Object per track/rules hash. WebSocket hibernation attachments retain only active
-session state; there is no race-history database. The service accepts ten updates
-per second from each normal client, caps accepted updates, bounds message size,
+session state; there is no race-history database. Clients send ten updates per
+second in the foreground and sparse parked states in the background. The service
+caps accepted updates, bounds message size,
 validates the wire shape and numeric ranges, assigns connection IDs, and allows
 only the deployed site origins. Callsigns are plain text in all views.
 
@@ -62,12 +72,15 @@ Local setup:
    `http://127.0.0.1:8877/AI-Car-Racer/?rv=0` in two browser profiles.
 
 `npm run test:multiplayer` exercises actual Durable Objects/WebSockets through
-Miniflare, including relay, isolation, departure, input rejection, interpolation,
-and lap validity. `npm run test:multiplayer:browser` runs independent browser
+Miniflare, including relay, isolation, departure, away/resume states, input
+rejection, interpolation, and lap validity. Simulated-clock client checks cover
+minute-long timer delays and acknowledgment grace on resume.
+`npm run test:multiplayer:browser` runs independent browser
 contexts against that service, covering opt-in, callsigns, actual WASD motion,
 1–5-car worker cohorts, generation continuity, 3D cars, mobile layout, isolation,
 reconnection, visibility lifecycle, and reload defaults. The visibility event is
-simulated in this headless test; socket disconnection and rejoining are real.
+simulated in this headless test; parked car rendering and retention of the same
+live socket across away/resume are checked against the real local service.
 The existing WebGPU/WebGL and contrast workflows continue to run.
 
 ## AI driving

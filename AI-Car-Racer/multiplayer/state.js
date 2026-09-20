@@ -1,5 +1,11 @@
 // Shared, deliberately small wire format. Never accept arbitrary car objects.
 export const COLORS = ['#79dec6','#f3bc76','#bca4f5','#f49cab','#8acaf5','#d5e58c'];
+export const ACTIVE_TTL = 15000;
+// Chrome can batch background timers once a minute. Allow two missed beats,
+// while still expiring abandoned sessions if their socket never closes.
+export const AWAY_TTL = 150000;
+export const presenceTTL = state => state?.away ? AWAY_TTL : ACTIVE_TTL;
+export const driverLabel = (name,state) => name+(state?.away?' · away':state?.paused?' · paused':'');
 // Range inputs (and older saved physics) supply strings. Equal driving rules
 // must produce the same room as the numeric defaults used by a fresh visitor.
 // Keep protocol 1's numeric key so existing default clients can still join.
@@ -20,12 +26,14 @@ export function validState(s) {
   if (Math.abs(s.x)>20000 || Math.abs(s.y)>20000 || Math.abs(s.speed)>100 || Math.abs(s.angle)>1e6) return null;
   if (!Number.isInteger(s.laps) || s.laps<0 || s.laps>100000) return null;
   if (s.bestLap!==null && !(typeof s.bestLap==='number'&&Number.isFinite(s.bestLap)&&s.bestLap>=1&&s.bestLap<=3600)) return null;
-  return {x:s.x,y:s.y,angle:s.angle,speed:s.speed,damaged:!!s.damaged,paused:!!s.paused,laps:s.laps,bestLap:s.bestLap};
+  if (s.away!==undefined && typeof s.away!=='boolean') return null;
+  const away=s.away===true;
+  return {x:s.x,y:s.y,angle:s.angle,speed:away?0:s.speed,damaged:!!s.damaged,paused:away||!!s.paused,away,laps:s.laps,bestLap:s.bestLap};
 }
 export function samplePeer(peer, now) {
-  if (!peer.current || now-peer.received>3000) return null;
+  if (!peer.current || now-peer.received>(peer.current.away?AWAY_TTL:3000)) return null;
   const b=peer.current, a=peer.previous;
-  if (!a || b.damaged!==a.damaged || Math.hypot(b.x-a.x,b.y-a.y)>250) return b;
+  if (!a || b.away || a.away || b.damaged!==a.damaged || Math.hypot(b.x-a.x,b.y-a.y)>250) return b;
   const t=Math.max(0,Math.min(1,(now-peer.received)/Math.max(50,peer.interval||100)));
   const turn=Math.atan2(Math.sin(b.angle-a.angle),Math.cos(b.angle-a.angle));
   return {...b,x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,angle:a.angle+turn*t};

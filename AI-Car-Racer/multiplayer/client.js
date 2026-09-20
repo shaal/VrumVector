@@ -1,4 +1,4 @@
-import {cleanCallsign,randomCallsign,validState,samplePeer,LapClock,COLORS,roomKey} from './state.js';
+import {cleanCallsign,randomCallsign,validState,samplePeer,LapClock,COLORS,roomKey,AWAY_TTL,presenceTTL,driverLabel} from './state.js';
 import {trackKey} from '../graphics/state.js';
 
 class LiveSession {
@@ -10,8 +10,10 @@ class LiveSession {
     this.timer=setInterval(()=>this.tick(),100);
     document.addEventListener('visibilitychange',()=>{
       this.clearControls();this.clock.invalidate();
-      if(document.hidden){this.disconnect();this.status='Away · return to rejoin';}
-      else this.retryAt=0;
+      // Switching windows parks the car; it must not remove it from a rival's
+      // grid. Give a returning tab time to receive its queued acknowledgments.
+      if(!document.hidden){this.retryAt=0;this.resumedAt=performance.now();}
+      this.nextSend=0;this.tick();
       this.renderUI();
     });
     window.addEventListener('pagehide',()=>this.disconnect());
@@ -28,7 +30,7 @@ class LiveSession {
         <label class="live-switch"><input type="checkbox" id="live-enabled"> Show live drivers <span>off by default</span></label>
         <p class="live-status" role="status" aria-live="polite"></p>
         <p class="live-room live-note" hidden></p>
-        <p class="live-note">Join to share your WASD car with drivers on the same track and vehicle settings. Hidden tabs leave the grid.</p>
+        <p class="live-note">Join to share your WASD car with drivers on the same track and vehicle settings. Switching windows parks your car and marks you away; you stay on the grid.</p>
         <p class="live-note">Compare room codes with your friend. Different codes? Match the track, max speed, traction and invincibility settings.</p>
         <div class="live-standings" hidden><div class="live-table-heading"><strong>Best laps</strong><span>seconds</span></div><ol></ol><p class="live-lap-hint"></p></div>
         <p class="live-note">Multiplayer keeps the game at 1×. Cross the start line, then every gate in order. Live cars pass through each other.</p>
@@ -94,11 +96,11 @@ class LiveSession {
         this.endpoint=endpoint.origin;
       }
       const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key));
-      if(epoch!==this.epoch||!this.enabled||document.hidden||this.root.hidden)return;
+      if(epoch!==this.epoch||!this.enabled||this.root.hidden)return;
       const room=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,'0')).join('');
       this.room=room.slice(0,8).toUpperCase();
       const url=new URL(`/room/${room}`,this.endpoint);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.searchParams.set('name',this.callsign);
-      const ws=new WebSocket(url);this.ws=ws;this.lastAck=performance.now();this.status='Connecting to the grid…';
+      const ws=new WebSocket(url);this.ws=ws;this.lastAck=performance.now();this.resumedAt=0;this.lastSent=-Infinity;this.nextSend=0;this.status='Connecting to the grid…';
       ws.onmessage=event=>{
         if(this.ws!==ws)return;
         let m;try{m=JSON.parse(event.data);}catch{return;}
@@ -124,18 +126,21 @@ class LiveSession {
   }
   tick(){
     const info=this.info;
-    if(!this.enabled||!info||this.root.hidden||document.hidden)return;
+    if(!this.enabled||!info||this.root.hidden)return;
     const key=roomKey(trackKey(info.road),info.maxSpeed,info.traction,info.invincible);
     if(key!==this.key){this.disconnect();this.key=key;this.resetRace();this.retryAt=0;}
     const now=performance.now();
-    if(this.ws&&now-this.lastAck>8000){this.disconnect();this.retry();}
+    if(this.ws&&now-Math.max(this.lastAck,this.resumedAt||0)>(document.hidden?AWAY_TTL:8000)){this.disconnect();this.retry();}
     if(!this.ws&&!this.connecting&&now>=(this.retryAt||0))this.connect(key);
     const car=info.players[1];
-    if(this.connected&&car&&this.ws?.readyState===WebSocket.OPEN){
-      const state=validState({x:car.x,y:car.y,angle:car.angle,speed:car.speed,damaged:car.damaged,paused:info.paused||info.awaitingStart,laps:this.clock.laps,bestLap:this.clock.bestLap});
-      if(state&&this.ws.bufferedAmount<4096)this.ws.send(JSON.stringify({type:'state',seq:this.seq++,name:this.callsign,state}));
+    if(this.connected&&car&&this.ws?.readyState===WebSocket.OPEN&&now>=(this.nextSend||0)&&now-(this.lastSent??-Infinity)>=100){
+      const state=validState({x:car.x,y:car.y,angle:car.angle,speed:car.speed,damaged:car.damaged,paused:info.paused||info.awaitingStart,away:document.hidden,laps:this.clock.laps,bestLap:this.clock.bestLap});
+      if(state&&this.ws.bufferedAmount<4096){
+        this.ws.send(JSON.stringify({type:'state',seq:this.seq++,name:this.callsign,state}));
+        this.lastSent=now;this.nextSend=now+(document.hidden?10000:100);
+      }
     }
-    for(const [id,p] of this.peers)if(now-p.received>15000)this.peers.delete(id);
+    for(const [id,p] of this.peers)if(now-p.received>presenceTTL(p.current))this.peers.delete(id);
     this.renderUI();
   }
   drivers(now=performance.now()){return [...this.peers.values()].map(p=>({...p,pose:samplePeer(p,now)})).filter(p=>p.pose);}
@@ -143,7 +148,7 @@ class LiveSession {
     if(!this.root)return;
     const count=this.peers.size+1;
     const label=this.enabled?`Multiplayer · ${this.connected?count+' live':this.unavailable?'unavailable':'connecting'}`:'Multiplayer · off';
-    const status=this.connected?(count===1?'You’re on the grid · waiting for rivals':`${count} drivers on this track`):this.status;
+    const status=this.connected?(document.hidden?'Away · your car is parked on the grid':count===1?'You’re on the grid · waiting for rivals':`${count} drivers on this track`):this.status;
     if(this.launch.textContent!==label)this.launch.textContent=label;
     if(this.statusNode.textContent!==status)this.statusNode.textContent=status;
     this.roomNode.hidden=!this.enabled||!this.room;
@@ -152,7 +157,7 @@ class LiveSession {
     const standings=this.root.querySelector('.live-standings');standings.hidden=!this.connected;
     if(this.panel.hidden||!this.connected)return;
     const rows=[{name:this.callsign+' (you)',color:this.color,bestLap:this.clock.bestLap,laps:this.clock.laps},
-      ...this.drivers().map(p=>({name:p.name+(p.pose.paused?' · paused':''),color:p.color,...p.pose})),
+      ...this.drivers().map(p=>({name:driverLabel(p.name,p.pose),color:p.color,...p.pose})),
       {name:'AI leader (local)',color:'#f3bc76',bestLap:this.localAI}];
     rows.sort((a,b)=>(a.bestLap??Infinity)-(b.bestLap??Infinity));
     const list=this.root.querySelector('ol');list.replaceChildren();
@@ -162,12 +167,13 @@ class LiveSession {
   drawClassic(ctx){
     if(!this.enabled)return;
     for(const p of this.drivers()){
+      const label=driverLabel(p.name,p.pose);
       if(window.DemoPresentation?.state.view3d){
-        window.DemoPresentation.drawDriver(ctx,p.pose,p.color,p.name);continue;
+        window.DemoPresentation.drawDriver(ctx,p.pose,p.color,label);continue;
       }
       const pose=p.pose;ctx.save();ctx.translate(pose.x,pose.y);ctx.rotate(-pose.angle);
       ctx.globalAlpha=pose.damaged?.4:.9;ctx.fillStyle=p.color;ctx.fillRect(-15,-25,30,50);ctx.fillStyle='#16302b';ctx.fillRect(-11,-12,22,12);ctx.restore();
-      ctx.save();ctx.font='bold 20px system-ui';ctx.textAlign='center';ctx.lineWidth=5;ctx.strokeStyle='#142622';ctx.fillStyle='#fff';ctx.strokeText(p.name,pose.x,pose.y-42);ctx.fillText(p.name,pose.x,pose.y-42);ctx.restore();
+      ctx.save();ctx.font='bold 20px system-ui';ctx.textAlign='center';ctx.lineWidth=5;ctx.strokeStyle='#142622';ctx.fillStyle='#fff';ctx.strokeText(label,pose.x,pose.y-42);ctx.fillText(label,pose.x,pose.y-42);ctx.restore();
     }
   }
 }

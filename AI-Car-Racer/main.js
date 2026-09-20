@@ -245,6 +245,10 @@ try { localStorage.removeItem('fastLap'); } catch (_) {}
 var simSpeed = 2;
 var _simStepAccum = 0;             // retained name so setSimSpeed stays stable
 var _lastTickWall = performance.now();
+document.addEventListener('visibilitychange',()=>{
+    // A parked human car must not catch up the time spent in another window.
+    _simStepAccum=0;_lastTickWall=performance.now();
+});
 
 var wallStart = performance.now();
 
@@ -1609,7 +1613,7 @@ function animate(){
         // Still render the last snapshot while paused so the track isn't empty
         // after the user hits Pause / before first Start.
         const shouldDrawCars = !pause || !!latestSnapshot || !!window.LiveSession?.enabled;
-        if(!pause){
+        if(!pause&&!document.hidden){
             // Local player-car accumulator. Runs in parallel with the worker's;
             // exact lockstep isn't needed because player cars only matter when
             // the user is actually driving (usually simSpeed=1).
