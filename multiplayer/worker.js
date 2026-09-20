@@ -67,13 +67,13 @@ export class LiveRoom extends DurableObject {
     // At most ~15 accepted updates/sec; normal clients send ten.
     if(Date.now()-s.accepted<65)return;
     Object.assign(s,{state,name,seq:m.seq,seen:Date.now(),accepted:Date.now()});
-    if(s.lobby&&m.setup!==undefined){
+    if(s.lobby&&m.setup!==undefined&&JSON.stringify(setup)!==JSON.stringify(this.setups.get('setup:'+s.id))){
       this.setups.set('setup:'+s.id,setup);await this.ctx.storage.put('setup:'+s.id,setup);
     }
     const withSetup=s.lobby&&(m.setup!==undefined||Date.now()-s.setupSent>=5000);
     if(withSetup)s.setupSent=Date.now();
     ws.serializeAttachment(s);this.broadcast({type:'driver',...this.player(s,withSetup)},ws);
-    this.send(ws,{type:'ack'});
+    this.send(ws,{type:'ack',seq:m.seq});
   }
   webSocketClose(ws){this.remove(ws);}
   webSocketError(ws){this.remove(ws);}

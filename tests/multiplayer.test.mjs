@@ -136,6 +136,15 @@ test('different setups remain discoverable; joining and restoring keeps the sock
   s.restoreSetup();assert.equal(s.drivers().length,0);assert.equal(s.setup.maxSpeed,15);assert.equal(s.originalSetup,null);
   assert.equal(s.ws,c.socket);assert.equal(c.closed,0);assert.deepEqual([...c.storage],saved);
 });
+test('setup metadata retries until accepted, and an old acknowledgment cannot confirm a newer setup',()=>{
+  const c=clientClock(),s=c.session;
+  s.tick();const first=c.sent.at(-1);assert.equal(first.setup.maxSpeed,15);
+  c.advance(100);s.tick();assert.equal(c.sent.at(-1).setup.maxSpeed,15,'Unacknowledged metadata survives a dropped/rate-limited update');
+  s.acknowledge(c.sent.at(-1).seq);c.advance(100);s.tick();assert.equal(c.sent.at(-1).setup,undefined);
+  s.info.maxSpeed=14;c.advance(100);s.tick();const changed=c.sent.at(-1);assert.equal(changed.setup.maxSpeed,14);
+  s.acknowledge(first.seq);c.advance(100);s.tick();assert.equal(c.sent.at(-1).setup.maxSpeed,14);
+  s.acknowledge(changed.seq);c.advance(100);s.tick();assert.equal(c.sent.at(-1).setup,undefined);
+});
 test('lobby discovers Phone and Brave despite different physics, preserves metadata, and accepts large tracks',async()=>{
   const a=await join('Phone','lobby'),b=await join('Brave','lobby');let c;
   const send=(p,value,seq=0)=>p.ws.send(JSON.stringify({type:'state',name:p===a?'Phone':'Brave',state:pose,seq,setup:value}));
@@ -143,6 +152,7 @@ test('lobby discovers Phone and Brave despite different physics, preserves metad
     send(a,setup);send(b,{...setup,maxSpeed:14});
     const seen=await until(()=>a.messages.find(m=>m.name==='Brave'&&m.setup));
     assert.equal(seen.setup.maxSpeed,14);assert.deepEqual(seen.state,pose);
+    assert.equal((await until(()=>b.messages.find(m=>m.type==='ack'))).seq,0);
     await until(()=>b.messages.find(m=>m.name==='Phone'&&m.setup));
     await delay(80);b.send({...pose,x:125},1,'Brave');
     const poseOnly=await until(()=>a.messages.find(m=>m.name==='Brave'&&m.state?.x===125));

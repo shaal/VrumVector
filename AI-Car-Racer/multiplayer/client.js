@@ -102,6 +102,9 @@ class LiveSession {
   }
   step(car,gates){if(this.enabled&&!document.hidden)this.clock.step(car,gates);}
   resetRace(){this.clock=new LapClock();this.localAI=null;}
+  acknowledge(seq){
+    if(Number.isSafeInteger(this.setupSeq)&&Number.isSafeInteger(seq)&&seq>=this.setupSeq)this.sentSetup=true;
+  }
   applySetup(setup){
     this.clearControls();
     const info=window.applyMultiplayerSetup?.(setup);
@@ -145,7 +148,7 @@ class LiveSession {
       }
       if(epoch!==this.epoch||!this.enabled||this.root.hidden)return;
       const url=new URL('/lobby',this.endpoint);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.searchParams.set('name',this.callsign);
-      const ws=new WebSocket(url);this.ws=ws;this.sentSetup=false;this.lastAck=performance.now();this.resumedAt=0;this.lastSent=-Infinity;this.nextSend=0;this.status='Connecting to the grid…';
+      const ws=new WebSocket(url);this.ws=ws;this.sentSetup=false;this.setupSeq=null;this.lastAck=performance.now();this.resumedAt=0;this.lastSent=-Infinity;this.nextSend=0;this.status='Connecting to the grid…';
       this.updateRaceCode(this.key);
       ws.onmessage=event=>{
         if(this.ws!==ws)return;
@@ -155,6 +158,7 @@ class LiveSession {
           this.id=m.id;this.color=m.color;this.connected=true;this.failures=0;
           for(const p of m.players||[])this.receive(p);
         }else if(m.type==='driver')this.receive(m);
+        else if(m.type==='ack')this.acknowledge(m.seq);
         else if(m.type==='leave')this.peers.delete(m.id);
         if(m.type==='welcome'||m.type==='leave')this.renderUI();
       };
@@ -177,7 +181,7 @@ class LiveSession {
     const setup=validSetup({inner:info.road?.innerList,outer:info.road?.outerList,gates:info.road?.checkPointList,maxSpeed:info.maxSpeed,traction:info.traction,invincible:!!info.invincible});
     if(!setup){if(this.ws)this.disconnect();this.status='This track is too large or incomplete for multiplayer.';this.renderUI();return;}
     const key=setupKey(setup);
-    if(key!==this.key){this.key=key;this.setup=setup;this.sentSetup=false;this.nextSend=0;this.resetRace();this.retryAt=0;this.updateRaceCode(key);}
+    if(key!==this.key){this.key=key;this.setup=setup;this.sentSetup=false;this.setupSeq=null;this.nextSend=0;this.resetRace();this.retryAt=0;this.updateRaceCode(key);}
     const now=performance.now();
     if(this.ws&&now-Math.max(this.lastAck,this.resumedAt||0)>(document.hidden?AWAY_TTL:8000)){this.disconnect();this.retry();}
     if(!this.ws&&!this.connecting&&now>=(this.retryAt||0))this.connect(key);
@@ -185,8 +189,11 @@ class LiveSession {
     if(this.connected&&car&&this.ws?.readyState===WebSocket.OPEN&&now>=(this.nextSend||0)&&now-(this.lastSent??-Infinity)>=100){
       const state=validState({x:car.x,y:car.y,angle:car.angle,speed:car.speed,damaged:car.damaged,paused:info.paused||info.awaitingStart,away:document.hidden,laps:this.clock.laps,bestLap:this.clock.bestLap});
       if(state&&this.ws.bufferedAmount<4096){
-        this.ws.send(JSON.stringify({type:'state',seq:this.seq++,name:this.callsign,state,...(!this.sentSetup?{setup:this.setup}:{})}));
-        this.sentSetup=true;
+        const seq=this.seq++;
+        if(!this.sentSetup&&this.setupSeq==null)this.setupSeq=seq;
+        // Mobile networks can deliver updates in a burst. A rate-limited
+        // setup change must be retried until the server accepts its sequence.
+        this.ws.send(JSON.stringify({type:'state',seq,name:this.callsign,state,...(!this.sentSetup?{setup:this.setup}:{})}));
         this.lastSent=now;this.nextSend=now+(document.hidden?10000:100);
       }
     }
