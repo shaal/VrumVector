@@ -3,10 +3,12 @@ import {trackKey} from '../graphics/state.js';
 
 class LiveSession {
   constructor(){
-    this.enabled=false;this.connected=false;this.peers=new Map();this.clock=new LapClock();this.seq=0;this.epoch=0;
+    let saved={};try{saved=JSON.parse(localStorage.getItem('vv.multiplayer')||'{}')||{};}catch{}
+    this.enabled=saved.enabled!==false;this.showDrivers=this.enabled&&saved.showDrivers===true;
+    this.connected=false;this.peers=new Map();this.clock=new LapClock();this.seq=0;this.epoch=0;
     try{this.callsign=cleanCallsign(localStorage.getItem('vv.callsign'));}catch{}
     if(!this.callsign)this.callsign=randomCallsign();
-    this.setCallsign(this.callsign);this.createUI();this.status='Off · drive privately';this.renderUI();
+    this.setCallsign(this.callsign);this.createUI();this.status=this.enabled?'Connecting…':'Off · your car is not shared';this.renderUI();
     this.timer=setInterval(()=>this.tick(),100);
     document.addEventListener('visibilitychange',()=>{
       this.clearControls();this.clock.invalidate();
@@ -23,23 +25,34 @@ class LiveSession {
     this.root=document.createElement('section');this.root.id='live-session';this.root.hidden=true;
     this.root.setAttribute('aria-label','Multiplayer');
     this.root.innerHTML=`
-      <button class="live-launch" aria-expanded="false" aria-controls="live-panel">Multiplayer · off</button>
+      <button class="live-launch" aria-expanded="false" aria-controls="live-panel"><span class="live-launch-title">Multiplayer</span><small class="live-launch-detail"></small></button>
       <section id="live-panel" hidden>
-        <div class="live-heading"><div><span>THE LIVE GRID</span><h3>Find your rivals.</h3></div><button data-live-close aria-label="Close multiplayer">×</button></div>
-        <form data-live-name><label for="live-callsign">Your callsign</label><div class="live-name-row"><input id="live-callsign" maxlength="24" autocomplete="off" spellcheck="false" required><button type="submit">Save</button></div></form>
-        <label class="live-switch"><input type="checkbox" id="live-enabled"> Show live drivers <span>off by default</span></label>
+        <div class="live-heading"><h3>Multiplayer</h3><button data-live-close aria-label="Close multiplayer">×</button></div>
+        <div class="live-setting">
+          <label class="live-switch" for="live-enabled"><span>Multiplayer</span><span data-live-enabled-state class="live-switch-state" aria-hidden="true"></span><input type="checkbox" id="live-enabled" aria-describedby="live-sharing-help"></label>
+          <p id="live-sharing-help" class="live-note"></p>
+        </div>
+        <div class="live-setting">
+          <label class="live-switch" for="live-show-drivers"><span>Show other drivers</span><span data-live-visibility-state class="live-switch-state" aria-hidden="true"></span><input type="checkbox" id="live-show-drivers" aria-describedby="live-visibility-help"></label>
+          <p id="live-visibility-help" class="live-note"></p>
+        </div>
         <p class="live-status" role="status" aria-live="polite"></p>
-        <p class="live-room live-note" hidden></p>
-        <p class="live-note">Join to share your WASD car with drivers on the same track and vehicle settings. Switching windows parks your car and marks you away; you stay on the grid.</p>
-        <p class="live-note">Compare room codes with your friend. Different codes? Match the track, max speed, traction and invincibility settings.</p>
+        <form data-live-name><label for="live-callsign">Your callsign</label><div class="live-name-row"><input id="live-callsign" maxlength="24" autocomplete="off" spellcheck="false" required><button type="submit">Save</button></div></form>
         <div class="live-standings" hidden><div class="live-table-heading"><strong>Best laps</strong><span>seconds</span></div><ol></ol><p class="live-lap-hint"></p></div>
-        <p class="live-note">Multiplayer keeps the game at 1×. Cross the start line, then every gate in order. Live cars pass through each other.</p>
+        <details class="live-help"><summary>Room & racing details</summary>
+          <p class="live-room live-note" hidden></p>
+          <p class="live-note">Friends need matching room codes. Use the same track, max speed, traction and invincibility settings.</p>
+          <p class="live-note">Multiplayer runs at 1×. Switching windows parks your car and marks you away. Live cars pass through each other; AI cars train locally.</p>
+          <p class="live-note">For a timed lap, cross the start line and every gate in order.</p>
+        </details>
         <button data-live-chase>Chase my car · WASD</button>
       </section>`;
     document.getElementById('canvasDiv').append(this.root);
     this.panel=this.root.querySelector('#live-panel');this.launch=this.root.querySelector('.live-launch');
+    this.launchTitle=this.root.querySelector('.live-launch-title');this.launchDetail=this.root.querySelector('.live-launch-detail');
     this.input=this.root.querySelector('#live-callsign');this.input.value=this.callsign;
     this.checkbox=this.root.querySelector('#live-enabled');this.statusNode=this.root.querySelector('.live-status');this.roomNode=this.root.querySelector('.live-room');
+    this.visibilityCheckbox=this.root.querySelector('#live-show-drivers');
     const toggle=on=>{this.panel.hidden=!on;this.launch.setAttribute('aria-expanded',String(on));if(on){const profiles=document.getElementById('driver-learning');if(profiles)profiles.open=false;}};
     this.launch.onclick=()=>toggle(this.panel.hidden);
     this.root.querySelector('[data-live-close]').onclick=()=>{toggle(false);this.launch.focus();};
@@ -51,6 +64,7 @@ class LiveSession {
     this.input.oninput=()=>this.input.setCustomValidity('');
     this.input.onfocus=()=>this.clearControls();
     this.checkbox.onchange=()=>this.setEnabled(this.checkbox.checked);
+    this.visibilityCheckbox.onchange=()=>this.setShowDrivers(this.visibilityCheckbox.checked);
     this.root.querySelector('[data-live-chase]').onclick=()=>{
       window.CircuitStudio?.enable(true);window.CircuitStudio?.setFollowTarget('player');toggle(false);
       window.CircuitStudio?.canvas?.focus({preventScroll:true});
@@ -58,19 +72,26 @@ class LiveSession {
     this.root.addEventListener('keydown',e=>{if(e.key==='Escape'){toggle(false);this.launch.focus();}});
   }
   setCallsign(name){this.callsign=cleanCallsign(name)||randomCallsign();try{localStorage.setItem('vv.callsign',this.callsign);}catch{}}
+  savePreferences(){try{localStorage.setItem('vv.multiplayer',JSON.stringify({enabled:this.enabled,showDrivers:this.showDrivers}));}catch{}}
+  setShowDrivers(on){this.showDrivers=this.enabled&&!!on;this.savePreferences();this.renderUI();}
   setEnabled(on){
-    this.enabled=!!on;this.checkbox.checked=this.enabled;this.retryAt=0;this.failures=0;this.unavailable=false;
+    this.enabled=!!on;if(!this.enabled)this.showDrivers=false;
+    this.savePreferences();this.retryAt=0;this.failures=0;this.unavailable=false;
     this.clock=new LapClock();this.localAI=null;
     window.setSimSpeed?.(1);
-    if(!on){this.disconnect();this.status='Off · drive privately';}
-    else {this.status='Connecting…';if(window.__awaitingStart)window.pauseGame?.();}
+    if(!on){this.disconnect();this.status='Off · your car is not shared';}
+    else {this.status='Connecting…';this.tick();}
     this.renderUI();
   }
   clearControls(){
     for(const car of this.info?.players||[])car?.controls?.clear?.();
   }
   frame(info){
+    const firstFrame=!this.info;
     this.info=info;this.root.hidden=info.phase!==4||document.getElementById('canvasDiv').classList.contains('ab-on');
+    // Auto-join at real time without dismissing the Start Training overlay.
+    // Wait until the instance is assigned to window before locking the selector.
+    if(firstFrame&&this.enabled)window.setSimSpeed?.(1);
     if(this.root.hidden&&this.ws){this.disconnect();this.clock.invalidate();}
     if(info.paused||info.awaitingStart)this.clock.invalidate();
     if(this.enabled && info.snapshot?.bestLapTimes && Array.isArray(info.snapshot.bestLapTimes)){
@@ -143,19 +164,29 @@ class LiveSession {
     for(const [id,p] of this.peers)if(now-p.received>presenceTTL(p.current))this.peers.delete(id);
     this.renderUI();
   }
-  drivers(now=performance.now()){return [...this.peers.values()].map(p=>({...p,pose:samplePeer(p,now)})).filter(p=>p.pose);}
+  drivers(now=performance.now()){
+    if(!this.enabled||!this.showDrivers)return [];
+    return [...this.peers.values()].map(p=>({...p,pose:samplePeer(p,now)})).filter(p=>p.pose);
+  }
   renderUI(){
     if(!this.root)return;
-    const count=this.peers.size+1;
-    const label=this.enabled?`Multiplayer · ${this.connected?count+' live':this.unavailable?'unavailable':'connecting'}`:'Multiplayer · off';
-    const status=this.connected?(document.hidden?'Away · your car is parked on the grid':count===1?'You’re on the grid · waiting for rivals':`${count} drivers on this track`):this.status;
-    if(this.launch.textContent!==label)this.launch.textContent=label;
+    const count=this.peers.size;
+    const label=this.enabled?`Multiplayer · ${this.connected?'on':this.unavailable?'unavailable':'connecting'}`:'Multiplayer · off';
+    const detail=!this.enabled?'Your car is not shared':this.showDrivers?'Other drivers shown':'Other drivers hidden';
+    const status=this.connected?(document.hidden?'Connected · your car is parked while away':count===0?'Connected · waiting for other drivers':`${count} other driver${count===1?'':'s'} on this track`):this.status;
+    if(this.launchTitle.textContent!==label)this.launchTitle.textContent=label;
+    if(this.launchDetail.textContent!==detail)this.launchDetail.textContent=detail;
+    this.checkbox.checked=this.enabled;this.visibilityCheckbox.checked=this.showDrivers;this.visibilityCheckbox.disabled=!this.enabled;
+    this.root.querySelector('[data-live-enabled-state]').textContent=this.enabled?'On':'Off';
+    this.root.querySelector('[data-live-visibility-state]').textContent=this.showDrivers?'On':'Off';
+    this.root.querySelector('#live-sharing-help').textContent=this.enabled?'Others can see your car, even when you hide theirs.':'Your car is not shared. Play privately.';
+    this.root.querySelector('#live-visibility-help').textContent=!this.enabled?'Turn on multiplayer to see other drivers.':this.showDrivers?'Their cars, callsigns and lap times are visible.':'Their cars, callsigns and lap times are hidden.';
     if(this.statusNode.textContent!==status)this.statusNode.textContent=status;
     this.roomNode.hidden=!this.enabled||!this.room;
     const roomText=this.room&&this.info?`Room ${this.room} · speed ${Number(this.info.maxSpeed)} · traction ${Number(this.info.traction)} · invincibility ${this.info.invincible?'on':'off'}`:'';
     if(this.roomNode.textContent!==roomText)this.roomNode.textContent=roomText;
-    const standings=this.root.querySelector('.live-standings');standings.hidden=!this.connected;
-    if(this.panel.hidden||!this.connected)return;
+    const standings=this.root.querySelector('.live-standings');standings.hidden=!this.connected||!this.showDrivers;
+    if(this.panel.hidden||standings.hidden)return;
     const rows=[{name:this.callsign+' (you)',color:this.color,bestLap:this.clock.bestLap,laps:this.clock.laps},
       ...this.drivers().map(p=>({name:driverLabel(p.name,p.pose),color:p.color,...p.pose})),
       {name:'AI leader (local)',color:'#f3bc76',bestLap:this.localAI}];

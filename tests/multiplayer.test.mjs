@@ -65,10 +65,11 @@ const clientSource=(await readFile(new URL('../AI-Car-Racer/multiplayer/client.j
   .replace('window.LiveSession=new LiveSession();','globalThis.Session=LiveSession;');
 function clientClock(){
   let now=1000,closed=0,cleared=0;
-  const document=new EventTarget(),window=new EventTarget(),sent=[];
-  document.hidden=false;
+  const document=new EventTarget(),window=new EventTarget(),sent=[],storage=new Map([['vv.callsign','Test Driver']]),speeds=[];
+  document.hidden=false;document.getElementById=()=>({classList:{contains:()=>false}});
+  window.setSimSpeed=value=>speeds.push(value);
   const context=vm.createContext({...liveState,document,window,performance:{now:()=>now},setInterval(){},
-    localStorage:{getItem:()=> 'Test Driver',setItem(){}},trackKey:()=> 'test track',WebSocket:{OPEN:1}});
+    localStorage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)},trackKey:()=> 'test track',WebSocket:{OPEN:1}});
   vm.runInContext(clientSource,context);
   context.Session.prototype.createUI=function(){this.root={hidden:false};this.checkbox={};};
   context.Session.prototype.renderUI=function(){};
@@ -77,9 +78,42 @@ function clientClock(){
   session.key=roomKey('test track',15,.5,false);session.enabled=true;session.connected=true;session.id='same-driver';session.lastAck=now;
   const socket={readyState:1,bufferedAmount:0,send(data){sent.push(JSON.parse(data));},close(){closed++;}};
   session.ws=socket;
-  return {session,document,window,socket,sent,get closed(){return closed;},get cleared(){return cleared;},
+  return {session,document,window,socket,sent,storage,speeds,newSession:()=>new context.Session(),get closed(){return closed;},get cleared(){return cleared;},
     advance(ms){now+=ms;},visibility(hidden){document.hidden=hidden;document.dispatchEvent(new Event('visibilitychange'));}};
 }
+test('new visitors join automatically at 1× with drivers hidden, without starting training',()=>{
+  const c=clientClock(),s=c.newSession();let joins=0,starts=0;
+  c.window.__awaitingStart=true;c.window.pauseGame=()=>starts++;
+  s.connect=()=>joins++;
+  assert.equal(s.enabled,true);assert.equal(s.showDrivers,false);
+  s.frame({...c.session.info,phase:4,paused:true,awaitingStart:true});s.tick();
+  assert.equal(joins,1);assert.deepEqual(c.speeds,[1]);assert.equal(starts,0);
+  assert.equal(s.clock.running,false);
+});
+test('visibility changes keep sharing and the same socket; opt-out and explicit choices persist',()=>{
+  const c=clientClock(),s=c.session;
+  s.receive({id:'rival',name:'Other driver',color:liveState.COLORS[1],state:pose});
+  assert.equal(s.peers.size,1);assert.equal(s.drivers().length,0);
+  s.drawClassic(new Proxy({},{get(){throw new Error('Hidden drivers must not draw in Classic or Tilt');}}));
+  s.tick();assert.equal(c.sent.length,1,'Hidden rivals do not stop your own car being shared');
+  s.clock.running=true;s.setShowDrivers(true);
+  assert.equal(s.drivers().length,1);assert.equal(s.ws,c.socket);assert.equal(s.clock.running,true);
+  assert.equal(c.newSession().showDrivers,true,'An explicit display choice survives reload');
+  s.setShowDrivers(false);assert.equal(s.drivers().length,0);assert.equal(c.closed,0);
+  s.setEnabled(false);
+  const returning=c.newSession();
+  assert.equal(returning.enabled,false);assert.equal(returning.showDrivers,false);
+  let joins=0;returning.connect=()=>joins++;returning.info=c.session.info;returning.tick();
+  assert.equal(joins,0,'A saved opt-out must never open a connection');
+  returning.setShowDrivers(true);assert.equal(returning.showDrivers,false,'Showing drivers cannot bypass an opt-out');
+});
+test('invalid saved multiplayer preferences fall back to connected and hidden',()=>{
+  const c=clientClock();
+  for(const raw of ['not json','null','{"enabled":"false","showDrivers":"true"}']){
+    c.storage.set('vv.multiplayer',raw);const s=c.newSession();
+    assert.equal(s.enabled,true);assert.equal(s.showDrivers,false);
+  }
+});
 test('switching windows retains the socket through minute-long timer delays and resumes with acknowledgment grace',()=>{
   const c=clientClock(),s=c.session;
   s.tick();assert.equal(c.sent.at(-1).state.away,false);

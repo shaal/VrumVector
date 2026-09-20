@@ -33,12 +33,19 @@ try{
     await p.evaluate(()=>{setN(2);setSeconds(4);setSimSpeed(20);});
     return p;
   }));
-  stage='2D default, visible graphics switch, and editable identity';console.log(stage);
+  stage='automatic multiplayer, hidden drivers, 2D default, and editable identity';console.log(stage);
+  await Promise.all([a,b].map(p=>p.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.peers.size===1)));
   for(const p of [a,b]){
     assert.equal(await p.evaluate(()=>window.CircuitStudio.enabled||window.CircuitStudio.ready||window.CircuitStudio.active),false);
     assert.equal(await p.locator('#graphics-toggle').isVisible(),true);
     assert.equal(await p.locator('#graphics-toggle').textContent(),'Switch to 3D graphics');
     assert.equal(await p.locator('#ai-drive-toggle').getAttribute('aria-pressed'),'false');
+    assert.equal(await p.evaluate(()=>window.LiveSession.enabled&&!window.LiveSession.showDrivers&&window.LiveSession.drivers().length===0),true);
+    assert.equal(await p.evaluate(()=>window.__awaitingStart&&pause),true,'Auto-joining must not start training');
+    assert.equal(await p.evaluate(()=>simSpeed),1);
+    assert.equal(await p.locator('#simSpeedInput').isDisabled(),true);
+    assert.match(await p.locator('.live-launch').textContent(),/Other drivers hidden/);
+    assert.equal(await p.locator('.live-standings').isVisible(),false);
   }
   await a.screenshot({path:`${out}/classic-start-desktop.png`});
   await a.setViewportSize({width:390,height:844});
@@ -48,13 +55,28 @@ try{
   await a.setViewportSize({width:1120,height:800});
   const names=await Promise.all([a,b].map(p=>p.evaluate(()=>window.LiveSession.callsign)));
   for(const name of names)assert.match(name,/^[A-Za-z]+ [A-Za-z]+ \d+$/);
-  assert.equal(await a.evaluate(()=>window.LiveSession.enabled||!!window.LiveSession.ws),false);
   await a.locator('.live-launch').click();await b.locator('.live-launch').click();
+  assert.equal(await a.getByRole('checkbox',{name:'Multiplayer',exact:true}).isChecked(),true);
+  assert.equal(await a.getByRole('checkbox',{name:'Show other drivers',exact:true}).isChecked(),false);
+  await a.screenshot({path:`${out}/multiplayer-default-desktop.png`});
+  await a.setViewportSize({width:390,height:844});
+  await a.screenshot({path:`${out}/multiplayer-default-mobile.png`});
+  const mobilePanel=await a.locator('#live-panel').boundingBox(),mobileLaunch=await a.locator('.live-launch').boundingBox();
+  assert.ok(mobilePanel.x>=0&&mobilePanel.x+mobilePanel.width<=390&&mobilePanel.y>=mobileLaunch.y+mobileLaunch.height,'Panel fits below the launch button on mobile');
+  for(const id of ['#live-enabled','#live-show-drivers']){
+    const toggle=await a.locator(id).boundingBox();assert.ok(toggle.y>=mobilePanel.y&&toggle.y+toggle.height<=mobilePanel.y+mobilePanel.height,'Both switches are visible without scrolling');
+  }
+  await a.setViewportSize({width:1120,height:800});
   await a.locator('#live-callsign').fill('Silver Fox');await a.locator('[data-live-name] button').click();
   await b.locator('#live-callsign').fill('Neon Lynx');await b.locator('[data-live-name] button').click();
   assert.equal(await a.evaluate(()=>playerCar2.controls.forward||playerCar2.controls.left||playerCar2.controls.reverse),false);
-  await a.locator('#live-enabled').check();await b.locator('#live-enabled').check();
+  await a.locator('#live-show-drivers').check();
+  await a.waitForFunction(()=>window.LiveSession.drivers().length===1);
+  assert.equal(await b.evaluate(()=>window.LiveSession.drivers().length),0,'Each player controls only their own view');
+  assert.equal(await b.evaluate(()=>window.LiveSession.connected),true,'Hiding rivals still shares your own car');
+  await b.locator('#live-show-drivers').check();
   await Promise.all([a,b].map(p=>p.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.drivers().length===1)));
+  for(const p of [a,b])await p.locator('#startOverlayBtn').click();
   assert.deepEqual(await b.evaluate(()=>({maxSpeed,traction})),{maxSpeed:15,traction:0.5});
   const room=await a.locator('.live-room').textContent();
   assert.match(room,/Room [A-F0-9]{8}.*speed 15.*traction 0.5/);
@@ -149,6 +171,15 @@ try{
   await a.screenshot({path:`${out}/ai-driving-3d.png`});
   await a.locator('#ai-drive-toggle').click();
   await a.locator('.live-launch').click();
+  stage='hide/show removes 3D rivals without disconnecting';console.log(stage);
+  await a.evaluate(()=>{window.__visibilitySocket=window.LiveSession.ws;});
+  await a.locator('#live-show-drivers').uncheck();
+  await a.waitForFunction(()=>window.CircuitStudio.liveCars.size===0);
+  assert.equal(await a.locator('.live-standings').isVisible(),false);
+  assert.equal(await a.evaluate(()=>window.LiveSession.connected&&window.LiveSession.ws===window.__visibilitySocket),true);
+  assert.equal(await b.evaluate(()=>window.LiveSession.peers.size),1);
+  await a.locator('#live-show-drivers').check();
+  await a.waitForFunction(()=>window.CircuitStudio.liveCars.size===1);
   await a.screenshot({path:`${out}/live-grid-desktop.png`});
   await a.setViewportSize({width:390,height:844});
   await a.waitForTimeout(500);await a.screenshot({path:`${out}/live-grid-mobile.png`});
@@ -163,6 +194,8 @@ try{
   await b.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.peers.size===1,{},{timeout:30000});
   await b.locator('#live-enabled').uncheck();
   assert.equal(await b.locator('#simSpeedInput').isDisabled(),false);
+  assert.equal(await b.locator('#live-show-drivers').isDisabled(),true);
+  assert.equal(await b.locator('#live-show-drivers').isChecked(),false);
   await a.waitForFunction(()=>window.LiveSession.peers.size===0&&window.CircuitStudio.liveCars.size===0);
   await b.locator('#live-enabled').check();
   await a.waitForFunction(()=>window.LiveSession.peers.size===1);
@@ -190,10 +223,16 @@ try{
   await b.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});
   await a.waitForFunction(()=>window.LiveSession.drivers().length===1&&!window.LiveSession.drivers()[0].pose.away);
   assert.equal(await b.evaluate(()=>window.LiveSession.ws===window.__awaySocket&&window.LiveSession.id===window.__awayId),true);
+  await b.locator('#live-show-drivers').check();
   await b.reload();await b.waitForFunction(()=>!!window.LiveSession?.info);
   assert.equal(await b.evaluate(()=>window.LiveSession.callsign),'Neon Lynx');
-  assert.equal(await b.evaluate(()=>window.LiveSession.enabled),false);
+  assert.equal(await b.evaluate(()=>window.LiveSession.enabled&&window.LiveSession.showDrivers),true);
+  await b.waitForFunction(()=>window.LiveSession.connected&&window.LiveSession.drivers().length===1);
+  await b.locator('.live-launch').click();await b.locator('#live-enabled').uncheck();
   await a.waitForFunction(()=>window.LiveSession.peers.size===0);
+  await b.reload();await b.waitForFunction(()=>!!window.LiveSession?.info);
+  assert.equal(await b.evaluate(()=>window.LiveSession.enabled||!!window.LiveSession.ws||window.LiveSession.showDrivers),false,'Turning multiplayer off survives reload');
+  assert.equal(await b.locator('#simSpeedInput').isDisabled(),false);
   await a.locator('[data-live-close]').click();
   await a.locator('[data-action="classic-top"]').click();
   await a.waitForFunction(()=>!window.CircuitStudio.active);
@@ -201,7 +240,7 @@ try{
   await a.reload();await a.waitForFunction(()=>!!window.PlayerAssist?.info&&!!window.CircuitStudio?.info);
   assert.equal(await a.evaluate(()=>window.PlayerAssist.enabled||window.CircuitStudio.enabled),false);
   assert.deepEqual(errors,[]);
-  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,checks:['2D default after saved 3D preference','graphics switch','multiplayer 1× lock','AI co-driver worker integration','steering/throttle override and release','AI off with held keys','default off','callsigns','legacy saved physics matching','numeric slider round-trip matching','visible room codes','cross-browser WASD','Tilt human cars and labels','generation continuity','AI 1–5','3D cars','mobile','room isolation','reconnect','background presence and parked car','away labels in standings and 3D','resume without reconnect','reload persistence']},null,2));
+  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,checks:['2D default after saved 3D preference','graphics switch','automatic multiplayer without auto-starting training','other drivers hidden by default','independent view controls','multiplayer 1× lock','AI co-driver worker integration','steering/throttle override and release','AI off with held keys','callsigns','legacy saved physics matching','numeric slider round-trip matching','visible room codes','cross-browser WASD','Tilt human cars and labels','generation continuity','AI 1–5','3D hide/show without reconnect','mobile controls visible without scrolling','room isolation','reconnect','background presence and parked car','away labels in standings and 3D','resume without reconnect','saved display choice','saved opt-out']},null,2));
   console.log('Live multiplayer browser checks passed');
 }catch(error){
   const diagnostics=[];

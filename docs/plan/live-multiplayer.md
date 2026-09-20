@@ -1,9 +1,23 @@
 # Live multiplayer
 
-Open **Multiplayer**, edit the random callsign, then enable **Show live drivers**.
-It starts off on every page load. The callsign alone is remembered locally.
-Enabling the option shares the WASD car and joins other opted-in browser
-sessions with the same track geometry, max speed, traction, and invincibility
+New visitors automatically join multiplayer at 1×, with other drivers hidden.
+Joining does not start training or dismiss the **Start Training** screen. The
+compact **Multiplayer** button shows the connection state and whether other
+drivers are hidden. Open it for two independent controls:
+
+- **Multiplayer** shares your WASD car. It is on by default. Turning it off
+  disconnects, stops sharing your car, hides other drivers, and unlocks speed.
+- **Show other drivers** displays their cars, callsigns, and lap standings. It
+  is off by default. Hiding them keeps your car shared and preserves the socket
+  and current lap. This control is unavailable while multiplayer is off.
+
+Both explicit choices and the editable random callsign are remembered locally.
+A saved opt-out stays off after reload; an explicit choice to show drivers stays
+on. Chrome and incognito keep their preferences independently. The panel explains
+that other players can see your car even when you hide theirs. Room matching and
+racing guidance are under **Room & racing details** to keep the main controls simple.
+
+Connected sessions join others with the same track geometry, max speed, traction, and invincibility
 setting. Equal numeric settings match even when loaded from older saved slider
 values. The panel shows a room code and current physics: friends with the same
 code are on the same grid. Different codes mean the track or vehicle settings
@@ -25,7 +39,7 @@ to 32 drivers. Normal and incognito windows can join the same room: identity is
 assigned per connection, without login or shared cookies. Their saved track and
 vehicle settings still need to match.
 
-Enabling multiplayer sets the game and AI training to 1× and locks the speed
+Automatic joining or enabling multiplayer sets the game and AI training to 1× and locks the speed
 selector while connected or reconnecting. Turning multiplayer off unlocks the
 selector and leaves it at 1×. Automatic AI generation changes preserve the human
 car and lap. Manual restarts reset the
@@ -76,9 +90,11 @@ Miniflare, including relay, isolation, departure, away/resume states, input
 rejection, interpolation, and lap validity. Simulated-clock client checks cover
 minute-long timer delays and acknowledgment grace on resume.
 `npm run test:multiplayer:browser` runs independent browser
-contexts against that service, covering opt-in, callsigns, actual WASD motion,
+contexts against that service, covering automatic joining without starting training,
+hidden-by-default drivers, independent visibility, saved choices and opt-out,
+callsigns, actual WASD motion,
 1–5-car worker cohorts, generation continuity, 3D cars, mobile layout, isolation,
-reconnection, visibility lifecycle, and reload defaults. The visibility event is
+reconnection, visibility lifecycle, and reload behavior. The visibility event is
 simulated in this headless test; parked car rendering and retention of the same
 live socket across away/resume are checked against the real local service.
 The existing WebGPU/WebGL and contrast workflows continue to run.
