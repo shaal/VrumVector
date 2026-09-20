@@ -3,6 +3,10 @@ import {readFileSync} from 'node:fs';
 import init,{WasmGraphRanker} from '../vendor/ruvector/ruvector_gnn_trainable_wasm/ruvector_gnn_trainable_wasm.js';
 await init({module_or_path:readFileSync(new URL('../vendor/ruvector/ruvector_gnn_trainable_wasm/ruvector_gnn_trainable_wasm_bg.wasm',import.meta.url))});
 const a=new WasmGraphRanker(2,8,7),b=new WasmGraphRanker(2,8,9);
+const sameSeed=new WasmGraphRanker(2,8,7);
+assert.equal(sameSeed.exportCheckpoint(),a.exportCheckpoint(),'Same seed must produce identical initialization');
+assert.notEqual(b.exportCheckpoint(),a.exportCheckpoint(),'Different seeds must change initial weights');
+sameSeed.free();
 const predict=(m,x,n)=>m.predict(new Float64Array([x,0]),JSON.stringify([[n,0]]));
 const before=JSON.parse(a.exportCheckpoint());
 for(let i=0;i<4000;i++){
