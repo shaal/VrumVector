@@ -1,5 +1,9 @@
 # Live multiplayer
 
+For Cloudflare usage alerts, production health checks, emergency disablement,
+and deployment verification, see the [multiplayer operations
+runbook](../operations/multiplayer-operations.md).
+
 New visitors automatically join multiplayer at 1×, with other drivers hidden.
 Joining does not start training or dismiss the **Start Training** screen. The
 compact **Multiplayer** button shows the connection state and whether other

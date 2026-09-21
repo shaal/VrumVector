@@ -23,12 +23,19 @@ python3 -m http.server 8765
 
 Any static server works (`npx serve`, `caddy file-server`, etc.).
 
-## Deployment (Cloudflare Pages)
+## Deployment (Cloudflare Pages + Workers)
 
-Live at **https://vectorvroom.shaal.dev/** (canonical) and
-**https://vectorvroom.pages.dev/** (Pages default) — a pure static deploy
-on Cloudflare Pages with the WASM vendored in-repo. No build step, no
-backend, no Workers.
+Live at **https://vv.shaal.dev/AI-Car-Racer/**. The game client is a pure
+static deploy on Cloudflare Pages with the WASM vendored in-repo. Multiplayer
+adds a separate Cloudflare Worker backed by a SQLite Durable Object:
+`vectorvroom-live` relays human poses, callsigns, and lap results over
+hibernating WebSockets. AI training and physics remain local in each browser;
+the Worker is not in the per-frame AI loop.
+
+The Pages default domain is **https://vectorvroom.pages.dev/**. A bare static
+checkout can still run without the live service; its multiplayer configuration
+is intentionally `null` until the deployment workflow writes the Worker
+endpoint.
 
 ### Auto-deploy on push (GitHub Actions)
 
@@ -41,7 +48,11 @@ Required repository secrets (Settings → Secrets and variables →
 Actions):
 
 - `CLOUDFLARE_API_TOKEN` — scoped token with **Account → Cloudflare
-  Pages → Edit** (nothing else needed for deploys).
+  Pages → Edit**.
+- `CLOUDFLARE_WORKERS_API_TOKEN` — optional separate token with **Account →
+  Workers Scripts → Edit**. If omitted, the workflow falls back to
+  `CLOUDFLARE_API_TOKEN`, which must then include both Pages and Workers
+  permissions.
 - `CLOUDFLARE_ACCOUNT_ID` — `376eedb6a8a2b212f869c0bb3683f0f9` for the
   3Paces account.
 
@@ -58,7 +69,7 @@ so behaviour is guaranteed consistent.
 ```
 
 Use this when iterating locally without committing, or when the
-Actions workflow is unavailable. The script rsyncs the runtime tree
+Actions workflow is unavailable for a static-only preview. The script rsyncs the runtime tree
 (`AI-Car-Racer/`, `vendor/ruvector/`, `_headers`, `_redirects`, root
 `index.html`) into `$TMPDIR` and uploads via `wrangler pages deploy` —
 the staging step is needed because the root `ruvector` dev symlink
@@ -80,6 +91,17 @@ Config files at the repo root control Pages behaviour:
 First-time setup: you need a Cloudflare account, a Pages project named
 `vectorvroom` (`wrangler pages project create vectorvroom --production-branch=main`),
 and `wrangler login` completed.
+
+For a production multiplayer release, prefer the GitHub Actions workflow: it
+deploys the Worker first, writes its HTTPS origin to
+`AI-Car-Racer/multiplayer/config.json`, and then publishes Pages. Deploying
+Pages alone can leave a site with a missing or stale live endpoint.
+
+### Multiplayer operations
+
+Traffic budgets, Cloudflare dashboard interpretation, health checks, emergency
+disablement, and browser verification are documented in
+[`docs/operations/multiplayer-operations.md`](docs/operations/multiplayer-operations.md).
 
 ## New-machine checklist
 
