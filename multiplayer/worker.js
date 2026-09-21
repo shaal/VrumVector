@@ -1,11 +1,14 @@
 import { DurableObject } from 'cloudflare:workers';
-import { cleanCallsign, validState, validSetup, COLORS, ACTIVE_TTL, presenceTTL } from '../AI-Car-Racer/multiplayer/state.js';
+import { cleanCallsign, validState, validSetup, COLORS, ALARM_INTERVAL, MIN_ACCEPT_INTERVAL, presenceTTL } from '../AI-Car-Racer/multiplayer/state.js';
 
-const TTL=ACTIVE_TTL, MAX_PLAYERS=32;
+const MAX_PLAYERS=32;
 export default {
   async fetch(request,env){
     const url=new URL(request.url);
-    if (url.pathname==='/health') return Response.json({ok:true,protocol:2});
+    if (url.pathname==='/health') return Response.json({ok:true,protocol:2,multiplayer:env.DISABLE_MULTIPLAYER!=='true'});
+    // Emergency circuit breaker: set DISABLE_MULTIPLAYER=true on the Worker
+    // without changing the static site if the account is approaching a limit.
+    if (env.DISABLE_MULTIPLAYER==='true') return Response.json({ok:false,error:'Multiplayer is temporarily paused'}, {status:503});
     const origin=request.headers.get('Origin')||'';
     const allowed=/^https:\/\/([a-z0-9-]+\.)?vectorvroom\.pages\.dev$/.test(origin)
       || origin==='https://vectorvroom.shaal.dev'
@@ -53,7 +56,7 @@ export class LiveRoom extends DurableObject {
     this.ctx.acceptWebSocket(server);this.sessions.set(server,s);server.serializeAttachment(s);
     this.send(server,{type:'welcome',id:s.id,color:s.color,players:[...this.sessions.values()].filter(p=>p!==s).map(p=>this.player(p,true))});
     this.broadcast({type:'driver',...this.player(s)},server);
-    if(!(await this.ctx.storage.getAlarm()))await this.ctx.storage.setAlarm(Date.now()+TTL);
+    if(!(await this.ctx.storage.getAlarm()))await this.ctx.storage.setAlarm(Date.now()+ALARM_INTERVAL);
     return new Response(null,{status:101,webSocket:client});
   }
   async webSocketMessage(ws,message){
@@ -64,8 +67,10 @@ export class LiveRoom extends DurableObject {
     if(m?.type!=='state'||!state||!name||!Number.isSafeInteger(m.seq)||m.seq<=s.seq){ws.close(1008,'Invalid state');this.remove(ws);return;}
     const setup=m.setup===undefined?this.setups.get('setup:'+s.id):validSetup(m.setup);
     if(s.lobby&&!setup){ws.close(1008,'Valid race setup required');this.remove(ws);return;}
-    // At most ~15 accepted updates/sec; normal clients send ten.
-    if(Date.now()-s.accepted<65)return;
+    // The browser sends at most 5 Hz while moving. Keep a server-side ceiling
+    // as protection against stale or hostile clients; rejected frames are not
+    // broadcast and cannot consume the room's fan-out budget.
+    if(Date.now()-s.accepted<MIN_ACCEPT_INTERVAL)return;
     Object.assign(s,{state,name,seq:m.seq,seen:Date.now(),accepted:Date.now()});
     if(s.lobby&&m.setup!==undefined&&JSON.stringify(setup)!==JSON.stringify(this.setups.get('setup:'+s.id))){
       this.setups.set('setup:'+s.id,setup);await this.ctx.storage.put('setup:'+s.id,setup);
@@ -79,6 +84,6 @@ export class LiveRoom extends DurableObject {
   webSocketError(ws){this.remove(ws);}
   async alarm(){
     this.prune();
-    if(this.sessions.size)await this.ctx.storage.setAlarm(Date.now()+TTL);
+    if(this.sessions.size)await this.ctx.storage.setAlarm(Date.now()+ALARM_INTERVAL);
   }
 }
