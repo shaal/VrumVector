@@ -36,9 +36,9 @@ tab keeps its player connected: the car parks, receives an **away** label, and
 sends a heartbeat every ten seconds when the browser allows it. Returning resumes
 the same connection and clears held controls and the partial lap. Editor/A-B views,
 closed pages, and switching multiplayer off leave the room. Failed connections
-retry with bounded backoff. Silent foreground connections expire within 15–30
+retry with bounded backoff. Silent foreground connections expire within 45–60
 seconds; their stale car poses disappear after three seconds. Away connections
-allow 150 seconds of silence (removal within 150–165 seconds), accommodating
+allow 180 seconds of silence (removal within 180–240 seconds), accommodating
 Chrome's delayed background timers. A frozen/discarded tab or sleeping device can
 still lose its connection; returning reconnects automatically. The lobby is limited
 to 32 drivers. Normal and incognito windows discover each other: identity is
@@ -69,9 +69,10 @@ WebSocket hibernation attachments retain small active-session state. Bounded
 geometry is stored separately per connection so complex tracks do not overflow
 attachment limits; it is deleted on departure. There is no race-history database.
 Setup metadata is sent on change, on welcome and periodically for recovery,
-not with every pose. Clients send ten updates per
-second in the foreground and sparse parked states in the background. The service
-caps accepted updates, bounds message size,
+not with every pose. Clients send five updates per second while moving, one
+heartbeat per second while parked, and one every ten seconds in the background.
+The cleanup alarm runs once per minute. The service caps accepted updates, bounds
+message size,
 validates the wire shape and numeric ranges, assigns connection IDs, and allows
 only the deployed site origins. Callsigns are plain text in all views.
 
@@ -86,6 +87,9 @@ static preview still publishes with multiplayer unavailable, and the workflow
 reports the service failure. Rerun the deployment after fixing access. A Durable Object migration creates the room
 namespace. PR services can be deleted after the PR closes. A bare static checkout
 has no endpoint configured and reports that clearly when joining is attempted.
+If Cloudflare usage needs an immediate pause without changing Pages, deploy the
+Worker with `--var DISABLE_MULTIPLAYER:true`; `/health` reports
+`multiplayer:false` while the circuit breaker is active.
 
 Local setup:
 

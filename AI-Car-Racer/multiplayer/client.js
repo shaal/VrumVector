@@ -1,4 +1,4 @@
-import {cleanCallsign,randomCallsign,validState,validSetup,setupKey,samplePeer,LapClock,COLORS,AWAY_TTL,presenceTTL,driverLabel} from './state.js';
+import {cleanCallsign,randomCallsign,validState,validSetup,setupKey,samplePeer,LapClock,COLORS,AWAY_TTL,presenceTTL,driverLabel,ACTIVE_SEND_INTERVAL,IDLE_SEND_INTERVAL,HIDDEN_SEND_INTERVAL} from './state.js';
 
 class LiveSession {
   constructor(){
@@ -14,7 +14,10 @@ class LiveSession {
       // Switching windows parks the car; it must not remove it from a rival's
       // grid. Give a returning tab time to receive its queued acknowledgments.
       if(!document.hidden){this.retryAt=0;this.resumedAt=performance.now();}
-      this.nextSend=0;this.tick();
+      // A visibility transition is a meaningful presence change. Send the
+      // parked/resumed pose immediately even if the previous heartbeat was
+      // only a moment ago.
+      this.lastSent=-Infinity;this.nextSend=0;this.tick();
       this.renderUI();
     });
     window.addEventListener('pagehide',()=>this.disconnect());
@@ -189,15 +192,23 @@ class LiveSession {
     if(this.ws&&now-Math.max(this.lastAck,this.resumedAt||0)>(document.hidden?AWAY_TTL:8000)){this.disconnect();this.retry();}
     if(!this.ws&&!this.connecting&&now>=(this.retryAt||0))this.connect(key);
     const car=info.players[1];
-    if(this.connected&&car&&this.ws?.readyState===WebSocket.OPEN&&now>=(this.nextSend||0)&&now-(this.lastSent??-Infinity)>=100){
-      const state=validState({x:car.x,y:car.y,angle:car.angle,speed:car.speed,damaged:car.damaged,paused:info.paused||info.awaitingStart,away:document.hidden,laps:this.clock.laps,bestLap:this.clock.bestLap});
+    // Pose interpolation makes 5 Hz smooth while driving. Before the race
+    // starts, after a crash, or while parked, a 1 Hz heartbeat is enough to
+    // keep presence alive without sending the same paused pose ten times/sec.
+    // Hidden tabs retain their existing sparse heartbeat so switching windows
+    // does not make a driver disappear from a rival's grid.
+    const paused=!!(info.paused||info.awaitingStart);
+    const moving=!!car&&!paused&&!car.damaged&&Math.abs(Number(car.speed)||0)>0.05;
+    const sendInterval=document.hidden?HIDDEN_SEND_INTERVAL:(moving?ACTIVE_SEND_INTERVAL:IDLE_SEND_INTERVAL);
+    if(this.connected&&car&&this.ws?.readyState===WebSocket.OPEN&&now>=(this.nextSend||0)&&now-(this.lastSent??-Infinity)>=sendInterval){
+      const state=validState({x:car.x,y:car.y,angle:car.angle,speed:car.speed,damaged:car.damaged,paused,away:document.hidden,laps:this.clock.laps,bestLap:this.clock.bestLap});
       if(state&&this.ws.bufferedAmount<4096){
         const seq=this.seq++;
         if(!this.sentSetup&&this.setupSeq==null)this.setupSeq=seq;
         // Mobile networks can deliver updates in a burst. A rate-limited
         // setup change must be retried until the server accepts its sequence.
         this.ws.send(JSON.stringify({type:'state',seq,name:this.callsign,state,...(!this.sentSetup?{setup:this.setup}:{})}));
-        this.lastSent=now;this.nextSend=now+(document.hidden?10000:100);
+        this.lastSent=now;this.nextSend=now+sendInterval;
       }
     }
     for(const [id,p] of this.peers)if(now-p.received>presenceTTL(p.current))this.peers.delete(id);

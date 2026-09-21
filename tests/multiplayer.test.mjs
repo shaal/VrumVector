@@ -6,7 +6,7 @@ import {createHash,webcrypto} from 'node:crypto';
 import {Miniflare} from 'miniflare';
 import {build} from 'esbuild';
 import * as liveState from '../AI-Car-Racer/multiplayer/state.js';
-const {cleanCallsign,randomCallsign,validState,samplePeer,LapClock,roomKey,AWAY_TTL,ACTIVE_TTL,presenceTTL,driverLabel}=liveState;
+const {cleanCallsign,randomCallsign,validState,samplePeer,LapClock,roomKey,AWAY_TTL,ACTIVE_TTL,presenceTTL,driverLabel,ACTIVE_SEND_INTERVAL,IDLE_SEND_INTERVAL,MIN_ACCEPT_INTERVAL}=liveState;
 
 const pose={x:100,y:100,angle:0,speed:2,damaged:false,paused:false,away:false,laps:0,bestLap:null};
 const setup={inner:[{x:100,y:100},{x:200,y:100},{x:200,y:200}],outer:[{x:0,y:0},{x:300,y:0},{x:300,y:300}],gates:[[{x:100,y:100},{x:0,y:0}],[{x:200,y:200},{x:300,y:300}]],maxSpeed:15,traction:.5,invincible:false};
@@ -108,6 +108,15 @@ test('visibility changes keep sharing and the same socket; opt-out and explicit 
   assert.equal(joins,0,'A saved opt-out must never open a connection');
   returning.setShowDrivers(true);assert.equal(returning.showDrivers,false,'Showing drivers cannot bypass an opt-out');
 });
+test('pose traffic is smooth while driving and sparse while parked',()=>{
+  const c=clientClock(),s=c.session;
+  s.tick();assert.equal(c.sent.length,1);
+  c.advance(ACTIVE_SEND_INTERVAL-1);s.tick();assert.equal(c.sent.length,1);
+  c.advance(1);s.tick();assert.equal(c.sent.length,2,'Moving cars use a five-per-second update budget');
+  s.info.paused=true;
+  c.advance(IDLE_SEND_INTERVAL-1);s.tick();assert.equal(c.sent.length,2);
+  c.advance(1);s.tick();assert.equal(c.sent.length,3,'Paused cars use a one-per-second heartbeat');
+});
 test('invalid saved multiplayer preferences fall back to connected and hidden',()=>{
   const c=clientClock();
   for(const raw of ['not json','null','{"enabled":"false","showDrivers":"true"}']){
@@ -139,11 +148,11 @@ test('different setups remain discoverable; joining and restoring keeps the sock
 test('setup metadata retries until accepted, and an old acknowledgment cannot confirm a newer setup',()=>{
   const c=clientClock(),s=c.session;
   s.tick();const first=c.sent.at(-1);assert.equal(first.setup.maxSpeed,15);
-  c.advance(100);s.tick();assert.equal(c.sent.at(-1).setup.maxSpeed,15,'Unacknowledged metadata survives a dropped/rate-limited update');
-  s.acknowledge(c.sent.at(-1).seq);c.advance(100);s.tick();assert.equal(c.sent.at(-1).setup,undefined);
-  s.info.maxSpeed=14;c.advance(100);s.tick();const changed=c.sent.at(-1);assert.equal(changed.setup.maxSpeed,14);
-  s.acknowledge(first.seq);c.advance(100);s.tick();assert.equal(c.sent.at(-1).setup.maxSpeed,14);
-  s.acknowledge(changed.seq);c.advance(100);s.tick();assert.equal(c.sent.at(-1).setup,undefined);
+  c.advance(ACTIVE_SEND_INTERVAL);s.tick();assert.equal(c.sent.at(-1).setup.maxSpeed,15,'Unacknowledged metadata survives a dropped/rate-limited update');
+  s.acknowledge(c.sent.at(-1).seq);c.advance(ACTIVE_SEND_INTERVAL);s.tick();assert.equal(c.sent.at(-1).setup,undefined);
+  s.info.maxSpeed=14;c.advance(ACTIVE_SEND_INTERVAL);s.tick();const changed=c.sent.at(-1);assert.equal(changed.setup.maxSpeed,14);
+  s.acknowledge(first.seq);c.advance(ACTIVE_SEND_INTERVAL);s.tick();assert.equal(c.sent.at(-1).setup.maxSpeed,14);
+  s.acknowledge(changed.seq);c.advance(ACTIVE_SEND_INTERVAL);s.tick();assert.equal(c.sent.at(-1).setup,undefined);
 });
 test('lobby discovers Phone and Brave despite different physics, preserves metadata, and accepts large tracks',async()=>{
   const a=await join('Phone','lobby'),b=await join('Brave','lobby');let c;
@@ -154,14 +163,14 @@ test('lobby discovers Phone and Brave despite different physics, preserves metad
     assert.equal(seen.setup.maxSpeed,14);assert.deepEqual(seen.state,pose);
     assert.equal((await until(()=>b.messages.find(m=>m.type==='ack'))).seq,0);
     await until(()=>b.messages.find(m=>m.name==='Phone'&&m.setup));
-    await delay(80);b.send({...pose,x:125},1,'Brave');
+    await delay(MIN_ACCEPT_INTERVAL+40);b.send({...pose,x:125},1,'Brave');
     const poseOnly=await until(()=>a.messages.find(m=>m.name==='Brave'&&m.state?.x===125));
     assert.equal(poseOnly.setup,undefined,'Do not resend geometry with every pose');
     c=await join('Late arrival','lobby');
     assert.equal(c.welcome.players.find(p=>p.name==='Brave').setup.maxSpeed,14);
     const large={...setup,inner:Array.from({length:256},(_,i)=>({x:i+.123456789012,y:i+.987654321098})),outer:Array.from({length:256},(_,i)=>({x:i+500.123456789,y:i+500.987654321})),gates:Array.from({length:256},(_,i)=>[{x:i+.123456789,y:i+.987654321},{x:i+500.123456789,y:i+500.987654321}])};
     assert.ok(JSON.stringify(large).length>16384);
-    await delay(80);send(b,large,2);
+    await delay(MIN_ACCEPT_INTERVAL+40);send(b,large,2);
     const largeUpdate=await until(()=>a.messages.find(m=>m.setup?.inner.length===256));
     assert.equal(largeUpdate.setup.gates.length,256);
   }finally{for(const p of [a,b,c])p?.ws.close();}
@@ -207,7 +216,7 @@ test('real WebSocket rooms relay live cars and renames, isolate tracks, and remo
     assert.equal(b.welcome.players.length,1);assert.equal(c.welcome.players.length,0);
     a.send();const update=await until(()=>b.messages.find(m=>m.type==='driver'&&m.state));
     assert.equal(update.name,'Silver Fox');assert.deepEqual(update.state,pose);
-    await delay(80);a.send({...pose,x:124,bestLap:12.5,laps:1},1,'Comet');
+    await delay(MIN_ACCEPT_INTERVAL+40);a.send({...pose,x:124,bestLap:12.5,laps:1},1,'Comet');
     await until(()=>b.messages.some(m=>m.name==='Comet'&&m.state.x===124&&m.state.bestLap===12.5));
     assert.equal(c.messages.filter(m=>m.type==='driver').length,0);
     a.ws.close();await until(()=>b.messages.some(m=>m.type==='leave'&&m.id===a.welcome.id));
@@ -220,7 +229,7 @@ test('real WebSockets keep the same driver while away and resume normal poses',a
     const parked=await until(()=>b.messages.find(m=>m.type==='driver'&&m.state?.away));
     assert.equal(parked.id,a.welcome.id);assert.equal(parked.state.speed,0);assert.equal(parked.state.paused,true);
     assert.equal(b.messages.some(m=>m.type==='leave'),false);
-    await delay(80);a.send({...pose,x:150},1);
+    await delay(MIN_ACCEPT_INTERVAL+40);a.send({...pose,x:150},1);
     const resumed=await until(()=>b.messages.find(m=>m.state?.x===150));
     assert.equal(resumed.id,a.welcome.id);assert.equal(resumed.state.away,false);assert.equal(resumed.state.speed,2);
     a.ws.close();await until(()=>b.messages.some(m=>m.type==='leave'&&m.id===a.welcome.id));

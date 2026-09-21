@@ -1,9 +1,21 @@
 // Shared, deliberately small wire format. Never accept arbitrary car objects.
 export const COLORS = ['#79dec6','#f3bc76','#bca4f5','#f49cab','#8acaf5','#d5e58c'];
-export const ACTIVE_TTL = 15000;
+// Multiplayer is intentionally low-frequency: the browser interpolates between
+// poses, so sending five active updates per second is enough for a smooth car.
+// Keeping these values in the shared protocol module prevents the browser and
+// Durable Object from drifting apart as the traffic policy evolves.
+export const ACTIVE_SEND_INTERVAL = 200;
+export const IDLE_SEND_INTERVAL = 1000;
+export const HIDDEN_SEND_INTERVAL = 10000;
+export const MIN_ACCEPT_INTERVAL = 150;
+// The alarm is a cleanup safety net, not the presence clock. A one-minute
+// cadence removes abandoned sessions while avoiding thousands of needless
+// Durable Object invocations per day.
+export const ALARM_INTERVAL = 60000;
+export const ACTIVE_TTL = 45000;
 // Chrome can batch background timers once a minute. Allow two missed beats,
 // while still expiring abandoned sessions if their socket never closes.
-export const AWAY_TTL = 150000;
+export const AWAY_TTL = 180000;
 export const presenceTTL = state => state?.away ? AWAY_TTL : ACTIVE_TTL;
 export const driverLabel = (name,state) => name+(state?.away?' · away':state?.paused?' · paused':'');
 // Range inputs (and older saved physics) supply strings. Equal driving rules
