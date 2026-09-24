@@ -156,21 +156,11 @@ function handleInit(m) {
     }
 }
 
-// Build a car polygon at an arbitrary pose without allocating a Car (avoids
-// instantiating Sensor + NeuralNetwork just to validate a spawn). Matches
-// car.js #createPolygon exactly — keep the two in sync.
-function makeCarPolygon(x, y, angle, width, height){
-    const halfLen = height / 2, halfWid = width / 2;
-    const fx = Math.sin(angle), fy = Math.cos(angle);
-    const rx = Math.cos(angle), ry = -Math.sin(angle);
-    return [
-        { x: x + fx * halfLen,              y: y + fy * halfLen              },
-        { x: x - fx * halfLen + rx * halfWid, y: y - fy * halfLen + ry * halfWid },
-        { x: x - fx * halfLen - rx * halfWid, y: y - fy * halfLen - ry * halfWid },
-    ];
-}
+// Check a spawn pose without allocating a Car (avoids instantiating Sensor +
+// NeuralNetwork just to validate a spawn). Car.polygonAt is the one copy of
+// the car's shape.
 function poseInCorridor(x, y, angle, width, height){
-    const poly = makeCarPolygon(x, y, angle, width, height);
+    const poly = Car.polygonAt(x, y, angle, width, height);
     const borders = self.road && self.road.borders;
     if (!borders) return true;
     const grid = self.road.borderGrid;

@@ -28,3 +28,22 @@ test('unpausing a worker before init does not step a missing road',async()=>{
     assert.equal(worker.scope.road,null);
   }finally{process.off('uncaughtException',onError);closeChannels();}
 });
+
+test('pose jitter still keeps every spawn clear of the walls (Car.polygonAt)',async()=>{
+  const {Simulation}=await import('./helpers/simulation.mjs');
+  const sim=new Simulation({track:'Triangle'}),polygonAt=sim.scope.CarClass.polygonAt,touches=sim.scope.polysIntersect;
+  try{
+    const worker=loadWorker(),N=64,{seededRandom}=await import('../AI-Car-Racer/graphics/state.js');
+    worker.scope.Math=Object.assign(Object.create(Math),{random:seededRandom('pose-jitter')});
+    worker.send({type:'init',canvasW:3200,canvasH:1800,borders:sim.road.borders,checkPointList:sim.road.checkPointList});
+    worker.send({type:'begin',N,seconds:1,maxSpeed:15,traction:.5,driverProfile:'balanced',brains:new Float32Array(N*244),
+      startInfo:{x:sim.spawn.x,y:sim.spawn.y,heading:sim.spawn.angle},poseJitter:{radiusPx:400,angleDeg:30,maxAttempts:8}});
+    worker.send({type:'setPause',pause:true});
+    const jitter=worker.posted.find(m=>m.event==='poseJitter'),snap=worker.posted.find(m=>m.type==='snapshot');
+    assert.ok(jitter.rejected>0,'some jittered poses touched a wall and were rejected');
+    for(let i=0;i<N;i++){
+      const body=polygonAt(snap.positions[i*5],snap.positions[i*5+1],snap.positions[i*5+2],30,50);
+      assert.ok(!sim.road.borders.some(b=>touches(body,b)),`car ${i} spawned touching a wall`);
+    }
+  }finally{closeChannels();}
+});

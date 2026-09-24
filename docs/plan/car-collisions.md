@@ -1,7 +1,9 @@
 # Car collisions: cars that cannot drive through each other (plan)
 
-**Status:** research and design only. Nothing here is built. Decisions D1–D4
-were taken on 2026-09-24 (the recommended options, below); C1 can start.
+**Status:** C1 is built: the shared core `AI-Car-Racer/collisions.js` and the
+`Car.update()` split. No simulator uses the core yet, so nothing changes for
+users until C2. Decisions D1–D4 were taken on 2026-09-24 (the recommended
+options, below). Results: [validation](../validation/car-collisions.md).
 
 **Goal:** an opt-in mode in which cars are solid. Cars can hit each other, a
 hit has a cost, the cars' sensors can see other cars, and the population
@@ -60,12 +62,18 @@ So making the whole population solid does not work:
 - Split the population into heats of **K = 8** cars. Cars collide only with
   cars in their own heat and pass through cars of other heats. Heats are
   interleaved (car `i` is in heat `i mod (N/K)`), so each heat mixes the
-  elite, its mutants, and fresh cars.
+  elite, its mutants, and fresh cars. Built in C1 with `ceil(N / K)` heats,
+  so no heat has more than K cars.
 - **Start:** one row across the start gate, per heat. Gate 0 is 417–752 px
   wide on the presets, and 8 cars at a 45 px pitch need about 315 px, so
   every car still touches the start gate on frame 1 (Auto Train and the
   fitness count rely on that). The elite keeps the centre slot, the current
   start pose. `poseInCorridor` (`sim-worker.js`) already checks wall clearance.
+  Built in C1: the elite keeps today's start pose as slot 0, and the other
+  slots alternate sides, so an even K has one more slot on one side (and
+  walls can push slots to one side). The slots rotate by heat, so fresh cars
+  do not always get the slot nearest a wall. On gates that are not square to
+  the heading, the row is staggered (up to 108 px ahead on Oval).
 - **Cost** at N = 500: about 1 750 pair tests per step, linear in N (estimate).
 - **K = N** gives "everyone races together", for small populations only.
 - **On screen,** cars of other heats still overlap. The display needs a
@@ -85,6 +93,17 @@ So making the whole population solid does not work:
     and does not fit the "dead cars skip everything" fast path.
 - **Crashed cars become non-solid** (no pile-ups in Triangle's 193 px apex).
   Cars stalled for a while likely should too.
+- **Built in C1:** the car's triangle tip is its rear, because a car moves
+  away from the tip (`x -= velocity.x`). So "nose" means the side of the
+  outline that faces the car's motion: the base when driving forward, the
+  long sides when reversing. "Enters" is read at the moment the cars first
+  touch during the step (swept along the motion, so fast cars cannot pass
+  through each other): a car strikes when its nose touches the other car
+  and its own motion carries it into the other car. A car rammed while it
+  reverses away does not strike, a car slower than 0.1 px per step never
+  strikes, and a tail or flank glance crashes nobody. Known outcome: a
+  cut-in crashes the car behind. Details:
+  [validation](../validation/car-collisions.md#c1-the-shared-core).
 
 ### Seeing other cars
 
@@ -199,7 +218,10 @@ Paired by track and seed, with shared random streams:
 
 Smaller defaults (change them at C1 review if needed):
 
-- Wrecks and cars stalled for 2 s are not solid.
+- Wrecks and cars stalled for 2 s are not solid. Built in C1: "stalled" means
+  under 0.1 px per step for 120 steps. A stalled car that drives off again,
+  or a car that turns without moving, is a ghost until it overlaps no live
+  heat-mate, so parking cannot buy a permanent ghost.
 - In collision mode the sensor stride is capped at 4 (the 20× level); at 100×
   a car would otherwise travel about 240 px between looks.
 - The toggle is an experiment in the Experiments panel plus `?collide=1`, off
@@ -207,7 +229,7 @@ Smaller defaults (change them at C1 review if needed):
 
 ## Tasks
 
-- [ ] **C1 — Shared collision core.** Heats, the start row per heat, an
+- [x] **C1 — Shared collision core.** Heats, the start row per heat, an
   allocation-free triangle contact test, the striker rule, non-solid wrecks;
   `Car.update()` split into physics and perception. Node tests, including
   "collisions off is bit-identical". About 4–6 hours.
@@ -215,6 +237,25 @@ Smaller defaults (change them at C1 review if needed):
   `begin` and trial messages, death cause 5 counted correctly, heat and
   contact flags in snapshots, a toggle, and a stride cap. About 4 hours.
   depends: C1
+  - Add `collisions.js` after `car.js` to both workers' `importScripts`.
+    In collision mode, replace the per-car `update()` loop with
+    `CarCollisions.step(cars, state, borders, checkPoints)`: every car's
+    `updatePhysics()`, then `resolveContacts()`, then `updatePerception()`
+    for the cars whose `updatePhysics()` returned true. With collisions off,
+    keep calling `update()`.
+  - Per generation: `row = startRow({..., count: rowSize(N, K), road})`,
+    `state = createState(N, {heatSize: K}, row)`, and car `i` spawns at
+    `spawnPose(row, i, state)`. Decide whether pose jitter stays off in
+    collision mode.
+  - The core sets `damaged` and `contactCrash`, and `state.mark[i]` for the
+    step. The simulators record `prevDamaged` and `prevSlide` before
+    `step()` and set `deathFrame`, `slideAtDeath`, `deathX`, `deathY`, and
+    cause 5 after it.
+  - Snapshots and C3's rays read `isSolid(state, i)` (fresh after each
+    pass).
+  - `sim-worker.js` `poseInCorridor` must then call `CarCollisions.poseClear`,
+    so the wall check has one copy. Its polygon copy is already gone: it
+    uses `Car.polygonAt`.
 - [ ] **C3 — Rays see cars.** Rays hit solid heat-mates; readings carry a
   `kind`; contact and near-car statistics in `DriverProfiles.summarize`.
   About 3 hours.

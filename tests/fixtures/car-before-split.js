@@ -48,27 +48,13 @@ class Car{
         this.polygon=this.#createPolygon();
     }
 
-    // One simulation step: physics, then perception. Collision mode
-    // (collisions.js) calls the two halves in separate passes, so car
-    // contacts resolve after every car has moved and before any car senses.
-    // This combined call runs the same statements in the same order as
-    // before the split; tests/collisions.test.mjs proves the results match.
     update(roadBorders, checkPointList){
-        if(!this.updatePhysics(roadBorders, checkPointList)) return;
-        this.updatePerception(roadBorders, checkPointList);
-    }
-
-    // Moves the car, then checks walls and checkpoints. Returns false only
-    // when an AI car was already a wreck; the caller then skips perception.
-    // A car that crashes during this step returns true, so its sensors and
-    // network still run once more, as they always have.
-    updatePhysics(roadBorders, checkPointList){
         if(this.controlType !== "AI") this.driveFrames++;
         // Damaged AI cars contribute nothing for the rest of the generation —
         // skip sensor raycasts + NN inference entirely. At end-of-gen this is
         // usually >80% of the population, so it dominates total sim cost.
         if(this.damaged && this.controlType == "AI"){
-            return false;
+            return;
         }
         if(!this.damaged){
             this.#move();
@@ -114,13 +100,6 @@ class Car{
             }
  
         }
-        return true;
-    }
-
-    // Records driving statistics, then (unless the sensor stride skips this
-    // car) casts rays, runs the network, and sets the controls for the next
-    // step.
-    updatePerception(roadBorders, checkPointList){
         if((this.useBrain||this.aiDriving)&&!this.damaged)globalThis.DriverProfiles?.record(this);
         if(this.sensor){
             // Perception LOD. At high simSpeed, non-privileged AI cars skip
@@ -236,37 +215,29 @@ class Car{
     }
 
     #createPolygon(){
-        return Car.polygonAt(this.x, this.y, this.angle, this.width, this.height);
-    }
-
-    // The car's body at any pose, without building a Car. The one copy of
-    // this shape: spawn checks and collisions.js use it too.
-    static polygonAt(x, y, angle, width, height){
-        // Long isoceles triangle. The tip (vertex 0) lies along (sin, cos).
-        // Motion runs the other way: #move adds (sin, cos) * speed to
-        // `velocity` and then does `x -= velocity.x`, so a car with
-        // speed > 0 moves along (-sin, -cos). The tip is therefore the REAR
-        // of a car driving forward, and the base (vertices 1 and 2) is its
-        // front. collisions.js relies on this. The base width runs along
-        // (cos, -sin).
+        // Long isoceles triangle with the tip pointing in the car's forward
+        // direction. Matches the motion convention in update():
+        //   velocity.x += sin(angle);  velocity.y += cos(angle)
+        // so the "forward" unit vector is (sin, cos). The perpendicular used
+        // for the base width is (cos, -sin) — i.e. 90° clockwise from forward.
         //
-        // Length uses the full car height (tip is h/2 from centre, base is
-        // h/2 on the other side), base width uses car width. polysIntersect
-        // iterates polygon edges via `(i+1)%poly.length`, so a 3-vertex
-        // polygon works everywhere the previous 4-vertex rectangle did.
-        const halfLen = height / 2;
-        const halfWid = width / 2;
-        const fx = Math.sin(angle);   // tip direction x
-        const fy = Math.cos(angle);   // tip direction y
-        const rx = Math.cos(angle);   // base direction x (perpendicular)
-        const ry = -Math.sin(angle);  // base direction y
+        // Length uses the full car height (tip is h/2 ahead of centre, base
+        // is h/2 behind), base width uses car width. polysIntersect iterates
+        // polygon edges via `(i+1)%poly.length`, so a 3-vertex polygon works
+        // everywhere the previous 4-vertex rectangle did.
+        const halfLen = this.height / 2;
+        const halfWid = this.width / 2;
+        const fx = Math.sin(this.angle);   // forward x
+        const fy = Math.cos(this.angle);   // forward y
+        const rx = Math.cos(this.angle);   // right x (perp to forward)
+        const ry = -Math.sin(this.angle);  // right y
         return [
-            // tip — the rear when driving forward
-            { x: x + fx * halfLen,              y: y + fy * halfLen              },
-            // base corner — front when driving forward
-            { x: x - fx * halfLen + rx * halfWid, y: y - fy * halfLen + ry * halfWid },
-            // other base corner
-            { x: x - fx * halfLen - rx * halfWid, y: y - fy * halfLen - ry * halfWid },
+            // tip — forward-most point
+            { x: this.x + fx * halfLen,              y: this.y + fy * halfLen              },
+            // back-right corner
+            { x: this.x - fx * halfLen + rx * halfWid, y: this.y - fy * halfLen + ry * halfWid },
+            // back-left corner
+            { x: this.x - fx * halfLen - rx * halfWid, y: this.y - fy * halfLen - ry * halfWid },
         ];
     }
     
