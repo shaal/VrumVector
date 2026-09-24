@@ -71,10 +71,14 @@ task's own doc or proof file, not in this checklist.
   prebuilt browser package, feed it per-generation learning metrics, tune the
   thresholds so that steady improvement does not read as "Drifting", and show a
   training-health pill in the driver-learning panel.
-- [ ] **T7 — Auto Train mode.** Build the opt-in `Auto Train` toggle from
+- [x] **T7 — Auto Train mode.** Build the opt-in `Auto Train` toggle from
   `docs/plan/training-ux-auto-mode.md` (Fresh → Grind → Polish, plateau bounce).
   Use the T6 health state for plateau detection.
   depends: T6
+  *(Shipped with a checkpoint past the start line as the Fresh exit (cars
+  spawn on the start gate), 20 Polish generations without a gain in the health
+  snapshot as the plateau, and an 8-generation Grind stay after a bounce. See
+  `docs/validation/auto-train.md`.)*
 - [ ] **T8 — Brain species from `ruvector-graph-condense-wasm`.** Vendor the
   crate (with a build patch for the wasm-opt SIMD validation failure), condense
   the brain archive into species, and offer species-diverse seeding as an

@@ -1,0 +1,7147 @@
+{
+  "version": 2,
+  "generations": 60,
+  "plateau": 20,
+  "bounce": 8,
+  "startGateCredit": 1,
+  "presets": {
+    "fresh": {
+      "N": 500,
+      "simSpeed": 2,
+      "seconds": 15,
+      "mutate": 0.25,
+      "conservativeInit": 0.7
+    },
+    "grind": {
+      "N": 600,
+      "simSpeed": 20,
+      "seconds": 15,
+      "mutate": 0.18,
+      "conservativeInit": 0.5
+    },
+    "polish": {
+      "N": 800,
+      "simSpeed": 2,
+      "seconds": 25,
+      "mutate": 0.05,
+      "conservativeInit": 0.3
+    }
+  },
+  "seconds": 2354,
+  "summary": [
+    {
+      "track": "Rectangle",
+      "seed": 0,
+      "gates": 5,
+      "firstGrind": 0,
+      "firstPolish": null,
+      "bounces": 0,
+      "returnsToPolish": 0,
+      "generations": {
+        "fresh": 1,
+        "grind": 59,
+        "polish": 0
+      },
+      "afterBounce": [],
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ]
+    },
+    {
+      "track": "Rectangle",
+      "seed": 1,
+      "gates": 5,
+      "firstGrind": 0,
+      "firstPolish": null,
+      "bounces": 0,
+      "returnsToPolish": 0,
+      "generations": {
+        "fresh": 1,
+        "grind": 59,
+        "polish": 0
+      },
+      "afterBounce": [],
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ]
+    },
+    {
+      "track": "Rectangle",
+      "seed": 2,
+      "gates": 5,
+      "firstGrind": 0,
+      "firstPolish": 4,
+      "bounces": 1,
+      "returnsToPolish": 1,
+      "generations": {
+        "fresh": 1,
+        "grind": 12,
+        "polish": 47
+      },
+      "afterBounce": [
+        {
+          "bounceAt": 33,
+          "returnedAt": 41,
+          "polishChampionBefore": 11,
+          "polishChampionAfter": 11,
+          "gained": false
+        }
+      ],
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        },
+        {
+          "generation": 4,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        },
+        {
+          "generation": 33,
+          "from": "polish",
+          "to": "grind",
+          "reason": "Plateau: no gain for 20 generations in Polish."
+        },
+        {
+          "generation": 41,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        }
+      ]
+    },
+    {
+      "track": "Rectangle",
+      "seed": 3,
+      "gates": 5,
+      "firstGrind": 0,
+      "firstPolish": 5,
+      "bounces": 1,
+      "returnsToPolish": 1,
+      "generations": {
+        "fresh": 1,
+        "grind": 13,
+        "polish": 46
+      },
+      "afterBounce": [
+        {
+          "bounceAt": 43,
+          "returnedAt": 51,
+          "polishChampionBefore": 11,
+          "polishChampionAfter": 11,
+          "gained": false
+        }
+      ],
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        },
+        {
+          "generation": 5,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        },
+        {
+          "generation": 43,
+          "from": "polish",
+          "to": "grind",
+          "reason": "Plateau: no gain for 20 generations in Polish."
+        },
+        {
+          "generation": 51,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        }
+      ]
+    },
+    {
+      "track": "Rectangle",
+      "seed": 4,
+      "gates": 5,
+      "firstGrind": 0,
+      "firstPolish": 3,
+      "bounces": 1,
+      "returnsToPolish": 1,
+      "generations": {
+        "fresh": 1,
+        "grind": 11,
+        "polish": 48
+      },
+      "afterBounce": [
+        {
+          "bounceAt": 39,
+          "returnedAt": 47,
+          "polishChampionBefore": 14,
+          "polishChampionAfter": 15,
+          "gained": true
+        }
+      ],
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        },
+        {
+          "generation": 3,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        },
+        {
+          "generation": 39,
+          "from": "polish",
+          "to": "grind",
+          "reason": "Plateau: no gain for 20 generations in Polish."
+        },
+        {
+          "generation": 47,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        }
+      ]
+    },
+    {
+      "track": "Rectangle",
+      "seed": 5,
+      "gates": 5,
+      "firstGrind": 0,
+      "firstPolish": 48,
+      "bounces": 0,
+      "returnsToPolish": 0,
+      "generations": {
+        "fresh": 1,
+        "grind": 48,
+        "polish": 11
+      },
+      "afterBounce": [],
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        },
+        {
+          "generation": 48,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        }
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": 0,
+      "gates": 9,
+      "firstGrind": 0,
+      "firstPolish": null,
+      "bounces": 0,
+      "returnsToPolish": 0,
+      "generations": {
+        "fresh": 1,
+        "grind": 59,
+        "polish": 0
+      },
+      "afterBounce": [],
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": 1,
+      "gates": 9,
+      "firstGrind": 0,
+      "firstPolish": null,
+      "bounces": 0,
+      "returnsToPolish": 0,
+      "generations": {
+        "fresh": 1,
+        "grind": 59,
+        "polish": 0
+      },
+      "afterBounce": [],
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": 2,
+      "gates": 9,
+      "firstGrind": 0,
+      "firstPolish": null,
+      "bounces": 0,
+      "returnsToPolish": 0,
+      "generations": {
+        "fresh": 1,
+        "grind": 59,
+        "polish": 0
+      },
+      "afterBounce": [],
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": 3,
+      "gates": 9,
+      "firstGrind": 0,
+      "firstPolish": null,
+      "bounces": 0,
+      "returnsToPolish": 0,
+      "generations": {
+        "fresh": 1,
+        "grind": 59,
+        "polish": 0
+      },
+      "afterBounce": [],
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": 4,
+      "gates": 9,
+      "firstGrind": 0,
+      "firstPolish": 5,
+      "bounces": 1,
+      "returnsToPolish": 0,
+      "generations": {
+        "fresh": 1,
+        "grind": 11,
+        "polish": 48
+      },
+      "afterBounce": [
+        {
+          "bounceAt": 53,
+          "returnedAt": null,
+          "polishChampionBefore": 19,
+          "polishChampionAfter": null,
+          "gained": false
+        }
+      ],
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        },
+        {
+          "generation": 5,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        },
+        {
+          "generation": 53,
+          "from": "polish",
+          "to": "grind",
+          "reason": "Plateau: no gain for 20 generations in Polish."
+        }
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": 5,
+      "gates": 9,
+      "firstGrind": 0,
+      "firstPolish": null,
+      "bounces": 0,
+      "returnsToPolish": 0,
+      "generations": {
+        "fresh": 1,
+        "grind": 59,
+        "polish": 0
+      },
+      "afterBounce": [],
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ]
+    }
+  ],
+  "traces": [
+    {
+      "track": "Rectangle",
+      "seed": 0,
+      "gates": 5,
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ],
+      "rows": [
+        {
+          "generation": 0,
+          "phase": "fresh",
+          "fitness": 2,
+          "laps": 0,
+          "champion": 2,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 1,
+          "phase": "grind",
+          "fitness": 2,
+          "laps": 0,
+          "champion": 2,
+          "health": "NeedsReplan",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 2,
+          "phase": "grind",
+          "fitness": 2,
+          "laps": 0,
+          "champion": 2,
+          "health": "NeedsReplan",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 3,
+          "phase": "grind",
+          "fitness": 2,
+          "laps": 0,
+          "champion": 2,
+          "health": "NeedsReplan",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 4,
+          "phase": "grind",
+          "fitness": 2,
+          "laps": 0,
+          "champion": 2,
+          "health": "NeedsReplan",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 5,
+          "phase": "grind",
+          "fitness": 2,
+          "laps": 0,
+          "champion": 2,
+          "health": "NeedsReplan",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 6,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 7,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 8,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 9,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 10,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 11,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 12,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 13,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 14,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 15,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 16,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 17,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 18,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 19,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 20,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 21,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 22,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 23,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 24,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 25,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 26,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 27,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 28,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 29,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 30,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 31,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 32,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 33,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 34,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 35,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 36,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 37,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 38,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 39,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 20
+        },
+        {
+          "generation": 40,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 21
+        },
+        {
+          "generation": 41,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 22
+        },
+        {
+          "generation": 42,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 23
+        },
+        {
+          "generation": 43,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 24
+        },
+        {
+          "generation": 44,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 25
+        },
+        {
+          "generation": 45,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 26
+        },
+        {
+          "generation": 46,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 27
+        },
+        {
+          "generation": 47,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 28
+        },
+        {
+          "generation": 48,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 29
+        },
+        {
+          "generation": 49,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 30
+        },
+        {
+          "generation": 50,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 31
+        },
+        {
+          "generation": 51,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 32
+        },
+        {
+          "generation": 52,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 33
+        },
+        {
+          "generation": 53,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 34
+        },
+        {
+          "generation": 54,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 35
+        },
+        {
+          "generation": 55,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 36
+        },
+        {
+          "generation": 56,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 37
+        },
+        {
+          "generation": 57,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 38
+        },
+        {
+          "generation": 58,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 39
+        },
+        {
+          "generation": 59,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 40
+        }
+      ]
+    },
+    {
+      "track": "Rectangle",
+      "seed": 1,
+      "gates": 5,
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ],
+      "rows": [
+        {
+          "generation": 0,
+          "phase": "fresh",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 1,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "NeedsReplan",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 2,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "NeedsReplan",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 3,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "NeedsReplan",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 4,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "NeedsReplan",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 5,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "NeedsReplan",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 6,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "NeedsReplan",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 7,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "NeedsReplan",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 8,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "NeedsReplan",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 9,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 10,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 11,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 12,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 13,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 14,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 15,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 16,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 17,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 18,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 19,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 20,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 21,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 22,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 23,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 24,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 25,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 26,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 27,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 28,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 29,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 20
+        },
+        {
+          "generation": 30,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 21
+        },
+        {
+          "generation": 31,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 22
+        },
+        {
+          "generation": 32,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 23
+        },
+        {
+          "generation": 33,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 24
+        },
+        {
+          "generation": 34,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 25
+        },
+        {
+          "generation": 35,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 26
+        },
+        {
+          "generation": 36,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 27
+        },
+        {
+          "generation": 37,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 28
+        },
+        {
+          "generation": 38,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 29
+        },
+        {
+          "generation": 39,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 30
+        },
+        {
+          "generation": 40,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 31
+        },
+        {
+          "generation": 41,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 32
+        },
+        {
+          "generation": 42,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 33
+        },
+        {
+          "generation": 43,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 34
+        },
+        {
+          "generation": 44,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 35
+        },
+        {
+          "generation": 45,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 36
+        },
+        {
+          "generation": 46,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 37
+        },
+        {
+          "generation": 47,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 38
+        },
+        {
+          "generation": 48,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 39
+        },
+        {
+          "generation": 49,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 40
+        },
+        {
+          "generation": 50,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 41
+        },
+        {
+          "generation": 51,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 42
+        },
+        {
+          "generation": 52,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 43
+        },
+        {
+          "generation": 53,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 44
+        },
+        {
+          "generation": 54,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 45
+        },
+        {
+          "generation": 55,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 46
+        },
+        {
+          "generation": 56,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 47
+        },
+        {
+          "generation": 57,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 48
+        },
+        {
+          "generation": 58,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 49
+        },
+        {
+          "generation": 59,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 50
+        }
+      ]
+    },
+    {
+      "track": "Rectangle",
+      "seed": 2,
+      "gates": 5,
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        },
+        {
+          "generation": 4,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        },
+        {
+          "generation": 33,
+          "from": "polish",
+          "to": "grind",
+          "reason": "Plateau: no gain for 20 generations in Polish."
+        },
+        {
+          "generation": 41,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        }
+      ],
+      "rows": [
+        {
+          "generation": 0,
+          "phase": "fresh",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 1,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 2,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 3,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 4,
+          "phase": "grind",
+          "fitness": 6,
+          "laps": 1,
+          "champion": 6,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 5,
+          "phase": "polish",
+          "fitness": 9,
+          "laps": 1,
+          "champion": 9,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 6,
+          "phase": "polish",
+          "fitness": 9,
+          "laps": 1,
+          "champion": 9,
+          "health": "Stuck",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 7,
+          "phase": "polish",
+          "fitness": 9,
+          "laps": 1,
+          "champion": 9,
+          "health": "Stuck",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 8,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 9,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 10,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 11,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 12,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 13,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 14,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 15,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 16,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 17,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 18,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 19,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 20,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 21,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 22,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 23,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 24,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 25,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 26,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 27,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 28,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 29,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 30,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 31,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 32,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 33,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 20
+        },
+        {
+          "generation": 34,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 35,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 36,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 37,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 38,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 39,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 40,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 41,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 42,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 43,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 44,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 45,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 46,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 47,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 48,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 49,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 50,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 51,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 52,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 53,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 54,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 55,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 56,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 57,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 58,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 59,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 17
+        }
+      ]
+    },
+    {
+      "track": "Rectangle",
+      "seed": 3,
+      "gates": 5,
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        },
+        {
+          "generation": 5,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        },
+        {
+          "generation": 43,
+          "from": "polish",
+          "to": "grind",
+          "reason": "Plateau: no gain for 20 generations in Polish."
+        },
+        {
+          "generation": 51,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        }
+      ],
+      "rows": [
+        {
+          "generation": 0,
+          "phase": "fresh",
+          "fitness": 2,
+          "laps": 0,
+          "champion": 2,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 1,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 2,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 3,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 4,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 5,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 6,
+          "phase": "polish",
+          "fitness": 9,
+          "laps": 1,
+          "champion": 9,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 7,
+          "phase": "polish",
+          "fitness": 9,
+          "laps": 1,
+          "champion": 9,
+          "health": "Stuck",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 8,
+          "phase": "polish",
+          "fitness": 9,
+          "laps": 1,
+          "champion": 9,
+          "health": "Stuck",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 9,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 10,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 11,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 12,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 13,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 14,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 15,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 16,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 17,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 18,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 19,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 20,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 21,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 22,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 23,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 24,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 25,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 26,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 27,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 28,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 29,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 30,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 31,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 32,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 33,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 34,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 35,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 36,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 37,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 38,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 39,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 40,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 41,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 42,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 43,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 20
+        },
+        {
+          "generation": 44,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 45,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 46,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 47,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 48,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 49,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 50,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 51,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 52,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 53,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 54,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 55,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 56,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 57,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 58,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 59,
+          "phase": "polish",
+          "fitness": 11,
+          "laps": 2,
+          "champion": 11,
+          "health": "Stuck",
+          "sinceProgress": 7
+        }
+      ]
+    },
+    {
+      "track": "Rectangle",
+      "seed": 4,
+      "gates": 5,
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        },
+        {
+          "generation": 3,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        },
+        {
+          "generation": 39,
+          "from": "polish",
+          "to": "grind",
+          "reason": "Plateau: no gain for 20 generations in Polish."
+        },
+        {
+          "generation": 47,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        }
+      ],
+      "rows": [
+        {
+          "generation": 0,
+          "phase": "fresh",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 1,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "NeedsReplan",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 2,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "NeedsReplan",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 3,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 4,
+          "phase": "polish",
+          "fitness": 12,
+          "laps": 2,
+          "champion": 12,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 5,
+          "phase": "polish",
+          "fitness": 12,
+          "laps": 2,
+          "champion": 12,
+          "health": "Stuck",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 6,
+          "phase": "polish",
+          "fitness": 12,
+          "laps": 2,
+          "champion": 12,
+          "health": "Stuck",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 7,
+          "phase": "polish",
+          "fitness": 13,
+          "laps": 2,
+          "champion": 13,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 8,
+          "phase": "polish",
+          "fitness": 13,
+          "laps": 2,
+          "champion": 13,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 9,
+          "phase": "polish",
+          "fitness": 13,
+          "laps": 2,
+          "champion": 13,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 10,
+          "phase": "polish",
+          "fitness": 13,
+          "laps": 2,
+          "champion": 13,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 11,
+          "phase": "polish",
+          "fitness": 13,
+          "laps": 2,
+          "champion": 13,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 12,
+          "phase": "polish",
+          "fitness": 13,
+          "laps": 2,
+          "champion": 13,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 13,
+          "phase": "polish",
+          "fitness": 13,
+          "laps": 2,
+          "champion": 13,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 14,
+          "phase": "polish",
+          "fitness": 13,
+          "laps": 2,
+          "champion": 13,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 15,
+          "phase": "polish",
+          "fitness": 13,
+          "laps": 2,
+          "champion": 13,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 16,
+          "phase": "polish",
+          "fitness": 13,
+          "laps": 2,
+          "champion": 13,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 17,
+          "phase": "polish",
+          "fitness": 13,
+          "laps": 2,
+          "champion": 13,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 18,
+          "phase": "polish",
+          "fitness": 13,
+          "laps": 2,
+          "champion": 13,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 19,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 20,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 21,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 22,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 23,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 24,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 25,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 26,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 27,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 28,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 29,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 30,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 31,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 32,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 33,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 34,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 35,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 36,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 37,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 38,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 39,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 20
+        },
+        {
+          "generation": 40,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 41,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 42,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 43,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 44,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 1,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 45,
+          "phase": "grind",
+          "fitness": 8,
+          "laps": 1,
+          "champion": 8,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 46,
+          "phase": "grind",
+          "fitness": 8,
+          "laps": 1,
+          "champion": 8,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 47,
+          "phase": "grind",
+          "fitness": 8,
+          "laps": 1,
+          "champion": 8,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 48,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 49,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 50,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 51,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 52,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 53,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 54,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 55,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 56,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 57,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 58,
+          "phase": "polish",
+          "fitness": 14,
+          "laps": 2,
+          "champion": 14,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 59,
+          "phase": "polish",
+          "fitness": 15,
+          "laps": 2,
+          "champion": 15,
+          "health": "Healthy",
+          "sinceProgress": 0
+        }
+      ]
+    },
+    {
+      "track": "Rectangle",
+      "seed": 5,
+      "gates": 5,
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        },
+        {
+          "generation": 48,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        }
+      ],
+      "rows": [
+        {
+          "generation": 0,
+          "phase": "fresh",
+          "fitness": 2,
+          "laps": 0,
+          "champion": 2,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 1,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 2,
+          "phase": "grind",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 3,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 4,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 5,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 6,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 7,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 8,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 9,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 10,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 11,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 12,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 13,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 14,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 15,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 16,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 17,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 18,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 19,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 20,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 21,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 22,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 23,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 20
+        },
+        {
+          "generation": 24,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 21
+        },
+        {
+          "generation": 25,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 22
+        },
+        {
+          "generation": 26,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 23
+        },
+        {
+          "generation": 27,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 24
+        },
+        {
+          "generation": 28,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 25
+        },
+        {
+          "generation": 29,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 26
+        },
+        {
+          "generation": 30,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 27
+        },
+        {
+          "generation": 31,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 28
+        },
+        {
+          "generation": 32,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 29
+        },
+        {
+          "generation": 33,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 30
+        },
+        {
+          "generation": 34,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 31
+        },
+        {
+          "generation": 35,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 32
+        },
+        {
+          "generation": 36,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 33
+        },
+        {
+          "generation": 37,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 34
+        },
+        {
+          "generation": 38,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 35
+        },
+        {
+          "generation": 39,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 36
+        },
+        {
+          "generation": 40,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 37
+        },
+        {
+          "generation": 41,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 38
+        },
+        {
+          "generation": 42,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 39
+        },
+        {
+          "generation": 43,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 40
+        },
+        {
+          "generation": 44,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 41
+        },
+        {
+          "generation": 45,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 42
+        },
+        {
+          "generation": 46,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 43
+        },
+        {
+          "generation": 47,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 48,
+          "phase": "grind",
+          "fitness": 6,
+          "laps": 1,
+          "champion": 6,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 49,
+          "phase": "polish",
+          "fitness": 9,
+          "laps": 1,
+          "champion": 9,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 50,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 51,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 52,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 53,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 54,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 55,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 56,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 57,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 58,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 59,
+          "phase": "polish",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 9
+        }
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": 0,
+      "gates": 9,
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ],
+      "rows": [
+        {
+          "generation": 0,
+          "phase": "fresh",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 1,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "NeedsReplan",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 2,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "NeedsReplan",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 3,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "NeedsReplan",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 4,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "NeedsReplan",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 5,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "NeedsReplan",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 6,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "NeedsReplan",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 7,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "NeedsReplan",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 8,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "NeedsReplan",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 9,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 10,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 11,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 12,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 13,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 14,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 15,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 16,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 17,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 18,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 19,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 20,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 21,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 22,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 23,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 24,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 25,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 26,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 27,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 28,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 29,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 30,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 31,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 32,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 33,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 20
+        },
+        {
+          "generation": 34,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 21
+        },
+        {
+          "generation": 35,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 22
+        },
+        {
+          "generation": 36,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 23
+        },
+        {
+          "generation": 37,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 24
+        },
+        {
+          "generation": 38,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 25
+        },
+        {
+          "generation": 39,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 26
+        },
+        {
+          "generation": 40,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 27
+        },
+        {
+          "generation": 41,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 28
+        },
+        {
+          "generation": 42,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 29
+        },
+        {
+          "generation": 43,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 30
+        },
+        {
+          "generation": 44,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 31
+        },
+        {
+          "generation": 45,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 32
+        },
+        {
+          "generation": 46,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 33
+        },
+        {
+          "generation": 47,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 34
+        },
+        {
+          "generation": 48,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 35
+        },
+        {
+          "generation": 49,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 36
+        },
+        {
+          "generation": 50,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 37
+        },
+        {
+          "generation": 51,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 38
+        },
+        {
+          "generation": 52,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 39
+        },
+        {
+          "generation": 53,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 40
+        },
+        {
+          "generation": 54,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 41
+        },
+        {
+          "generation": 55,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 42
+        },
+        {
+          "generation": 56,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 43
+        },
+        {
+          "generation": 57,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 44
+        },
+        {
+          "generation": 58,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 45
+        },
+        {
+          "generation": 59,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 46
+        }
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": 1,
+      "gates": 9,
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ],
+      "rows": [
+        {
+          "generation": 0,
+          "phase": "fresh",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 1,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 2,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 3,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 4,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 5,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 6,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 7,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 8,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 9,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 10,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 11,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 12,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 13,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 14,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 15,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 16,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 17,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 18,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 19,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 20,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 20
+        },
+        {
+          "generation": 21,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 21
+        },
+        {
+          "generation": 22,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 22
+        },
+        {
+          "generation": 23,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 23
+        },
+        {
+          "generation": 24,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 24
+        },
+        {
+          "generation": 25,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 25
+        },
+        {
+          "generation": 26,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 26
+        },
+        {
+          "generation": 27,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 27
+        },
+        {
+          "generation": 28,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 28
+        },
+        {
+          "generation": 29,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 29
+        },
+        {
+          "generation": 30,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 30
+        },
+        {
+          "generation": 31,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 31
+        },
+        {
+          "generation": 32,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 32
+        },
+        {
+          "generation": 33,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 33
+        },
+        {
+          "generation": 34,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 34
+        },
+        {
+          "generation": 35,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 35
+        },
+        {
+          "generation": 36,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 36
+        },
+        {
+          "generation": 37,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 37
+        },
+        {
+          "generation": 38,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 38
+        },
+        {
+          "generation": 39,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 39
+        },
+        {
+          "generation": 40,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 40
+        },
+        {
+          "generation": 41,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 41
+        },
+        {
+          "generation": 42,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 42
+        },
+        {
+          "generation": 43,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 43
+        },
+        {
+          "generation": 44,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 44
+        },
+        {
+          "generation": 45,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 45
+        },
+        {
+          "generation": 46,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 46
+        },
+        {
+          "generation": 47,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 47
+        },
+        {
+          "generation": 48,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 48
+        },
+        {
+          "generation": 49,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 49
+        },
+        {
+          "generation": 50,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 50
+        },
+        {
+          "generation": 51,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 51
+        },
+        {
+          "generation": 52,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 52
+        },
+        {
+          "generation": 53,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 53
+        },
+        {
+          "generation": 54,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 54
+        },
+        {
+          "generation": 55,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 55
+        },
+        {
+          "generation": 56,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 56
+        },
+        {
+          "generation": 57,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 57
+        },
+        {
+          "generation": 58,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 58
+        },
+        {
+          "generation": 59,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 59
+        }
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": 2,
+      "gates": 9,
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ],
+      "rows": [
+        {
+          "generation": 0,
+          "phase": "fresh",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 1,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 2,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 3,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 4,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 5,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 6,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 7,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 8,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 9,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 10,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 11,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 12,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 13,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 14,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 15,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 16,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 17,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 18,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 19,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 20,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 21,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 20
+        },
+        {
+          "generation": 22,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 21
+        },
+        {
+          "generation": 23,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 22
+        },
+        {
+          "generation": 24,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 23
+        },
+        {
+          "generation": 25,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 24
+        },
+        {
+          "generation": 26,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 25
+        },
+        {
+          "generation": 27,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 26
+        },
+        {
+          "generation": 28,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 27
+        },
+        {
+          "generation": 29,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 28
+        },
+        {
+          "generation": 30,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 29
+        },
+        {
+          "generation": 31,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 30
+        },
+        {
+          "generation": 32,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 31
+        },
+        {
+          "generation": 33,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 32
+        },
+        {
+          "generation": 34,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 33
+        },
+        {
+          "generation": 35,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 34
+        },
+        {
+          "generation": 36,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 35
+        },
+        {
+          "generation": 37,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 36
+        },
+        {
+          "generation": 38,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 37
+        },
+        {
+          "generation": 39,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 38
+        },
+        {
+          "generation": 40,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 39
+        },
+        {
+          "generation": 41,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 40
+        },
+        {
+          "generation": 42,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 41
+        },
+        {
+          "generation": 43,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 42
+        },
+        {
+          "generation": 44,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 43
+        },
+        {
+          "generation": 45,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 44
+        },
+        {
+          "generation": 46,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 45
+        },
+        {
+          "generation": 47,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 46
+        },
+        {
+          "generation": 48,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 47
+        },
+        {
+          "generation": 49,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 48
+        },
+        {
+          "generation": 50,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 49
+        },
+        {
+          "generation": 51,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 50
+        },
+        {
+          "generation": 52,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 51
+        },
+        {
+          "generation": 53,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 52
+        },
+        {
+          "generation": 54,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 53
+        },
+        {
+          "generation": 55,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 54
+        },
+        {
+          "generation": 56,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 55
+        },
+        {
+          "generation": 57,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 56
+        },
+        {
+          "generation": 58,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 57
+        },
+        {
+          "generation": 59,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 58
+        }
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": 3,
+      "gates": 9,
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ],
+      "rows": [
+        {
+          "generation": 0,
+          "phase": "fresh",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 1,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 2,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 3,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 4,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 5,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 6,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 7,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 8,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 9,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 10,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 11,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 12,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 13,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 14,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 15,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 16,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 17,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 18,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 19,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 20,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 20
+        },
+        {
+          "generation": 21,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 21
+        },
+        {
+          "generation": 22,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 22
+        },
+        {
+          "generation": 23,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 23
+        },
+        {
+          "generation": 24,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 24
+        },
+        {
+          "generation": 25,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 25
+        },
+        {
+          "generation": 26,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 26
+        },
+        {
+          "generation": 27,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 27
+        },
+        {
+          "generation": 28,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 28
+        },
+        {
+          "generation": 29,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 29
+        },
+        {
+          "generation": 30,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 30
+        },
+        {
+          "generation": 31,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 31
+        },
+        {
+          "generation": 32,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 32
+        },
+        {
+          "generation": 33,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 33
+        },
+        {
+          "generation": 34,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 34
+        },
+        {
+          "generation": 35,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 35
+        },
+        {
+          "generation": 36,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 36
+        },
+        {
+          "generation": 37,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 37
+        },
+        {
+          "generation": 38,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 38
+        },
+        {
+          "generation": 39,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 39
+        },
+        {
+          "generation": 40,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 40
+        },
+        {
+          "generation": 41,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 41
+        },
+        {
+          "generation": 42,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 42
+        },
+        {
+          "generation": 43,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 43
+        },
+        {
+          "generation": 44,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 44
+        },
+        {
+          "generation": 45,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 45
+        },
+        {
+          "generation": 46,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 46
+        },
+        {
+          "generation": 47,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 47
+        },
+        {
+          "generation": 48,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 48
+        },
+        {
+          "generation": 49,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 49
+        },
+        {
+          "generation": 50,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 50
+        },
+        {
+          "generation": 51,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 51
+        },
+        {
+          "generation": 52,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 52
+        },
+        {
+          "generation": 53,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 53
+        },
+        {
+          "generation": 54,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 54
+        },
+        {
+          "generation": 55,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 55
+        },
+        {
+          "generation": 56,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 56
+        },
+        {
+          "generation": 57,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 57
+        },
+        {
+          "generation": 58,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 58
+        },
+        {
+          "generation": 59,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Stuck",
+          "sinceProgress": 59
+        }
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": 4,
+      "gates": 9,
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        },
+        {
+          "generation": 5,
+          "from": "grind",
+          "to": "polish",
+          "reason": "A car completed a lap."
+        },
+        {
+          "generation": 53,
+          "from": "polish",
+          "to": "grind",
+          "reason": "Plateau: no gain for 20 generations in Polish."
+        }
+      ],
+      "rows": [
+        {
+          "generation": 0,
+          "phase": "fresh",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 1,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 2,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 3,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "NeedsReplan",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 4,
+          "phase": "grind",
+          "fitness": 6,
+          "laps": 0,
+          "champion": 6,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 5,
+          "phase": "grind",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 6,
+          "phase": "polish",
+          "fitness": 12,
+          "laps": 1,
+          "champion": 12,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 7,
+          "phase": "polish",
+          "fitness": 12,
+          "laps": 1,
+          "champion": 12,
+          "health": "Stuck",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 8,
+          "phase": "polish",
+          "fitness": 12,
+          "laps": 1,
+          "champion": 12,
+          "health": "Stuck",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 9,
+          "phase": "polish",
+          "fitness": 12,
+          "laps": 1,
+          "champion": 12,
+          "health": "Stuck",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 10,
+          "phase": "polish",
+          "fitness": 12,
+          "laps": 1,
+          "champion": 12,
+          "health": "Stuck",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 11,
+          "phase": "polish",
+          "fitness": 12,
+          "laps": 1,
+          "champion": 12,
+          "health": "Stuck",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 12,
+          "phase": "polish",
+          "fitness": 12,
+          "laps": 1,
+          "champion": 12,
+          "health": "Stuck",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 13,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 14,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 15,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 16,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 17,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 18,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 19,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 20,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 21,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 22,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 23,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 24,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 25,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 26,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 27,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 28,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 29,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 30,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 31,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 32,
+          "phase": "polish",
+          "fitness": 18,
+          "laps": 1,
+          "champion": 18,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 33,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 34,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 35,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 36,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 37,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 38,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 39,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 40,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 41,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 42,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 43,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 44,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 45,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 46,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 47,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 48,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 49,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 50,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 51,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 52,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 53,
+          "phase": "polish",
+          "fitness": 19,
+          "laps": 2,
+          "champion": 19,
+          "health": "Stuck",
+          "sinceProgress": 20
+        },
+        {
+          "generation": 54,
+          "phase": "grind",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 55,
+          "phase": "grind",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 56,
+          "phase": "grind",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 57,
+          "phase": "grind",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 58,
+          "phase": "grind",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 59,
+          "phase": "grind",
+          "fitness": 10,
+          "laps": 1,
+          "champion": 10,
+          "health": "Stuck",
+          "sinceProgress": 5
+        }
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": 5,
+      "gates": 9,
+      "changes": [
+        {
+          "generation": 0,
+          "from": "fresh",
+          "to": "grind",
+          "reason": "A car passed a checkpoint."
+        }
+      ],
+      "rows": [
+        {
+          "generation": 0,
+          "phase": "fresh",
+          "fitness": 3,
+          "laps": 0,
+          "champion": 3,
+          "health": null,
+          "sinceProgress": null
+        },
+        {
+          "generation": 1,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 2,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 3,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 4,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 5,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 6,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 7,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 8,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 9,
+          "phase": "grind",
+          "fitness": 4,
+          "laps": 0,
+          "champion": 4,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 10,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 11,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 12,
+          "phase": "grind",
+          "fitness": 5,
+          "laps": 0,
+          "champion": 5,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 13,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 0
+        },
+        {
+          "generation": 14,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 1
+        },
+        {
+          "generation": 15,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 2
+        },
+        {
+          "generation": 16,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 3
+        },
+        {
+          "generation": 17,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 4
+        },
+        {
+          "generation": 18,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 5
+        },
+        {
+          "generation": 19,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 6
+        },
+        {
+          "generation": 20,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Healthy",
+          "sinceProgress": 7
+        },
+        {
+          "generation": 21,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 8
+        },
+        {
+          "generation": 22,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 9
+        },
+        {
+          "generation": 23,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 10
+        },
+        {
+          "generation": 24,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 11
+        },
+        {
+          "generation": 25,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 12
+        },
+        {
+          "generation": 26,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 13
+        },
+        {
+          "generation": 27,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 14
+        },
+        {
+          "generation": 28,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 15
+        },
+        {
+          "generation": 29,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 16
+        },
+        {
+          "generation": 30,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 17
+        },
+        {
+          "generation": 31,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 18
+        },
+        {
+          "generation": 32,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 19
+        },
+        {
+          "generation": 33,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 20
+        },
+        {
+          "generation": 34,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 21
+        },
+        {
+          "generation": 35,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 22
+        },
+        {
+          "generation": 36,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 23
+        },
+        {
+          "generation": 37,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 24
+        },
+        {
+          "generation": 38,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 25
+        },
+        {
+          "generation": 39,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 26
+        },
+        {
+          "generation": 40,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 27
+        },
+        {
+          "generation": 41,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 28
+        },
+        {
+          "generation": 42,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 29
+        },
+        {
+          "generation": 43,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 30
+        },
+        {
+          "generation": 44,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 31
+        },
+        {
+          "generation": 45,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 32
+        },
+        {
+          "generation": 46,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 33
+        },
+        {
+          "generation": 47,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 34
+        },
+        {
+          "generation": 48,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 35
+        },
+        {
+          "generation": 49,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 36
+        },
+        {
+          "generation": 50,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 37
+        },
+        {
+          "generation": 51,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 38
+        },
+        {
+          "generation": 52,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 39
+        },
+        {
+          "generation": 53,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 40
+        },
+        {
+          "generation": 54,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 41
+        },
+        {
+          "generation": 55,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 42
+        },
+        {
+          "generation": 56,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 43
+        },
+        {
+          "generation": 57,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 44
+        },
+        {
+          "generation": 58,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 45
+        },
+        {
+          "generation": 59,
+          "phase": "grind",
+          "fitness": 7,
+          "laps": 0,
+          "champion": 7,
+          "health": "Stuck",
+          "sinceProgress": 46
+        }
+      ]
+    }
+  ]
+}

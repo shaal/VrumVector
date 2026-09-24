@@ -45,7 +45,7 @@ export class Simulation {
     for(const car of this.cars){const rank=profiles.rank(car,gates);if(rank>score){elite=car;score=rank;}}
     const vector=new Float32Array(244);let at=0;
     for(const level of elite.brain.levels){for(const n of level.biases)vector[at++]=n;for(const n of level.weights)vector[at++]=n;}
-    return {vector,fitness:elite.checkPointsCount+elite.laps*gates,styleScore:profiles.styleScore(elite),
+    return {vector,fitness:elite.checkPointsCount+elite.laps*gates,laps:elite.laps,styleScore:profiles.styleScore(elite),
       popN:this.cars.length,popStillAlive:this.cars.filter(c=>!c.damaged).length,driving:profiles.summarize(elite)};
   }
 }

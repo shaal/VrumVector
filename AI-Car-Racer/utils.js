@@ -121,13 +121,16 @@ function phaseToLayout(phase){
             </div>
 
             <div id="trainingPresets" style="display:flex; gap:.35em; margin:.35em 0; flex-wrap:wrap;">
-                <button class='controlButton' style='flex:1;min-width:0;' onclick="applyTrainingPreset('fresh')" title="Cold start: N=500, 2×, 15s, variance 0.25, cons-init 0.70">🌱 Fresh</button>
-                <button class='controlButton' style='flex:1;min-width:0;' onclick="applyTrainingPreset('grind')" title="Farm gens + archive: N=600, 20×, 15s, variance 0.18">🏎️ Grind</button>
-                <button class='controlButton' style='flex:1;min-width:0;' onclick="applyTrainingPreset('polish')" title="Refine lap times: N=800, 2×, 25s, variance 0.05">✨ Polish</button>
+                <button class='controlButton' data-preset='fresh' style='flex:1;min-width:0;' onclick="applyTrainingPreset('fresh')" title="Cold start: N=500, 2×, 15s, variance 0.25, cons-init 0.70">🌱 Fresh</button>
+                <button class='controlButton' data-preset='grind' style='flex:1;min-width:0;' onclick="applyTrainingPreset('grind')" title="Farm gens + archive: N=600, 20×, 15s, variance 0.18">🏎️ Grind</button>
+                <button class='controlButton' data-preset='polish' style='flex:1;min-width:0;' onclick="applyTrainingPreset('polish')" title="Refine lap times: N=800, 2×, 25s, variance 0.05">✨ Polish</button>
+                <button type='button' class='controlButton auto-train-toggle' id='autoTrainToggle' aria-pressed='false' aria-describedby='autoTrainStatus' onclick="if(window.AutoTrain){window.AutoTrain.toggle();}else{window.__autoTrainPending=!window.__autoTrainPending;this.setAttribute('aria-pressed',String(window.__autoTrainPending));this.textContent='🤖 Auto Train: '+(window.__autoTrainPending?'on':'off');}" title="Opt-in: start at Fresh, move to Grind at the first checkpoint past the start line, to Polish at the first lap, and back to Grind after 20 Polish generations without a gain">🤖 Auto Train: off</button>
+                <p id='autoTrainStatus' class='auto-train-status' role='status' aria-live='polite'></p>
             </div>
             <details id="trainingTuning" class="more-actions">
                 <summary>Training tuning (sliders)</summary>
                 <div id="inputsContainer">
+                    <p id="autoTrainLock" class="auto-train-lock" hidden>🔒 Auto Train sets these values. Moving one turns Auto Train off.</p>
                     <label for="batchSizeInput">AI cars · next generation</label>
                     <input min="1" max="2000" id="batchSizeInput" step="1" type="range" oninput="setN(this.value)">
                     <output id="batchSizeOutput" name="AI cars"></output>
@@ -266,6 +269,8 @@ function phaseToLayout(phase){
             showInputCanvas();
             showGraphCanvas();
             graphProgress();
+            // Auto Train restarts at Fresh on a new track before this generation is built.
+            try { window.AutoTrain && window.AutoTrain.syncTrack(); } catch (_) {}
             begin();
             // Page-load gate: begin() keeps pause=true while __awaitingStart.
             // Label the primary button as an explicit Start CTA. After the
@@ -279,6 +284,8 @@ function phaseToLayout(phase){
                 }
             }
             try { if (typeof syncStartOverlay === 'function') syncStartOverlay(); } catch (_) {}
+            // The panel was re-rendered; show the Auto Train state again.
+            try { window.AutoTrain && window.AutoTrain.render(); } catch (_) {}
             break;
 
     }
