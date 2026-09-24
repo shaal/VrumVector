@@ -1,7 +1,7 @@
 # Car collisions: cars that cannot drive through each other (plan)
 
 **Status:** research and design only. Nothing here is built. Decisions D1–D4
-below need an answer before task C1 starts.
+were taken on 2026-09-24 (the recommended options, below); C1 can start.
 
 **Goal:** an opt-in mode in which cars are solid. Cars can hit each other, a
 hit has a cost, the cars' sensors can see other cars, and the population
@@ -182,25 +182,28 @@ Paired by track and seed, with shared random streams:
   (`vetoedDecision` in `learning/decision.js`); n ≥ 6 per arm across at least
   2 sessions before a strong claim.
 
-## Decisions needed before C1
+## Decisions (taken 2026-09-24)
 
-- **D1 — Who collides.** Recommended: heats of 8 inside the AI population.
+- **D1 — Who collides.** **Taken:** heats of 8 inside the AI population.
   Alternatives: the whole population (small N only), a few rival cars driven
   by archived champions (learners ghost each other), or only your own car.
-- **D2 — What a hit does.** Recommended: the striker crashes; head-on crashes
+- **D2 — What a hit does.** **Taken:** the striker crashes; head-on crashes
   both. Alternatives: both crash, or a bump that slows the car.
-- **D3 — How cars see cars.** Recommended: the existing rays also hit cars
+- **D3 — How cars see cars.** **Taken:** the existing rays also hit cars
   (no retraining, no migration). Alternative: separate car inputs (bigger
   network, padding migration).
-- **D4 — Your car.** Recommended for now: no contact between your car and the
+- **D4 — Your car.** **Taken for now:** no contact between your car and the
   AI, and multiplayer stays non-colliding (5 Hz, lagged, documented in
   `live-multiplayer.md`). One-way contact (your car hits AI poses) is possible
   at 1× later.
 
-Smaller questions: keep wrecks as obstacles or not; cap the sensor stride in
-collision mode (at 100× a car travels about 240 px between looks); a toggle
-in the Experiments panel plus `?collide=1`, or a saved physics setting like
-traction.
+Smaller defaults (change them at C1 review if needed):
+
+- Wrecks and cars stalled for 2 s are not solid.
+- In collision mode the sensor stride is capped at 4 (the 20× level); at 100×
+  a car would otherwise travel about 240 px between looks.
+- The toggle is an experiment in the Experiments panel plus `?collide=1`, off
+  by default and not a saved physics setting.
 
 ## Tasks
 

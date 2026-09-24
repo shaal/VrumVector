@@ -175,13 +175,12 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
   3 hours.
   depends: H3
 
-## Open questions
+## Defaults for the open questions (2026-09-24; change at H1 review if needed)
 
-1. Record only the WASD car, or whichever car the person is driving (the
-   arrow-key car too)?
-2. Allow recording during multiplayer races (already 1×), or keep it solo
-   only at first?
-3. Should a clone recorded on one track ever seed another track directly, or
-   only through vector memory and the transfer check?
-4. Keep raw demonstrations after training, or only the clone? Raw data allows
-   retraining after a trainer change; the clone alone is smaller.
+1. **Which car:** the WASD car only (the panel calls it "your car"). The
+   arrow-key car can follow later.
+2. **Multiplayer:** solo only at first; no recording while multiplayer is on.
+3. **Other tracks:** a clone seeds another track only through vector memory
+   and the transfer check, never directly.
+4. **Raw data:** keep raw demonstrations (within the 10 × 5-minute cap), so a
+   clone can be retrained after a trainer change.
