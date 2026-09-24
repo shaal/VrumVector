@@ -22,4 +22,15 @@ for(const change of [s=>s.schema=99,s=>s.ewc.current_fisher=[],s=>s.grad_up[0]=n
  assert.throws(()=>b.importCheckpoint(JSON.stringify(bad)));
  assert.deepEqual(JSON.parse(b.exportCheckpoint()).micro,before.micro);
 }
-a.free();b.free();console.log('Real SONA WASM: exact state, pattern retrieval, optimizer continuation, and atomic rejection passed');
+// A checkpoint saved by the previous vendored build (d5d3296cd) still restores exactly.
+const legacy=JSON.parse(readFileSync(new URL('./fixtures/sona-checkpoint-d5d3296c.json',import.meta.url),'utf8'));
+const restored=WasmEphemeralAgent.withConfig('legacy',JSON.stringify(legacy.config));
+restored.importCheckpoint(JSON.stringify(legacy.checkpoint));
+const reexported=JSON.parse(restored.exportCheckpoint());
+for(const key of Object.keys(legacy.checkpoint))if(key!=='background_elapsed_ms')assert.deepEqual(reexported[key],legacy.checkpoint[key],'legacy '+key);
+const byId=list=>list.map(p=>JSON.stringify(p)).sort();
+assert.deepEqual(byId(JSON.parse(restored.findPatterns(vector,3))),byId(legacy.patterns));
+assert.deepEqual(Object.keys(JSON.parse(restored.getStats())).sort(),Object.keys(legacy.stats).sort());
+for(let i=0;i<105;i++)restored.processTask(vector,.7);
+const {micro}=JSON.parse(restored.exportCheckpoint());assert.ok([...micro.up_proj,...micro.down_proj].every(Number.isFinite));
+a.free();b.free();restored.free();console.log('Real SONA WASM: exact state, pattern retrieval, optimizer continuation, atomic rejection, and legacy checkpoint import passed');

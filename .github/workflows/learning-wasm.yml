@@ -4,6 +4,12 @@ on:
     branches: ['codex/sona-checkpoints', 'codex/trainable-gnn']
     paths: ['scripts/ruvector-patches/**', 'scripts/build-learning-wasm.sh', 'scripts/build-gnn-wasm.sh', 'tests/gnn-wasm.mjs', '.github/workflows/learning-wasm.yml', 'tests/learning-wasm.mjs']
   workflow_dispatch:
+    inputs:
+      target:
+        description: Binding to rebuild on this branch (ship/* or codex/*)
+        type: choice
+        options: [sona, gnn]
+        default: sona
 permissions:
   contents: read
 concurrency:
@@ -11,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
-    if: github.repository == 'shaal/VrumVector' && startsWith(github.ref, 'refs/heads/codex/')
+    if: github.repository == 'shaal/VrumVector' && (startsWith(github.ref, 'refs/heads/codex/') || startsWith(github.ref, 'refs/heads/ship/'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -34,14 +40,16 @@ jobs:
           rustup default 1.85.0
           if [[ "$(wasm-pack --version 2>/dev/null || true)" != "wasm-pack 0.13.1" ]]; then cargo install wasm-pack --version 0.13.1 --locked; fi
       - run: bash scripts/build-learning-wasm.sh
-        if: github.ref_name == 'codex/sona-checkpoints'
+        if: github.ref_name == 'codex/sona-checkpoints' || inputs.target == 'sona'
       - run: bash scripts/build-gnn-wasm.sh
-        if: github.ref_name == 'codex/trainable-gnn'
+        if: github.ref_name == 'codex/trainable-gnn' || inputs.target == 'gnn'
       - name: Commit generated bindings and lockfile
+        env:
+          TARGET: ${{ inputs.target }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          if [[ "$GITHUB_REF_NAME" == 'codex/sona-checkpoints' ]]; then
+          if [[ "$GITHUB_REF_NAME" == 'codex/sona-checkpoints' || "$TARGET" == 'sona' ]]; then
             git add vendor/ruvector/sona scripts/ruvector-patches/sona.Cargo.lock
           else
             git add vendor/ruvector/ruvector_gnn_trainable_wasm scripts/ruvector-patches/gnn.Cargo.lock
