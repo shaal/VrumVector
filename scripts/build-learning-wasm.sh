@@ -5,12 +5,18 @@ BUILD="$(mktemp -d)"
 trap 'rm -rf "$BUILD"' EXIT
 # Reproducible output: panic-location strings otherwise embed the random build
 # folder and the local Cargo home (which includes the user's home folder name).
-export RUSTFLAGS="--remap-path-prefix=$BUILD=/build --remap-path-prefix=$(cd "$BUILD" && pwd -P)=/build --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo"
+# CARGO_ENCODED_RUSTFLAGS (0x1f-separated) survives spaces in paths and takes
+# precedence over any RUSTFLAGS in the caller's environment.
+unset RUSTFLAGS
+CARGO_ENCODED_RUSTFLAGS="$(printf '%s\x1f%s\x1f%s' "--remap-path-prefix=$BUILD=/build" \
+  "--remap-path-prefix=$(cd "$BUILD" && pwd -P)=/build" "--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo")"
+export CARGO_ENCODED_RUSTFLAGS
 UPSTREAM=5356a84e2f784a33fa497da2e73440d469eb5542
 git -C "$BUILD" init -q upstream
 git -C "$BUILD/upstream" remote add origin https://github.com/ruvnet/ruvector.git
-# Upstream rewrote its history once; shaal/ruvector tags every base this repo
-# has vendored (vv/*), so fall back to the fork if upstream stops serving it.
+# Upstream rewrote its history once; shaal/ruvector tags the clean source
+# commit of every build these scripts use (vv/*), so fall back to the fork if
+# upstream stops serving it.
 if ! git -C "$BUILD/upstream" fetch -q --depth 1 origin "$UPSTREAM"; then
   git -C "$BUILD/upstream" remote add fork https://github.com/shaal/ruvector.git
   git -C "$BUILD/upstream" fetch -q --depth 1 fork "$UPSTREAM"

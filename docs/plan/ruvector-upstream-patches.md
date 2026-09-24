@@ -208,12 +208,14 @@ without adding reproducibility.
 - `scripts/build-learning-wasm.sh` and `scripts/build-gnn-wasm.sh` build from
   upstream `5356a84e2` plus the patch files. If upstream stops serving a SHA,
   they fetch it from `shaal/ruvector`.
-- `shaal/ruvector` tags every base this repo has vendored:
+- `shaal/ruvector` tags the clean source commits of these builds and of the
+  HNSW backend (older April packages record a `-dirty` tree; see T9):
   `vv/vendored-base-d5d3296c`, `vv/sona-gnn-base-5356a84e`, and
   `vv/hnsw-wasm-backend-5f2a9a75` (the HNSW backend, also on branch
   `feat/hnsw-wasm-backend`). Never delete `vv/*` tags.
 - Both scripts remap the build folder and the Cargo home in panic strings, so
-  a build is byte-reproducible and carries no local paths.
+  a build carries no local paths and repeats byte for byte on one host. CI is
+  the reference build.
 - Option 1 (upstream PRs for `find_patterns`, the checkpoint bindings, the
   online GNN, and the HNSW backend) is still open and still needs the
   user's approval, because it posts to a third-party repository.

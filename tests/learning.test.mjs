@@ -201,6 +201,7 @@ for(const [name,source,file,count] of [
     const code=await readFile(new URL(source,import.meta.url),'utf8');
     const tags=[...code.matchAll(/(?:_bg\.wasm|\.js)\?v=(?:sona|gnn)-([0-9a-f]+)'/g)].map(m=>m[1]);
     assert.equal(tags.length,count,'every glue and wasm URL carries the tag');
+    assert.doesNotMatch(code.replace(/\/\/.*$/gm,''),/ruvector_(?:sona|gnn_trainable_wasm)(?:_bg\.wasm|\.js)'/,'no untagged glue or wasm URL');
     const hash=createHash('sha256').update(await readFile(new URL(file,import.meta.url))).digest('hex');
     for(const tag of tags)assert.equal(tag,hash.slice(0,8),`Set ?v=…-<first 8 hex of the wasm SHA-256> in ${source.split('/').pop()} after a rebuild`);
   });

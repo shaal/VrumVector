@@ -41,7 +41,8 @@ generated bindings. Run it from a `ship/*` or `codex/*` branch with
 remap the build folder and the Cargo home (`--remap-path-prefix`), so a build
 carries no local paths and repeats byte for byte on the same host. Builds on
 different hosts (macOS vs the Linux CI runner) differ only in Rust symbol
-hashes, because Cargo hashes the host triple into crate metadata. CI is the
+hashes and the function and data order they induce, because Cargo hashes the
+host triple into crate metadata. CI is the
 reference build: commit only CI-built binaries. After a rebuild,
 set the `?v=sona-…` query in `AI-Car-Racer/sona/engine.js` (or `?v=gnn-…` in
 `AI-Car-Racer/gnnReranker.js`) to the first 8 hex digits of the new wasm
