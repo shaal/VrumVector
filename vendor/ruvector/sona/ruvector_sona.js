@@ -708,10 +708,10 @@ export class WasmSonaEngine {
      * @param {bigint} trajectory_id
      * @param {number} node_id
      * @param {number} score
-     * @param {bigint} latency_us
+     * @param {bigint} _latency_us
      */
-    recordStep(trajectory_id, node_id, score, latency_us) {
-        wasm.wasmsonaengine_recordStep(this.__wbg_ptr, trajectory_id, node_id, score, latency_us);
+    recordStep(trajectory_id, node_id, score, _latency_us) {
+        wasm.wasmsonaengine_recordStep(this.__wbg_ptr, trajectory_id, node_id, score, _latency_us);
     }
     /**
      * Run instant learning cycle
