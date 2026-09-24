@@ -11,6 +11,7 @@ import {syntheticDataset} from './helpers/synthetic.mjs';
 import {trainClone,trainCloneInWorker,prepareDataset,splitBlocks,pairRows,predict,evaluate,CloneError,CLONE_DEFAULTS,KEY_NAMES}
   from '../AI-Car-Racer/learning/clone.js';
 import {seededRandom} from '../AI-Car-Racer/graphics/state.js';
+import {lagPairs,keyBits,KEY_ORDER} from '../AI-Car-Racer/learning/demonstration.js';
 
 const ROUND=30; // seconds of closed-loop driving, like one training round
 // Teachers come from short genetic runs with a fixed seed, so every run is the
@@ -124,8 +125,9 @@ test('the same seed gives the same weights, and the dataset is left unchanged',(
 
 test('the lag choice finds keys that act late, or the nearest candidate',t=>{
   // Teachers evolved with keys that act 9 steps late (a 150 ms reaction), so
-  // they drive well that way, as a person does. The keys that fit the inputs
-  // of step t are held at step t + 10.
+  // they are adapted to that delay, as a person is. They crash often and hold
+  // some keys almost always; the timing shows in the keys that change. The
+  // keys that fit the inputs of step t are held at step t + 10.
   const found={},nearest={},loss=report=>Object.fromEntries(report.lags.map(l=>[l.lag,round(l.finalLoss??l.screenLoss)]));
   for(const track of ['Rectangle','Triangle']){
     const {dataset}=teacher(track,9);
@@ -165,6 +167,7 @@ test('empty, malformed, and non-finite datasets are refused with a reason',()=>{
   }
   const tooLarge=syntheticDataset({runs:1,steps:600});
   assert.throws(()=>trainClone({...tooLarge,inputs:Float64Array.from(tooLarge.inputs,(v,i)=>i===3?1e39:v)}),fails('invalid-data'),'1e39 is not a 32-bit number');
+  assert.throws(()=>trainClone({...tooLarge,inputs:BigInt64Array.from(tooLarge.inputs,()=>1n)}),fails('invalid-data'),'BigInt inputs');
   const plain=syntheticDataset({runs:1,steps:600});
   const nulls={...plain,inputs:Array.from(plain.inputs,(v,i)=>i===7?null:v)};
   assert.throws(()=>trainClone(nulls),fails('invalid-data'),'null is not an input');
@@ -262,15 +265,34 @@ test('linked rows (for mirrored copies) stay on the side of the row they copy',(
   for(let t=0;t<n;t++)assert.equal(split.held[n+t],split.held[t]);
   assert.ok(split.held.subarray(0,n).some(Boolean),'the originals were split');
   assert.ok(trainClone(dataset,{maxEpochs:2}).weights.every(Number.isFinite));
-  for(const bad of [[5,5],[5,-2],[5,2*n],[5,1.5],[n+1,n]]){
-    const links=dataset.sameSplitAs.slice();links[bad[0]]=bad[1];
-    const withBad={...dataset,sameSplitAs:bad[1]===1.5?Array.from(links,(v,i)=>i===5?1.5:v):links};
-    assert.throws(()=>prepareDataset(withBad),fails('invalid-data'),JSON.stringify(bad));
+  for(const bad of [[5,5],[5,-2],[5,2*n],[5,1.5],[5,-1.5],[5,'-1'],[n+1,n]]){
+    const links=Array.from(dataset.sameSplitAs);links[bad[0]]=bad[1];
+    assert.throws(()=>prepareDataset({...dataset,sameSplitAs:links}),fails('invalid-data'),JSON.stringify(bad));
   }
   assert.throws(()=>prepareDataset({...dataset,sameSplitAs:new Int32Array(3)}),fails('invalid-data'));
   // Only whole runs may be linked.
   const half=dataset.sameSplitAs.slice();half.fill(-1,n,n+300);
   assert.throws(()=>prepareDataset({...dataset,sameSplitAs:half}),fails('invalid-data'));
+});
+
+test("H1's stored demonstrations convert to the trainer's dataset as the plan says",()=>{
+  // A stored demonstration: keys as a bitmask, and the physics step of each
+  // sample, with gaps (a pause, a crash) between runs of consecutive steps.
+  const sampleSteps=Uint32Array.from([...Array(300).keys()].map(i=>i+1).concat([...Array(200).keys()].map(i=>i+400),[...Array(250).keys()].map(i=>i+700)));
+  const n=sampleSteps.length,random=seededRandom('h1-store');
+  const demo={sampleSteps,inputs:Float32Array.from({length:n*10},()=>random()),keys:Uint8Array.from({length:n},()=>Math.floor(random()*16))};
+  // The conversion in the plan's H3 note (H2's job).
+  const episode=new Uint32Array(n),keys=new Uint8Array(n*4);
+  for(let i=0;i<n;i++){
+    episode[i]=i&&sampleSteps[i]!==sampleSteps[i-1]+1?episode[i-1]+1:i?episode[i-1]:0;
+    for(let o=0;o<4;o++)keys[i*4+o]=demo.keys[i]>>o&1;
+  }
+  const data=prepareDataset({inputs:demo.inputs,keys,episode});
+  assert.equal(data.run[n-1],2,'three runs');
+  for(const k of [1,2,9,16])assert.deepEqual(pairRows(data,{held:new Uint8Array(n)},k).train,lagPairs(demo,k),`lag ${k}`);
+  // Bit o of H1's key mask is key o of the trainer.
+  assert.deepEqual(KEY_ORDER,KEY_NAMES);
+  KEY_NAMES.forEach((key,o)=>assert.equal(keyBits({[key]:true}),1<<o,key));
 });
 
 // The real module worker script, driven through a stand-in worker scope

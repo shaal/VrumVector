@@ -59,7 +59,10 @@ export function prepareDataset(dataset){
   if(!ArrayBuffer.isView(d.inputs))for(let i=0;i<d.inputs.length;i++)
     if(typeof d.inputs[i]!=='number')throw new CloneError('invalid-data',`Input ${i} is not a number.`);
   // Checked after the Float32 conversion: 1e39 is finite, but not as a Float32.
-  const inputs=d.inputs instanceof Float32Array?d.inputs:Float32Array.from(d.inputs);
+  let inputs=d.inputs;
+  if(!(inputs instanceof Float32Array)){
+    try{inputs=Float32Array.from(inputs);}catch{throw new CloneError('invalid-data','Inputs must be numbers.');}
+  }
   for(let i=0;i<inputs.length;i++)if(!Number.isFinite(inputs[i]))throw new CloneError('invalid-data',`Input ${i} is not a finite 32-bit number.`);
   const keys=new Uint8Array(n*KEY_COUNT);
   for(let i=0;i<keys.length;i++){
@@ -74,13 +77,15 @@ export function prepareDataset(dataset){
   let link=null;
   if(d.sameSplitAs!=null){
     if(length(d.sameSplitAs)!==n)throw new CloneError('invalid-data','sameSplitAs must have one value per row.');
-    link=Int32Array.from(d.sameSplitAs);
+    link=new Int32Array(n);
     for(let t=0;t<n;t++){
-      const to=link[t];
-      if(to===-1)continue;
-      if(!(to>=0&&to<n&&to!==t&&d.sameSplitAs[t]===to&&link[to]===-1))
-        throw new CloneError('invalid-data',`sameSplitAs[${t}] must be -1 or the index of a row that is not linked itself.`);
+      const to=d.sameSplitAs[t];
+      if(!(to===-1||(Number.isInteger(to)&&to>=0&&to<n&&to!==t)))
+        throw new CloneError('invalid-data',`sameSplitAs[${t}] must be -1 or the index of another row.`);
+      link[t]=to;
     }
+    for(let t=0;t<n;t++)if(link[t]>=0&&link[link[t]]!==-1)
+      throw new CloneError('invalid-data',`sameSplitAs[${t}] must point to a row that is not linked itself.`);
     // Link whole runs (a mirrored run), so every block is linked or not.
     for(let t=1;t<n;t++)if(run[t]===run[t-1]&&(link[t]<0)!==(link[t-1]<0))
       throw new CloneError('invalid-data',`Row ${t}: a run must be all linked or all unlinked (link whole runs).`);

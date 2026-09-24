@@ -1,7 +1,8 @@
 // Scripted teachers for behavioural-cloning tests. evolveTeacher() runs a short
 // genetic run in the real simulator; drive() lets one network drive one car and
 // can log, per physics step, the keys held during the step and the 10 inputs
-// the car computed at its end: the dataset rows of AI-Car-Racer/learning/clone.js.
+// the car computed at its end (Car.lastInputs, as the game's recorder reads
+// them): the dataset rows of AI-Car-Racer/learning/clone.js.
 import {Simulation} from './simulation.mjs';
 import {LearningCoach,buildPopulation} from '../../AI-Car-Racer/learning/policy.js';
 import {seededRandom} from '../../AI-Car-Racer/graphics/state.js';
@@ -59,7 +60,7 @@ export function drive(sim,flat,{seconds=30,start=sim.spawn,delay=0,record=false}
     [car.controls.forward,car.controls.left,car.controls.right,car.controls.reverse]=held;
     car.update(road.borders,road.checkPointList);steps=f;
     moved||=car.x!==start.x||car.y!==start.y;
-    if(record&&moved){keys.push(...held);inputs.push(...car.brain.levels[0].inputs);}
+    if(record&&moved){keys.push(...held);inputs.push(...car.lastInputs);}
     queue.push(Array.from(car.brain.levels[1].outputs,v=>v?1:0));
     if(car.damaged){crashedAt=f;break;}
   }
