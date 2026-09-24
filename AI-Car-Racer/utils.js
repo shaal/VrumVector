@@ -239,8 +239,8 @@ function phaseToLayout(phase){
             const ssEl = document.getElementById('simSpeedInput');
             if (ssEl && typeof simSpeed !== 'undefined'){
                 ssEl.value = String(simSpeed);
-                ssEl.disabled = !!window.LiveSession?.enabled;
-                ssEl.title = ssEl.disabled ? 'Multiplayer runs at 1×' : 'Simulation speed';
+                ssEl.disabled = !!(window.LiveSession?.enabled || window.DemonstrationRecorder?.recording);
+                ssEl.title = window.LiveSession?.enabled ? 'Multiplayer runs at 1×' : ssEl.disabled ? 'Recording runs at 1×' : 'Simulation speed';
             }
             // Move "Import / Export Brain" and "More actions" panels to sit
             // below #rv-panel (Vector Memory) so they live at the bottom of

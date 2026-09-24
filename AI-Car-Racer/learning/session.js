@@ -2,6 +2,7 @@ import {LearningCoach,buildPopulation,cleanContext,contextKey,validBrain} from '
 import {trackKey} from '../graphics/state.js';
 import {applyTransferGuard,transferGuard,isTransferPaused,resumeTransfer,runTransferCheck,clearTransferGuards} from './transferCheck.js';
 import {TrainingHealth,loadHealth,HEALTH_WINDOW} from './health.js';
+import {DemonstrationRecorder,DemonstrationStore,MAX_DEMONSTRATIONS,MAX_SECONDS} from './demonstration.js';
 
 // Sliders store strings; accept a finite number in [0, 1] or use the default.
 const liveNumber=(value,fallback)=>{const n=Number(value);return Number.isFinite(n)&&n>=0&&n<=1?n:fallback;};
@@ -199,15 +200,102 @@ class DriverLearning {
     const review=this.consolidations?`${this.consolidations} memory reviews · ${sona?.patterns??0} learned patterns.`:'Memories are reviewed every 8 generations.';
     const restored=sona?.restoration==='exact'?' Full learning checkpoint restored.':sona?.restoration==='unavailable'?' Saved checkpoint retained until the learning engine is available.':sona?.replayedExamples?` ${sona.replayedExamples} circuit examples recovered from an older save.`:'';
     this.root.querySelector('[data-learning-consolidation]').textContent=review+restored+(sona?.savedExamples?` ${sona.savedExamples} successful circuit examples saved.`:'');
+    renderDemonstration();
   }
 }
 export const learning=window.DriverLearning=new DriverLearning();
 // Both arms of the A/B comparison can use the same genetic policy.
 learning.createCoach=()=>new LearningCoach();learning.buildPopulation=buildPopulation;
 
+// Recording your driving (WASD car only). Samples stay in this browser's
+// IndexedDB; multiplayer never sends them, and recording is off while it is on.
+const demoStore=new DemonstrationStore();
+let demoCount=null,demoStorage='unknown',demoNotice='';
+const point=p=>({x:p.x,y:p.y});
+export const demonstrations=window.DemonstrationRecorder=new DemonstrationRecorder({store:demoStore,
+  environment:{
+    // PlayerAssist hides this panel outside training and in the A/B view.
+    state:()=>({multiplayer:!!window.LiveSession?.enabled,adaptive:!!window.AdaptiveGates?.isEnabled?.(),
+      simSpeed:typeof simSpeed==='undefined'?1:simSpeed,assist:!!window.PlayerAssist?.enabled,
+      // controls.js ignores keys typed into the page's own form controls.
+      hidden:!!window.PlayerAssist?.root?.hidden,
+      focused:document.hasFocus()&&!document.activeElement?.closest?.('input,textarea,select,[contenteditable="true"]')}),
+    now:()=>performance.now(),
+    signature:car=>[car,road.innerList,road.outerList,road.checkPointList,road.borders,car.maxSpeed,car.traction,learning.profile],
+    snapshot:car=>({
+      context:cleanContext({profile:learning.profile,track:geometryKey(road),maxSpeed:car.maxSpeed,traction:car.traction,seconds:typeof seconds==='undefined'?20:seconds}),
+      track:{canvasW:canvas.width,canvasH:canvas.height,borders:road.borders.map(s=>s.map(point)),checkPointList:road.checkPointList.map(s=>s.map(point)),
+        startInfo:{x:car.origin.x,y:car.origin.y,heading:car.origin.angle}}}),
+  },
+  // Recording runs at 1× (setSimSpeed holds it there and locks the menu, and
+  // keeps the last speed asked for, such as a preset's, in speedBefore).
+  // Stopping restores that speed and unlocks the menu; multiplayer keeps 1×.
+  onStart(){const before=typeof simSpeed==='undefined'?1:simSpeed;window.setSimSpeed?.(1);this.speedBefore=before;},
+  onStop(){window.setSimSpeed?.(window.LiveSession?.enabled?1:this.speedBefore??1);},
+  onChange:recorder=>{if(Number.isFinite(recorder.storedCount))demoCount=recorder.storedCount;renderDemonstration();},
+});
+// Best effort: a reload or closed tab keeps what was recorded so far. The
+// closing save skips the cap; the next panel open, or a page restored from
+// the back-forward cache, restores it.
+window.addEventListener('pagehide',()=>{if(demonstrations.recording)demonstrations.stop('page',{closing:true});});
+window.addEventListener('pageshow',event=>{if(event.persisted&&demoStorage==='ready'){demoStorage='unknown';refreshDemoCount();}});
+// rAF stops in a hidden tab, so main.js cannot see that wait.
+document.addEventListener('visibilitychange',()=>{if(document.hidden)demonstrations.interrupt();});
+// The database opens the first time the panel opens, not on every page load.
+function refreshDemoCount(){
+  if(demoStorage==='checking'||demoStorage==='ready')return;demoStorage='checking';
+  // A save made while the page closed skips the cap; restore it first.
+  demoStore.prune().then(({count,dropped})=>{demoCount=count;demoStorage='ready';
+    if(dropped)demoNotice='The oldest recording was removed to keep the newest 10.';})
+    .catch(error=>{console.warn('[demonstration] storage unavailable',error);demoStorage='unavailable';})
+    .finally(renderDemonstration);
+}
+const DEMO_PAUSES={idle:'Waiting for your car to move.',ai:'Paused while AI driving is on.',damaged:'Paused: your car crashed. Recording resumes when it moves again.',
+  speed:'Paused: the simulation is not at 1×.',invincible:'Paused while invincibility is on.',
+  unfocused:'Paused: WASD keys are not reaching your car. Click the track to go on.'};
+const DEMO_BLOCKED={multiplayer:'Turn off Multiplayer to record your driving.',
+  adaptive:'Turn off Adaptive green gates (Experiments) to record your driving. They can move the gates between generations.'};
+const DEMO_STOPS={full:`Stopped at the ${MAX_SECONDS/60}-minute limit.`,multiplayer:'Stopped: Multiplayer is on.',context:'Stopped: the track, physics, or driving style changed.',page:'Stopped when the page closed.',
+  away:'Stopped: you left the training view.',error:'Stopped after an error.',adaptive:'Stopped: Adaptive green gates are on.'};
+const plural=(n,one,many=one+'s')=>`${n} ${n===1?one:many}`;
+const savedCount=()=>demoCount==null?'Recordings stay in this browser.':`${demoCount} of ${MAX_DEMONSTRATIONS} recordings saved in this browser.`+
+  (demoCount>=MAX_DEMONSTRATIONS?' A new recording replaces the oldest.':'');
+function lastDemoText(last){
+  const lead=DEMO_STOPS[last.reason]?DEMO_STOPS[last.reason]+' ':'';
+  if(last.tooShort)return `${lead}Not saved: less than 1 second of driving. ${savedCount()}`;
+  const what=`${last.seconds.toFixed(1)} s, ${plural(last.laps,'lap')}, ${plural(last.crashes,'crash','crashes')}`;
+  if(last.saved==='saving')return `${lead}Saving ${what}…`;
+  if(last.saved==='failed')return `${lead}Could not save the recording in this browser.`;
+  return `${lead}Saved ${what}.${last.dropped?' The oldest recording was removed.':''} ${savedCount()}`;
+}
+function renderDemonstration(){
+  const root=learning.root;if(!root)return;
+  const button=root.querySelector('[data-demo-record]'),live=root.querySelector('[data-demo-live]'),status=root.querySelector('[data-demo-status]');
+  const run=demonstrations.progress(),blocked=demonstrations.blocked();
+  const stalled=window.__awaitingStart||(typeof pause!=='undefined'&&pause===true);
+  const label=run?'Stop recording':'Record my driving';
+  if(button.textContent!==label)button.textContent=label;
+  // The label says the state, so there is no aria-pressed. aria-disabled keeps
+  // focus on the button when Multiplayer turns on.
+  button.dataset.active=String(!!run);
+  button.setAttribute('aria-disabled',String(!run&&(!!blocked||demoStorage==='unavailable')));
+  root.querySelector('[data-demo-badge]').hidden=!run;
+  live.hidden=!run;
+  if(run){
+    const text=`${run.samples.toLocaleString('en-US')} samples · ${run.seconds.toFixed(1)} s · ${plural(run.laps,'lap')} · ${plural(run.checkpoints,'checkpoint')} · ${plural(run.crashes,'crash','crashes')}`;
+    if(live.textContent!==text)live.textContent=text;
+  }
+  // The live counts change every step; the status line (announced) changes only with the state.
+  const text=run?(stalled?'Recording. Press Play to drive.':run.reason?`Recording. ${DEMO_PAUSES[run.reason]}`:'Recording your driving.'):
+    demoStorage==='unavailable'?'Recording needs browser storage (IndexedDB), which is not available here.':
+    blocked?(demonstrations.last?lastDemoText(demonstrations.last)+' ':'')+DEMO_BLOCKED[blocked]:
+    demonstrations.last?lastDemoText(demonstrations.last):(demoNotice?demoNotice+' ':'')+savedCount();
+  if(status.textContent!==text)status.textContent=text;
+}
+
 export function attachLearningControls(host){
   const root=document.createElement('details');root.id='driver-learning';
-  root.innerHTML=`<summary data-learning-title>Driver profile · Balanced</summary>
+  root.innerHTML=`<summary><span data-learning-title>Driver profile · Balanced</span><span class="learning-demo-badge" data-demo-badge hidden> · Recording</span></summary>
     <section class="learning-panel" aria-label="Driver profiles and learning">
       <div class="learning-panel-heading"><strong>Find your driving style</strong><button type="button" data-learning-close aria-label="Close driver profiles">×</button></div>
       <label for="driver-profile">Driving style</label><select id="driver-profile">${Object.values(DriverProfiles.profiles).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select>
@@ -221,6 +309,10 @@ export function attachLearningControls(host){
       <p class="learning-note" data-learning-graph></p><button type="button" data-learning-review>Review learned memories</button><p class="learning-note" data-learning-consolidation></p>
       <div class="learning-transfer"><p class="learning-note" data-transfer-status role="status" aria-live="polite"></p>
       <button type="button" data-transfer-check>Check transfer</button> <button type="button" data-transfer-resume hidden>Resume transfer</button></div>
+      <div class="learning-demo"><p><strong>Teach by driving</strong></p>
+      <p class="learning-note">Save your WASD driving as examples for the AI. Recording runs at 1× and pauses while AI driving is on. Recordings stay in this browser and are never sent.</p>
+      <button type="button" data-demo-record data-active="false" aria-disabled="false">Record my driving</button>
+      <p class="learning-demo-live" data-demo-live hidden></p><p class="learning-note" data-demo-status role="status" aria-live="polite"></p></div>
     </section>`;
   host.append(root);learning.root=root;
   root.querySelector('select').onchange=event=>learning.setProfile(event.target.value);
@@ -231,10 +323,17 @@ export function attachLearningControls(host){
     if(learning.transferRun)learning.cancelTransferCheck();else learning.checkTransfer();
   };
   root.querySelector('[data-transfer-resume]').onclick=()=>{learning.resumeTransfer();root.querySelector('[data-transfer-check]').focus();};
+  root.querySelector('[data-demo-record]').onclick=event=>{
+    if(event.detail>1||event.currentTarget.getAttribute('aria-disabled')==='true')return; // a double click must not start and stop at once
+    if(demonstrations.recording)demonstrations.stop('user');else demonstrations.start();
+    renderDemonstration();
+  };
   root.querySelector('[data-learning-review]').onclick=()=>{const done=learning.consolidate();if(!done)root.querySelector('[data-learning-consolidation]').textContent='Complete a generation with Vector Memory on to review new memories.';};
   root.addEventListener('toggle',()=>{
-    if(root.open){const panel=document.getElementById('live-panel');if(panel&&!panel.hidden)panel.querySelector('[data-live-close]').click();learning.render();}
+    if(root.open){const panel=document.getElementById('live-panel');if(panel&&!panel.hidden)panel.querySelector('[data-live-close]').click();refreshDemoCount();learning.render();}
   });
   root.addEventListener('keydown',event=>{if(event.key==='Escape'){root.open=false;root.querySelector('summary').focus();}});
-  learning.render();return root;
+  learning.render();
+  setInterval(()=>{demonstrations.poll();if(root.open||demonstrations.recording)renderDemonstration();},250);
+  return root;
 }
