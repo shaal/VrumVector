@@ -50,11 +50,13 @@ task's own doc or proof file, not in this checklist.
   `feat/hnsw-wasm-backend` to `shaal/ruvector` so the vendored HNSW backend has
   a durable source. Record the fork-pin decision (Option 2) in
   `docs/plan/ruvector-upstream-patches.md`.
-- [ ] **T4 — Paired bootstrap verdicts for learning benchmarks.** Port
+- [x] **T4 — Paired bootstrap verdicts for learning benchmarks.** Port
   `pairedBootstrapDecision` (`crates/ruvector-sota-bench/harness/src/statistics.ts`,
   ADR-306) to a dependency-free JS module. Report pass / fail / inconclusive
   for adaptive-vs-fixed in `scripts/benchmark-learning.mjs` and graph-vs-EMA in
-  `scripts/benchmark-gnn.mjs`. Enforce the n ≥ 5 per arm floor.
+  `scripts/benchmark-gnn.mjs`. Enforce the n ≥ 5 per arm floor. *(Shipped with
+  n ≥ 6 independent units, this project's rule, plus cluster resampling and a
+  small-sample interval correction; see `docs/plan/learning-proof/README.md`.)*
 - [ ] **T5 — Sequential verdict for the A/B comparison and a transfer guard.**
   Port the paired sequential test (anytime-valid e-value, accept at 20×) from
   `ruvector-typesafe-core` `loop_gate`. Feed it paired per-generation outcomes

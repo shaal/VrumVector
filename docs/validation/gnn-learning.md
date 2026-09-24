@@ -40,7 +40,22 @@ EMA accumulated only earlier feedback from that parent.
 | Better selection in paired comparisons | 6 | 10 |
 
 Nine comparisons tied. The graph improved feedback error in one of the five
-held-out contexts. These short runs do not establish better long-run racing,
+held-out contexts.
+
+Paired bootstrap verdicts (`AI-Car-Racer/learning/decision.js`, expanded 95%
+interval; positive means the graph is better) do not favour either method. The
+fixed model makes the same choice in every round of a context, and every
+profile on a track starts from the same seeded root population, so selection
+is resampled by track and squared error by (track, root) seed.
+
+| Held-out measure | Mean difference | 95% interval | Independent units | Verdict |
+|---|---:|---|---:|---|
+| Progress of selected descendants | −0.127 | — | 3 tracks | too few units (6 needed) |
+| Squared feedback error, EMA minus graph | −0.0031 | [−0.0130, +0.0064] | 12 track seeds | inconclusive |
+
+The graph does not beat EMA, and the data also does not show that EMA is
+better. The five held-out contexts come from three tracks, which cannot support
+a selection verdict either way. These short runs do not establish better long-run racing,
 lap times, or generalization to new track geometry. EMA remains the default.
 `gnn · experimental` is an explicit option, with EMA fallback until eight training
 outcomes are available or whenever the graph backend cannot load.

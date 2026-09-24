@@ -34,6 +34,33 @@ Values below are means across the three paired seeds. Higher progress is better;
 | Monza | Wild | 2.00 | 2.00 | 0 / 3 / 0 |
 | Monza | Reckless | 2.00 | 2.33 | 1 / 2 / 0 |
 
+## Paired verdicts
+
+`scripts/benchmark-learning.mjs` reports a paired bootstrap verdict for
+adaptive minus fixed final best progress (`AI-Car-Racer/learning/decision.js`).
+All five profiles on one track start from the same seeded population, so the
+verdict resamples whole (track, seed) clusters, not single pairs. Settings:
+10000 resamples; an expanded percentile 95% interval (Hesterberg), which kept
+false passes near 2% on simulated symmetric no-effect data, including tied
+whole-checkpoint deltas; fewer than 6 clusters is always inconclusive. **pass**
+means the interval's lower bound reaches 0.25 checkpoints. **fail** means the
+upper bound is below 0.25, so a gain of that size is ruled out ("no meaningful
+improvement", not necessarily a regression). A track whose own interval lies
+below zero vetoes a pooled pass.
+
+| Run | Rectangle | Triangle | Monza | Overall |
+|---|---|---|---|---|
+| 3 seeds (this report) | too few clusters (3) | too few clusters (3) | too few clusters (3) | inconclusive: Δ +0.09 [−0.08, +0.31], 45 pairs in 9 clusters |
+| 6 seeds ([raw](policy-benchmark-6seeds.json)) | inconclusive: Δ 0.00 [−0.30, +0.29] | inconclusive: Δ +0.13 [−0.06, +0.43] | inconclusive: Δ +0.10 [−0.04, +0.30] | **fail**: Δ +0.08 [−0.03, +0.19], 90 pairs in 18 clusters |
+
+With six seeds, a gain of 0.25 checkpoints from adaptive exploration is ruled
+out overall, though no single track rules it out. The six-seed run extends the
+three-seed run (its first three seeds are the same 90 records), so it is more
+data, not an independent replication. One of the 15 track/profile cells has an
+interval that excludes zero: Triangle / Calm, Δ +0.67 [+0.17, +1.15]. Its lower
+bound is below the 0.25 threshold, and with 15 cells about 0.4 such results are
+expected by chance at the 2.5% level. The default stays at fixed exploration.
+
 ## Interpretation and limits
 
 - Balanced tied on Rectangle and Triangle, and lost one Monza seed. There is no evidence here to enable adaptation universally.

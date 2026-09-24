@@ -2,7 +2,7 @@
 
 Open **Driver profile · Balanced**, next to **AI driving**, in either 2D or Circuit Studio. Choose a style for the AI population and the player's optional AI co-driver. Selecting a style before Start does not start the simulation. Selecting it during training starts a new generation. The profile and adaptive-exploration preference survive reload; AI driving, multiplayer, sound, and 3D remain opt-in.
 
-Adaptive exploration is **off for new visitors**. A controlled 90-run experiment found mixed results, so it remains an explicit experiment. Champion preservation, context-aware memory, and actual offspring feedback operate with either setting. See [the measured results](learning-proof/README.md).
+Adaptive exploration is **off for new visitors**. A controlled 90-run experiment found mixed results, and a paired six-seed rerun rules out a gain of 0.25 checkpoints overall, so it remains an explicit experiment. Champion preservation, context-aware memory, and actual offspring feedback operate with either setting. See [the measured results](learning-proof/README.md).
 
 | Profile | Driving decisions | Training preference within a checkpoint tie |
 | --- | --- | --- |
