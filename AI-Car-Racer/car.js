@@ -179,6 +179,8 @@ class Car{
                 }
                 offsets.push(lf);
                 offsets.push(lr);
+                // Human demonstrations record exactly what the network sees.
+                (this.lastInputs||=new Float32Array(offsets.length)).set(offsets);
                 const rawOutputs=NeuralNetwork.feedForward(offsets,this.brain);
                 const outputs=(this.useBrain||this.aiDriving)&&globalThis.DriverProfiles
                     ? DriverProfiles.apply(this,rawOutputs) : rawOutputs;

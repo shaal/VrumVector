@@ -33,3 +33,11 @@
 .learning-health[data-state="Stuck"]::before,.learning-health[data-state="NeedsReplan"]::before {background:#f4d59c;}
 .learning-health[data-state="Contradicting"]::before,.learning-health[data-state="Collapsing"]::before,.learning-health[data-state="NeedsHumanReview"]::before {background:#f0a09a;}
 .learning-panel p.learning-health[hidden] {display:none;}
+.learning-demo {border-top:1px solid #526a5c;margin-top:12px;padding-top:2px;}
+.learning-demo-badge {color:#ffb4ab;}
+.learning-demo-badge[hidden],.learning-panel p.learning-demo-live[hidden] {display:none;}
+.learning-panel p.learning-demo-live {margin:6px 0 0;font:10px/1.5 var(--font-mono,monospace);color:#f7f2df;}
+#driver-learning button[data-demo-record][data-active="true"] {background:#4a2a28;border-color:#ffb4ab;}
+#driver-learning button[data-demo-record][data-active="true"]:hover {background:#5a2f2c;}
+#driver-learning button[aria-disabled="true"] {cursor:not-allowed;opacity:.6;}
+#driver-learning button[aria-disabled="true"]:hover {background:#284235;}

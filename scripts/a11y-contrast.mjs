@@ -165,6 +165,13 @@ function pageAudit() {
 const scenarios = [
   {name:'driver-profiles',setup:async(page)=>{await page.locator('#driver-learning summary').click();}},
   {name:'driver-profiles-3d',studio:true,setup:async(page)=>{await page.locator('#driver-learning summary').click();}},
+  {name:'driver-recording',setup:async(page)=>{
+    // Recording is off while multiplayer is on (the default).
+    await page.evaluate(()=>window.LiveSession?.setEnabled(false));
+    await page.locator('#driver-learning summary').click();
+    await page.locator('[data-demo-record]').click();
+    await page.waitForFunction(()=>window.DemonstrationRecorder?.recording);
+  }},
   {
     name: 'multiplayer-panel',
     studio: true,

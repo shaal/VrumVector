@@ -136,7 +136,7 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
 
 ## Tasks
 
-- [ ] **H1 — Record demonstrations.** `Car.lastInputs`; a recorder on the
+- [x] **H1 — Record demonstrations.** `Car.lastInputs`; a recorder on the
   `playerSteps` loop (1× forced, AI driving off, not damaged); IndexedDB store
   with context and a 10 × 5-minute cap; Record / Stop in the driver-learning
   panel with a live sample count and laps. Tests: node (scripted keys in the
@@ -144,15 +144,42 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
   record samples; AI driving or damage pauses recording). About 3–4 hours.
 - [ ] **H2 — Dataset: filter, mirror, split.** Idle-start and post-crash
   filtering, mirror augmentation with a symmetry test on a mirrored track, and
-  time-block splits. About 2 hours.
+  time-block splits. About 2 hours. (H1 already skips the idle start and the
+  damaged steps, and stores `crashSteps`; H2 decides what else to drop around
+  a crash.) Also record the start: keep the last 0.5 s (30 steps) of the car
+  at rest before it first moves, so a clone learns to pull away from a stop.
+  Every race starts from rest. (Decided 2026-09-24.)
   depends: H1
-- [ ] **H3 — Behavioural-cloning trainer.** Sigmoid stand-in, BCE, rare-key
+- [x] **H3 — Behavioural-cloning trainer.** Sigmoid stand-in, BCE, rare-key
   weights, Adam, early stop, key lag `k` chosen on held-out blocks, in a
   Worker. Tests: it recovers a known teacher network from that network's own
   driving (held-out agreement ≥ 95%, closed-loop progress within one
   checkpoint of the teacher); same seed gives the same weights. About 3–4
   hours.
   depends: H2
+  Built before H2 (2026-09-24). H2 must produce this dataset for
+  `trainClone()` and `trainCloneInWorker()` in `learning/clone.js`:
+  `{inputs: Float32Array(n·10), keys: Uint8Array(n·4), episode: Uint32Array(n)}`.
+  Row `t` is one physics step: the 10 inputs sensed at the end of step `t`
+  (`Car.lastInputs`) and the keys held during step `t` (forward, left,
+  right, reverse; each 0 or 1). Rows stay unpaired; the trainer pairs inputs
+  `t` with keys `t + k`. Rows of one run are consecutive steps: start a new
+  `episode` id at every gap, and give every demonstration and every mirrored
+  run its own id (a new run is wherever the id changes). From H1's store, a
+  gap is wherever `sampleSteps[i] ≠ sampleSteps[i − 1] + 1` (the same pairs
+  as `lagPairs`, which a test checks), and the key bitmask unpacks as
+  1 forward, 2 left, 4 right, 8 reverse. The trainer already makes the
+  2-second time-block split (`splitBlocks`), so H2's "time-block splits" is
+  done; H2 does filtering and mirroring. For mirrored runs, set the optional
+  `sameSplitAs: Int32Array(n)`: for each mirrored row, the row it copies
+  (which must not be linked itself), and −1 for originals. Link whole runs.
+  A block and its mirror then land on the same side of the split; otherwise
+  held-out scores are inflated. The trainer needs at least two blocks and 60
+  pairs on each side of the split, or it refuses with `not-enough-data`.
+  Caution for the 0.5 s at rest: in a one-off check, clones trained with
+  those rest steps learned to press nothing at rest and never pulled away;
+  give rest steps the keys that first moved the car (see the results).
+  Results: `docs/validation/behavioural-cloning.md`.
 - [ ] **H4 — Seed from a demonstration.** "Use my driving" in the panel, the
   `demonstration` seed kind, the source count, and the per-context offer
   rule. About 2 hours.
@@ -183,4 +210,6 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
 3. **Other tracks:** a clone seeds another track only through vector memory
    and the transfer check, never directly.
 4. **Raw data:** keep raw demonstrations (within the 10 × 5-minute cap), so a
-   clone can be retrained after a trainer change.
+   clone can be retrained after a trainer change. H1 keeps the newest 10: a
+   new recording replaces the oldest, and the panel says so first. (Kept on
+   2026-09-24; no delete button is needed.)
