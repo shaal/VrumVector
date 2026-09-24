@@ -329,7 +329,7 @@ async function brainStartFresh(){
     // Wipe legacy localStorage trained state. Named saves
     // (vv_brainsave_*) are deliberately preserved so a fresh-start
     // doesn't lose the user's curated slots.
-    var legacyKeys = ["bestBrain", "oldBestBrain", "fastLap", "progress", "rvAnnotations", "vv.driverChampions", "bestBrainLearningContext", "oldBestBrainLearningContext"];
+    var legacyKeys = ["bestBrain", "oldBestBrain", "fastLap", "progress", "rvAnnotations", "vv.driverChampions", "bestBrainLearningContext", "oldBestBrainLearningContext", "vv.transferGuard"];
     for (var i = 0; i < legacyKeys.length; i++){
         try { localStorage.removeItem(legacyKeys[i]); } catch (_) {}
     }

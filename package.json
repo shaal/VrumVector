@@ -12,7 +12,7 @@
     "test:multiplayer": "node --test tests/multiplayer.test.mjs",
     "test:multiplayer:browser": "node tests/multiplayer-browser.mjs",
     "dev:multiplayer": "wrangler dev --config multiplayer/wrangler.jsonc --var ALLOW_LOCAL:true --port 8878",
-    "test:learning": "node --test tests/learning.test.mjs tests/decision.test.mjs tests/sim-worker.test.mjs",
+    "test:learning": "node --test tests/learning.test.mjs tests/decision.test.mjs tests/sim-worker.test.mjs tests/transfer.test.mjs",
     "test:gnn": "node --test tests/graph-learning.test.mjs",
     "test:gnn:wasm": "node tests/gnn-wasm.mjs",
     "benchmark:gnn": "node scripts/benchmark-gnn.mjs",
@@ -20,7 +20,8 @@
     "test:crash-maps": "node --test tests/crash-similarity.test.mjs",
     "test:learning:browser": "node tests/learning-browser.mjs",
     "benchmark:learning": "node scripts/benchmark-learning.mjs",
-    "benchmark:crash-similarity": "node scripts/measure-crash-similarity.mjs"
+    "benchmark:crash-similarity": "node scripts/measure-crash-similarity.mjs",
+    "benchmark:transfer": "node scripts/benchmark-transfer.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

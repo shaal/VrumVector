@@ -38,6 +38,7 @@ Archive identity is checked against the restored mirror, with exact genome compa
 - Counts of memory-derived, saved, and fresh drivers.
 - The top recalled memories with an explanation of how their conditions match.
 - A manual memory-review button and automatic SONA consolidation every eight generations.
+- **Check transfer**: paired trials of starting from memories of other tracks, styles, or conditions against fresh starts. When fresh starts win with 20× evidence, transfer pauses for this track, style, and conditions until **Resume transfer** or **Start Fresh**. **Continue check** adds trials to an unfinished check. See [the transfer check](../validation/transfer-check.md).
 
 SONA buffers are bounded to 128 steps. Zero-checkpoint fitness has zero quality; it is not treated as a successful example. Periodic consolidation means patterns can form during a long unattended session instead of waiting until the user leaves the track.
 
