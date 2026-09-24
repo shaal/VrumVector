@@ -1,10 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import init from '../vendor/ruvector/ruvector_gnn_trainable_wasm/ruvector_gnn_trainable_wasm.js';
 import {GRAPH_DIM,graphExample,heldOut} from '../AI-Car-Racer/learning/graph-features.js';
 import * as graph from '../AI-Car-Racer/gnnReranker.js';
-await init({module_or_path:readFileSync(new URL('../vendor/ruvector/ruvector_gnn_trainable_wasm/ruvector_gnn_trainable_wasm_bg.wasm',import.meta.url))});
+// Initialise the same versioned module instance that loadGnn imports.
+await (await import(graph.GNN_MODULE_URL)).default({module_or_path:readFileSync(new URL('../vendor/ruvector/ruvector_gnn_trainable_wasm/ruvector_gnn_trainable_wasm_bg.wasm',import.meta.url))});
 await graph.loadGnn();
 function context(hold){for(let i=0;;i++){const c={track:'fixture-'+i,profile:'careful',maxSpeed:15,traction:.5,seconds:6};if(heldOut(c)===hold)return c;}}
 const training=context(false),evaluation=context(true);

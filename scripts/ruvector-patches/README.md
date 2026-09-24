@@ -37,11 +37,16 @@ browser wrapper). Offline time does not advance the background learning timer.
 Rebuild with `bash scripts/build-learning-wasm.sh`. The dedicated CI workflow
 runs native continuation/rejection tests and actual WASM tests before committing
 generated bindings. Run it from a `ship/*` or `codex/*` branch with
-`gh workflow run learning-wasm.yml --ref <branch> -f target=sona`. Build in CI,
-not locally: a local build embeds the absolute Cargo registry path (including
-the home folder name) in panic strings of the public WASM. After a rebuild,
-set the `?v=sona-…` query in `AI-Car-Racer/sona/engine.js` to the first 8 hex
-digits of the new wasm SHA-256 (`npm run test:learning` fails until you do).
+`gh workflow run learning-wasm.yml --ref <branch> -f target=sona`. Both build scripts
+remap the build folder and the Cargo home (`--remap-path-prefix`), so a build
+carries no local paths and repeats byte for byte on the same host. Builds on
+different hosts (macOS vs the Linux CI runner) differ only in Rust symbol
+hashes and the function and data order they induce, because Cargo hashes the
+host triple into crate metadata. CI is the
+reference build: commit only CI-built binaries. After a rebuild,
+set the `?v=sona-…` query in `AI-Car-Racer/sona/engine.js` (or `?v=gnn-…` in
+`AI-Car-Racer/gnnReranker.js`) to the first 8 hex digits of the new wasm
+SHA-256 (`npm run test:learning` fails until you do).
 `tests/fixtures/sona-checkpoint-d5d3296c.json` is a checkpoint saved by the
 previous build; `tests/learning-wasm.mjs` proves that it still restores. The pinned upstream SHA, Rust, wasm-pack, Cargo lockfile,
 patch hashes, and binary hash are recorded. Legacy saves recover from the circuit

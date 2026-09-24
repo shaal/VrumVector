@@ -3,10 +3,24 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$(mktemp -d)"
 trap 'rm -rf "$BUILD"' EXIT
-UPSTREAM=d5d3296cd90d688afae838d06a5fc2c023dd9107
+# Reproducible output: panic-location strings otherwise embed the random build
+# folder and the local Cargo home (which includes the user's home folder name).
+# CARGO_ENCODED_RUSTFLAGS (0x1f-separated) survives spaces in paths and takes
+# precedence over any RUSTFLAGS in the caller's environment.
+unset RUSTFLAGS
+CARGO_ENCODED_RUSTFLAGS="$(printf '%s\x1f%s\x1f%s' "--remap-path-prefix=$BUILD=/build" \
+  "--remap-path-prefix=$(cd "$BUILD" && pwd -P)=/build" "--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo")"
+export CARGO_ENCODED_RUSTFLAGS
+UPSTREAM=5356a84e2f784a33fa497da2e73440d469eb5542
 git -C "$BUILD" init -q upstream
 git -C "$BUILD/upstream" remote add origin https://github.com/ruvnet/ruvector.git
-git -C "$BUILD/upstream" fetch -q --depth 1 origin "$UPSTREAM"
+# Upstream rewrote its history once; shaal/ruvector tags the clean source
+# commit of every build these scripts use (vv/*), so fall back to the fork if
+# upstream stops serving it.
+if ! git -C "$BUILD/upstream" fetch -q --depth 1 origin "$UPSTREAM"; then
+  git -C "$BUILD/upstream" remote add fork https://github.com/shaal/ruvector.git
+  git -C "$BUILD/upstream" fetch -q --depth 1 fork "$UPSTREAM"
+fi
 git -C "$BUILD/upstream" checkout -q --detach FETCH_HEAD
 git -C "$BUILD/upstream" apply "$ROOT/scripts/ruvector-patches/gnn-online-training.patch"
 # Compile the two added upstream modules as a small companion binding. This
@@ -47,7 +61,7 @@ cp "$BUILD/gnn/pkg/ruvector_gnn_trainable_wasm"* "$DEST/"
   echo
   echo "Upstream: ruvnet/ruvector@$UPSTREAM."
   echo 'Companion build of the patched online.rs and online_wasm.rs modules; legacy GNN unchanged.'
-  echo 'Rust 1.85.0; wasm-pack 0.13.1; web target; locked dependencies.'
+  echo 'Rust 1.85.0; wasm-pack 0.13.1; web target; locked dependencies; build paths remapped (reproducible).'
   echo 'Rebuild with bash scripts/build-gnn-wasm.sh.'
   echo
   sha256sum "$ROOT/scripts/ruvector-patches/gnn-online-training.patch" "$DEST/ruvector_gnn_trainable_wasm_bg.wasm" | sed "s|$ROOT/||g"
