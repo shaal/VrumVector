@@ -18,6 +18,7 @@ jobs:
       - run: npm ci
       - run: npm run test:learning
       - run: npm run test:learning:wasm
+      - run: npm run test:crash-maps
       - run: npm run test:gnn:wasm
       - run: npm run test:gnn
       - run: npx playwright install --with-deps chromium

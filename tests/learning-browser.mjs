@@ -243,6 +243,24 @@ try{
   await page.evaluate(()=>window.__rvBridge.persist());
   await page.unroute('**/ruvector_gnn_trainable_wasm_bg.wasm');await page.reload();await ready();
   assert.deepEqual(await page.evaluate(async()=>(await import('/AI-Car-Racer/gnnReranker.js')).serialize()),graphSaved.checkpoint);
+  mark('crash-map recall reports cosine similarity in every index geometry');
+  const crashRecall=await page.evaluate(()=>{
+    const b=window.__rvBridge,C=window.CrashMapCodec,runs={};
+    const map=cells=>{const xy=new Float32Array(cells.length*2);cells.forEach(([x,y],i)=>{xy[i*2]=(x+.5)*200;xy[i*2+1]=(y+.5)*200;});return C.encodeDeathMap(xy,cells.length,3200,1800);};
+    const repeat=(cell,n)=>Array.from({length:n},()=>cell);
+    const base=map([...repeat([2,2],6),...repeat([8,4],3),[12,6],[3,7]]);
+    const weak=map([...repeat([2,2],1),...repeat([9,4],6),...repeat([13,1],6),[1,8],[5,5],[14,3]]);
+    let cosine=0;for(let i=0;i<base.length;i++)cosine+=base[i]*weak[i];
+    const id=b.archiveCrashMap(weak,{survival:.9,fitness:3,generation:1,cps:[],geometrySig:'crash-recall-check'});
+    const read=()=>b.recommendCrashLayouts(base,b.crashMapCount()).find(hit=>hit.id===id)?.similarity;
+    runs.euclidean=read();
+    if(b.setIndexKind('hyperbolic')){runs.hyperbolic=read();b.setIndexKind('euclidean');}
+    return {cosine,runs};
+  });
+  assert.ok(crashRecall.cosine>.1&&crashRecall.cosine<.55,`fixture cosine ${crashRecall.cosine}`);
+  for(const [kind,similarity] of Object.entries(crashRecall.runs))
+    assert.ok(Math.abs(similarity-crashRecall.cosine)<1e-4,`${kind} crash recall ${similarity} vs cosine ${crashRecall.cosine}`);
+  assert.ok('hyperbolic' in crashRecall.runs,'The hyperbolic index must load in this check');
   mark('learning controls in 3D');
   await page.evaluate(()=>{window.CircuitStudio.setQuality('low');window.CircuitStudio.forceWebGL=true;});
   await page.locator('#graphics-toggle').click({timeout:90000});await page.waitForFunction(()=>window.CircuitStudio.active,{},{timeout:90000});
@@ -252,7 +270,7 @@ try{
   await page.screenshot({path:`${out}/profiles-3d-mobile.png`});
   const mobile=await page.locator('.learning-panel').boundingBox();assert.ok(mobile.x>=0&&mobile.x+mobile.width<=390&&mobile.y+mobile.height<=844);
   assert.deepEqual(errors,[]);
-  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,retrieval,baseline,checks:['profiles','real worker learning','manual override','persistent champion','SONA circuit example replay','genetic baseline','context-aware WASM retrieval','offspring credit','archive round trip','cross-tab context','2D/3D/mobile learning UI']},null,2));
+  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,retrieval,baseline,checks:['profiles','real worker learning','manual override','persistent champion','SONA circuit example replay','genetic baseline','context-aware WASM retrieval','offspring credit','archive round trip','cross-tab context','crash-map cosine recall','2D/3D/mobile learning UI']},null,2));
   console.log('Driver profiles and learning browser checks passed');
 }catch(error){
   const diagnostics=await page?.evaluate(()=>({serial:presentationRunSerial,assistRun:window.PlayerAssist?.run,

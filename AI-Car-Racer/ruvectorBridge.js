@@ -15,6 +15,7 @@
 import initVec, { VectorDB } from '../vendor/ruvector/ruvector_wasm/ruvector_wasm.js?v=hnsw-wasm-20260424b';
 import initCnn, { CnnEmbedder } from '../vendor/ruvector/ruvector_cnn_wasm/index.js';
 import { flatten, unflatten, FLAT_LENGTH, TOPOLOGY, BRAIN_SCHEMA_VERSION } from './brainCodec.js';
+import { crashLayoutFromHit } from './archive/crashRecall.js';
 import {loadGnn,isReady as gnnIsReady,gnnScore,rememberSelection,rememberCachedSelection,observeGraph,
   info as gnnInfo,serialize as gnnSerialize,deserialize as gnnDeserialize,_debugReset as gnnReset} from './gnnReranker.js';
 // P3.A — hyperbolic HNSW swap. `loadHyperbolic` boots the wasm side; the
@@ -323,7 +324,9 @@ function rebuildIndicesFromMirror() {
   _brainDB = new IndexClass(FLAT_LENGTH, 'cosine');
   _trackDB = new IndexClass(TRACK_DIM, 'cosine');
   _dynamicsDB = new IndexClass(DYNAMICS_DIM, 'cosine');
-  _crashDB = new IndexClass(CRASH_DIM, 'cosine');
+  // Crash maps stay on the cosine index in every geometry: adaptive gates
+  // compare recalls against a cosine floor (CRASH_SIM_MIN).
+  _crashDB = new VectorDB(CRASH_DIM, 'cosine');
   // Phase 2A — rebuild the shadow hyperbolic brain index too when
   // available. We don't shadow the track / dynamics DBs — federation only
   // fans out over the brain index (track / dynamics are joins, not
@@ -458,7 +461,7 @@ export function ready() {
     _brainDB = new IndexClass(FLAT_LENGTH, 'cosine');
     _trackDB = new IndexClass(TRACK_DIM, 'cosine');
     _dynamicsDB = new IndexClass(DYNAMICS_DIM, 'cosine');
-    _crashDB = new IndexClass(CRASH_DIM, 'cosine');
+    _crashDB = new VectorDB(CRASH_DIM, 'cosine'); // cosine in every geometry; see rebuildIndicesFromMirror
     // Phase 2A — F2. Stand up the hyperbolic shadow brain index so federated
     // search has something to fan out to, regardless of whether _indexKind is
     // currently hyperbolic. When the wasm didn't load this stays null and
@@ -622,36 +625,10 @@ export function recommendCrashLayouts(crashVec, k = 5) {
     return [];
   }
   if (!hits || !hits.length) return [];
-  const out = [];
-  for (let i = 0; i < hits.length; i++) {
-    const h = hits[i];
-    const id = h.id;
-    const entry = _crashMirror.get(id);
-    // VectorDB cosine distance ∈ [0, 2]; sim = 1 - dist/2 roughly, or 1-dist for unit vectors.
-    // Our vectors are L2-normalised; cosine distance ≈ 1 - cos_sim for some builds.
-    // Prefer metadata from mirror; fall back to hit.metadata.
-    const meta = (entry && entry.meta) || h.metadata || {};
-    // VectorDB cosine DISTANCE: 0 = identical, 2 = opposite (same as tracks).
-    const dist = Number(h.score);
-    const sim = Number.isFinite(dist)
-      ? Math.max(0, Math.min(1, 1 - dist / 2))
-      : 0;
-    out.push({
-      id,
-      similarity: sim,
-      distance: dist,
-      survival: Number(meta.survival) || 0,
-      fitness: Number(meta.fitness) || 0,
-      generation: meta.generation | 0,
-      nGates: meta.nGates | 0,
-      nDeaths: meta.nDeaths | 0,
-      cps: Array.isArray(meta.cps) ? meta.cps : null,
-      causes: meta.causes || null,
-      bottleneck: meta.bottleneck != null ? (meta.bottleneck | 0) : null,
-      geometrySig: meta.geometrySig || null,
-      timestamp: meta.timestamp || 0,
-    });
-  }
+  // Score is cosine DISTANCE (1 - cos), as for tracks. Crash grids are
+  // non-negative, so the former `1 - dist/2` never fell below 0.5 and the
+  // adaptive-gate threshold admitted maps with cosine ≥ 0.10.
+  const out = hits.map(h => crashLayoutFromHit(h, _crashMirror.get(h.id)));
   // Prefer high similarity, then high survival
   out.sort((a, b) => (b.similarity - a.similarity) || (b.survival - a.survival));
   return out;
@@ -2134,6 +2111,9 @@ export async function _debugReset() {
   _trackMirror.clear();
   _dynamicsMirror.clear();
   _crashMirror.clear();
+  // No fixture path rebuilds the crash store, so clear it with its mirror;
+  // otherwise later recalls return purged maps through hit metadata.
+  if (_crashDB) _crashDB = new VectorDB(CRASH_DIM, 'cosine');
   _observations.clear();
   _insertionOrder = [];
   _queryDynamicsVec = null;
