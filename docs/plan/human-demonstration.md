@@ -136,7 +136,7 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
 
 ## Tasks
 
-- [ ] **H1 — Record demonstrations.** `Car.lastInputs`; a recorder on the
+- [x] **H1 — Record demonstrations.** `Car.lastInputs`; a recorder on the
   `playerSteps` loop (1× forced, AI driving off, not damaged); IndexedDB store
   with context and a 10 × 5-minute cap; Record / Stop in the driver-learning
   panel with a live sample count and laps. Tests: node (scripted keys in the
@@ -144,7 +144,9 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
   record samples; AI driving or damage pauses recording). About 3–4 hours.
 - [ ] **H2 — Dataset: filter, mirror, split.** Idle-start and post-crash
   filtering, mirror augmentation with a symmetry test on a mirrored track, and
-  time-block splits. About 2 hours.
+  time-block splits. About 2 hours. (H1 already skips the idle start and the
+  damaged steps, and stores `crashSteps`; H2 decides what else to drop around
+  a crash.)
   depends: H1
 - [ ] **H3 — Behavioural-cloning trainer.** Sigmoid stand-in, BCE, rare-key
   weights, Adam, early stop, key lag `k` chosen on held-out blocks, in a
@@ -199,4 +201,5 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
 3. **Other tracks:** a clone seeds another track only through vector memory
    and the transfer check, never directly.
 4. **Raw data:** keep raw demonstrations (within the 10 × 5-minute cap), so a
-   clone can be retrained after a trainer change.
+   clone can be retrained after a trainer change. H1 keeps the newest 10: a
+   new recording replaces the oldest, and the panel says so first.
