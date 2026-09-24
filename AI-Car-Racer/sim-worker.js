@@ -310,7 +310,9 @@ const _tickChannel = new MessageChannel();
 let _loopScheduled = false;
 _tickChannel.port1.onmessage = () => {
     _loopScheduled = false;
-    if (pause) return;
+    // A setPause(false) can arrive before 'init' (A/B mirrors pause to a fresh
+    // baseline worker). Nothing can step without a road; 'begin' restarts the loop.
+    if (pause || !self.road) return;
     stepOnce();
     // Re-arm immediately while running so the worker stays hot at high speed.
     if (!pause) scheduleTick();
