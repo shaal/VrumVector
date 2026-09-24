@@ -75,6 +75,7 @@ import {
   isReady as loraIsReady,
   sonaReady,
   adapt as loraAdapt,
+  adaptPreview as loraPreview,
   reward as loraReward,
   info as sonaEngineInfo,
   serialize as loraSerialize,
@@ -147,12 +148,12 @@ function contextualArchive(){
   if(!_learningContext)return _brainMirror;
   return new Map([..._brainMirror].map(([id,entry])=>[id,{vector:entry.vector,meta:evaluationFor(entry.meta,_learningContext)}]));
 }
-function decorateSeeds(candidates,k){
+function decorateSeeds(candidates,k,mode=_rerankerMode){
   if(!_learningContext)return candidates.slice().sort((a,b)=>b.score-a.score).slice(0,Math.max(1,k|0));
   const decorated=candidates.map(candidate=>{
     const match=matchContext(candidate.meta,_learningContext);
     // A trained graph replaces the EMA term; do not apply feedback twice.
-    return {...candidate,score:candidate.score*match.factor*(_rerankerMode==='ema'?1+.3*learnedWeight(candidate.id):1),
+    return {...candidate,score:candidate.score*match.factor*(mode==='ema'?1+.3*learnedWeight(candidate.id):1),
       matchLabel:match.label,exactContext:match.exact};
   });
   return selectDiverse(decorated,k);
@@ -366,7 +367,8 @@ function rebuildIndicesFromMirror() {
 // exist, seeding can prefer brains that *drive like* successful ones on this
 // track (not only track-shape neighbors). Empty dynamics archive is a no-op
 // (term skipped). UI checkbox / A/B strip stay authoritative after first paint.
-// `_queryDynamicsVec` is set by callers (main.js / uiPanels) before recommendSeeds.
+// `_queryDynamicsVec` is set by main.js before each live recommendSeeds call.
+// (The panel's previewSeeds passes its own dynamics query instead.)
 let _useDynamics = true;
 let _queryDynamicsVec = null;
 // Weight of the dynamics-sim term in the final score product. Small enough
@@ -773,8 +775,34 @@ function upsertTrack(trackVec) {
 // Returns [{ id, vector, meta, score }, ...] ordered best first.
 // Caller is expected to unflatten vectors into NeuralNetwork instances.
 export function recommendSeeds(trackVec, k = 5) {
+  return _rankSeeds(trackVec, k, { record: true, dynamicsVec: _queryDynamicsVec, report: {} });
+}
+
+// The ranking recommendSeeds() would return now, for display (the Vector
+// Memory panel polls it). Read-only: it does not cache the LoRA query or its
+// drift, remember a selection for reranker feedback, read or fill the
+// consistency cache in a way that counts, set info().reranker, record
+// observability timings, or update federation stats. `dynamicsVec` replaces
+// the staged dynamics query without staging it. The returned copy carries
+// `rerankerMode`, the reranker the ranking used (info().reranker only follows
+// live calls).
+export function previewSeeds(trackVec, k = 5, options = {}) {
+  const dynamicsVec = options && 'dynamicsVec' in options ? options.dynamicsVec : _queryDynamicsVec;
+  const dyn = (dynamicsVec instanceof Float32Array && dynamicsVec.length === DYNAMICS_DIM) ? dynamicsVec : null;
+  const report = {};
+  const seeds = _rankSeeds(trackVec, k, { record: false, dynamicsVec: dyn, report });
+  // A copy: a cache hit returns the array live retrieval also returned.
+  const out = seeds.slice();
+  out.rerankerMode = report.mode || 'none';
+  return out;
+}
+
+function _rankSeeds(trackVec, k, { record, dynamicsVec, report }) {
   requireReady();
-  if (_brainMirror.size === 0) return [];
+  if (_brainMirror.size === 0) { report.mode = 'none'; return []; }
+  const obsStart = record ? _obsStart : () => {};
+  const obsEnd = record ? _obsEnd : () => {};
+  const obsTime = record ? _obsTime : (_, fn) => fn();
 
   // Gather candidate brain ids by joining trackDB hits against meta.trackId.
   // VectorDB scores are cosine DISTANCE (0 = identical, 2 = opposite); convert
@@ -789,7 +817,7 @@ export function recommendSeeds(trackVec, k = 5) {
   // (test override) the adapt term collapses to identity so we skip the
   // timer entirely — recording a ~0 here would pollute the histogram.
   const queryVec = trackVec
-    ? (_bypassLora ? trackVec : _obsTime('adapt', () => loraAdapt(trackVec)))
+    ? (_bypassLora ? trackVec : record ? _obsTime('adapt', () => loraAdapt(trackVec)) : loraPreview(trackVec))
     : null;
 
   // 1C — F4. Consult the consistency mode BEFORE running the search. In
@@ -803,9 +831,10 @@ export function recommendSeeds(trackVec, k = 5) {
     ? _consistencyTrackVecKey(trackVec) + ':k' + (k | 0) + (_learningContext?':'+contextKey(_learningContext):'')
     : null;
   if (consistencyMode === 'eventual') {
-    const cached = _consistencyGetCachedResult(cacheKey);
+    const cached = record ? _consistencyGetCachedResult(cacheKey) : _consistencyPeekCachedResult(cacheKey);
     if (cached.hit) {
-      rememberCachedSelection(cached.value,learnedWeight);
+      if (record) rememberCachedSelection(cached.value,learnedWeight);
+      report.mode = _rerankerMode; // the live call that filled the cache
       return cached.value;
     }
   }
@@ -826,12 +855,12 @@ export function recommendSeeds(trackVec, k = 5) {
   // call is the dominant cost.
   let trackSimByTrackId = null;
   if (queryVec && !_trackDB.isEmpty()) {
-    _obsStart('retrieve');
+    obsStart('retrieve');
     try {
       trackSimByTrackId = new Map();
       const trackHits = _trackDB.search(queryVec, Math.min(5, Number(_trackDB.len())));
       for (const th of trackHits) trackSimByTrackId.set(th.id, 1 - th.score);
-    } finally { _obsEnd('retrieve'); }
+    } finally { obsEnd('retrieve'); }
   }
 
   // Phase 2A — F2 federation branch. Fans out to Euclidean + Hyperbolic
@@ -850,14 +879,14 @@ export function recommendSeeds(trackVec, k = 5) {
     // timer inside — federated runs accumulate in 'federate' only, and
     // a single-index run accumulates in 'rerank'. The stacked bar shows
     // whichever path actually ran.
-    const fedOut = _obsTime('federate', () => _recommendSeedsFederated({
+    const fedOut = obsTime('federate', () => _recommendSeedsFederated({
       queryVec,
       trackVec,
       k,
       frozenIds,
-      trackSimByTrackId, memory,
+      trackSimByTrackId, memory, record, dynamicsVec, report,
     }));
-    if (consistencyMode === 'eventual' && cacheKey) {
+    if (record && consistencyMode === 'eventual' && cacheKey) {
       _consistencyRecordQuery(cacheKey, fedOut);
     }
     return fedOut;
@@ -909,24 +938,20 @@ export function recommendSeeds(trackVec, k = 5) {
   // a constant-1 substitution, not real work).
   let gnnMap = null;
   if (useGnn) {
-    _obsStart('rerank');
+    obsStart('rerank');
     try { gnnMap = gnnScore(memory, candidates, _learningContext); }
-    finally { _obsEnd('rerank'); }
+    finally { obsEnd('rerank'); }
   } else if (!skipRerank) {
     // EMA fallback: the "work" is the emaBoost lookup per candidate in
     // the scoring loop below, which we can't cleanly bracket without
     // restructuring. Record a zero sample so the 'rerank' row still
     // shows up with count > 0 after an EMA-only run — satisfies the
     // done-criteria claim that rerank has count>0 after one generation.
-    _obsStart('rerank'); _obsEnd('rerank');
+    obsStart('rerank'); obsEnd('rerank');
   }
-  if (skipRerank) {
-    _rerankerMode = 'none';
-  } else if (useGnn && gnnMap) {
-    _rerankerMode = 'gnn';
-  } else {
-    _rerankerMode = candidates.size > 0 ? 'ema' : 'none';
-  }
+  const mode = skipRerank ? 'none' : (useGnn && gnnMap) ? 'gnn' : candidates.size > 0 ? 'ema' : 'none';
+  report.mode = mode;
+  if (record) _rerankerMode = mode;
 
   // P1.C — precompute dynamics similarity per brain when the toggle is on,
   // we have a staged query vector, and the dynamics archive is non-empty.
@@ -936,18 +961,18 @@ export function recommendSeeds(trackVec, k = 5) {
   // score 0 on this term — their overall ranking just stays determined by
   // trackTerm × fitTerm × rerankTerm, same as before this phase shipped.
   const dynamicsSimMap = new Map(); // brainId -> dynamicsSim in [-1,1]
-  const dynamicsActive = _useDynamics && _queryDynamicsVec && !_dynamicsDB.isEmpty();
+  const dynamicsActive = _useDynamics && dynamicsVec && !_dynamicsDB.isEmpty();
   if (dynamicsActive) {
-    _obsStart('dynamics');
+    obsStart('dynamics');
     try {
-      const dHits = _dynamicsDB.search(_queryDynamicsVec, Math.min(_dynamicsMirror.size, 25));
+      const dHits = _dynamicsDB.search(dynamicsVec, Math.min(_dynamicsMirror.size, 25));
       const hitMap = new Map();
       for (const h of dHits) hitMap.set(h.id, 1 - h.score);
       for (const [bid, entry] of memory) {
         const did = entry.meta && entry.meta.dynamicsId;
         if (did != null && hitMap.has(did)) dynamicsSimMap.set(bid, hitMap.get(did));
       }
-    } finally { _obsEnd('dynamics'); }
+    } finally { obsEnd('dynamics'); }
   }
 
   const scored = [];
@@ -987,7 +1012,8 @@ export function recommendSeeds(trackVec, k = 5) {
     });
   }
   scored.sort((a, b) => b.score - a.score);
-  const out = decorateSeeds(scored,k);
+  const out = decorateSeeds(scored,k,mode);
+  if (!record) return out;
   rememberSelection(out,memory,candidates,_learningContext,learnedWeight);
   // 1C — F4. In eventual mode, stash the result so the next TTL calls
   // under the same trackVec key short-circuit at the top of this fn.
@@ -1072,7 +1098,7 @@ function _pickRepresentativeBrain({ trackSimByTrackId, frozenIds, memory }) {
   return bestId;
 }
 
-function _recommendSeedsFederated({ queryVec, trackVec, k, frozenIds, trackSimByTrackId, memory }) {
+function _recommendSeedsFederated({ queryVec, trackVec, k, frozenIds, trackSimByTrackId, memory, record = true, dynamicsVec = _queryDynamicsVec, report = {} }) {
   const kk = Math.max(1, k | 0);
   // Build the shard list. Hyperbolic shard is only included when the
   // shadow index is populated (wasm loaded + archive hydrated through
@@ -1081,7 +1107,7 @@ function _recommendSeedsFederated({ queryVec, trackVec, k, frozenIds, trackSimBy
   const shards = [{ name: 'euclidean', db: _brainDB, metric: 'cosine' }];
   if (_brainDB_hyperbolic && !_brainDB_hyperbolic.isEmpty()) {
     shards.push({ name: 'hyperbolic', db: _brainDB_hyperbolic, metric: 'poincare' });
-  } else if (_federationEnabled && !_brainDB_hyperbolic) {
+  } else if (record && _federationEnabled && !_brainDB_hyperbolic) {
     // Only warn once per session — keep the hot path silent.
     if (!_federationStats._degradeWarned) {
       console.warn('[federation] hyperbolic shadow unavailable — degrading to Euclidean-only');
@@ -1092,6 +1118,8 @@ function _recommendSeedsFederated({ queryVec, trackVec, k, frozenIds, trackSimBy
   const repId = _pickRepresentativeBrain({ trackSimByTrackId, frozenIds, memory });
   if (!repId || !memory.has(repId)) {
     // Nothing to query with — empty archive or every brain filtered out.
+    report.mode = _rerankerMode;
+    if (!record) return [];
     _federationStats.enabled = true;
     _federationStats.shards = shards.length;
     _federationStats.lastKPrime = _kPrime(kk, shards.length);
@@ -1146,9 +1174,9 @@ function _recommendSeedsFederated({ queryVec, trackVec, k, frozenIds, trackSimBy
   else if (_rerankerPolicy === 'gnn') useGnn = gnnIsReady();
   else useGnn = false; // keep EMA as the default until held-out racing evidence supports promotion
   const gnnMap = (useGnn && candidatesMap.size > 0) ? gnnScore(memory, candidatesMap, _learningContext) : null;
-  if (skipRerank) _rerankerMode = 'none';
-  else if (useGnn && gnnMap) _rerankerMode = 'gnn';
-  else _rerankerMode = candidatesMap.size > 0 ? 'ema' : 'none';
+  const mode = skipRerank ? 'none' : (useGnn && gnnMap) ? 'gnn' : candidatesMap.size > 0 ? 'ema' : 'none';
+  report.mode = mode;
+  if (record) _rerankerMode = mode;
 
   // Composite score per candidate, mirroring the single-index path's
   // trackTerm * fitTerm * rerankTerm * dynamicsTerm product so federated
@@ -1156,9 +1184,9 @@ function _recommendSeedsFederated({ queryVec, trackVec, k, frozenIds, trackSimBy
   // consumers — the rv-panel rendering, main.js seed selection — don't
   // need to special-case federation).
   const dynamicsSimMap = new Map();
-  const dynamicsActive = _useDynamics && _queryDynamicsVec && !_dynamicsDB.isEmpty();
+  const dynamicsActive = _useDynamics && dynamicsVec && !_dynamicsDB.isEmpty();
   if (dynamicsActive) {
-    const dHits = _dynamicsDB.search(_queryDynamicsVec, Math.min(_dynamicsMirror.size, 25));
+    const dHits = _dynamicsDB.search(dynamicsVec, Math.min(_dynamicsMirror.size, 25));
     const hitMap = new Map();
     for (const h of dHits) hitMap.set(h.id, 1 - h.score);
     for (const c of union) {
@@ -1206,8 +1234,9 @@ function _recommendSeedsFederated({ queryVec, trackVec, k, frozenIds, trackSimBy
       // index return path (federated-disabled callers never see it).
       shards: t.shards,
     };
-  }),kk);
+  }),kk,mode);
 
+  if (!record) return out;
   rememberSelection(out,memory,candidatesMap,_learningContext,learnedWeight);
   _federationStats.enabled = true;
   _federationStats.shards = shards.length;
@@ -1953,6 +1982,7 @@ import {
   setMode as _consistencySetMode,
   recordQuery as _consistencyRecordQuery,
   getCachedResult as _consistencyGetCachedResult,
+  peekCachedResult as _consistencyPeekCachedResult,
   freezeArchive as _consistencyFreezeArchive,
   thawArchive as _consistencyThawArchive,
   clearCache as _consistencyClearCache,

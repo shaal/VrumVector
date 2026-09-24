@@ -46,6 +46,7 @@ import {
   loadAdapter as loadLora,
   isReady as loraReady,
   adapt as loraAdapt,
+  preview as loraPreview,
   reward as loraReward,
   driftL2 as loraDrift,
   recentDrift as loraRecentDrift,
@@ -154,6 +155,7 @@ export function sonaReady() { return !!_agent; }
 // ─── P1.B pass-throughs ────────────────────────────────────────────────────
 
 export const adapt        = loraAdapt;
+export const adaptPreview = loraPreview;
 export const reward       = loraReward;
 export const driftL2      = loraDrift;
 export const recentDrift  = loraRecentDrift;

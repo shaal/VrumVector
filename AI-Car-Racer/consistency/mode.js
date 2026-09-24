@@ -140,6 +140,13 @@ export function getCachedResult(key) {
   return { hit: true, value: entry.value };
 }
 
+// What the next getCachedResult(key) would return, without counting a call,
+// counting a hit or miss, or evicting. For read-only previews.
+export function peekCachedResult(key) {
+  const entry = key ? _cache.get(key) : null;
+  return entry && _callCount + 1 <= entry.expiresAtCall ? { hit: true, value: entry.value } : { hit: false };
+}
+
 export function clearCache() { _cache.clear(); }
 
 // ─── frozen-mode snapshot ref ────────────────────────────────────────────

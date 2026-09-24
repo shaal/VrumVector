@@ -57,8 +57,8 @@ export async function fanOut(queryVec, k, shards) {
 }
 
 // Synchronous sibling. Today's shard backends (VectorDB, HyperbolicVectorDB)
-// are both sync, and recommendSeeds is called in hot paths (GA seed buffer
-// construction, rv-panel poll) that already expect sync. We keep the async
+// are both sync, and seed ranking is called in hot paths (GA seed buffer
+// construction, the rv-panel's previewSeeds poll) that already expect sync. We keep the async
 // fanOut as the contract surface for future worker-backed indexes, and use
 // this sync variant internally. The two share kPrime() so the over-request
 // math is identical.

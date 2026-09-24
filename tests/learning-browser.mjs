@@ -210,6 +210,104 @@ try{
   assert.ok(retrieval.metas.every(m=>m?.track==='fixture-track'));
   assert.deepEqual(retrieval.dedup,{id:'careful-seed',careful:4,wild:5,restored:4,evaluations:2,selfParent:false});
   assert.deepEqual(retrieval.identity,{count:2,freshIsUnique:true,oldFitness:4});
+  mark('the Vector Memory panel preview is read-only and ranks like live retrieval');
+  const preview=await page.evaluate(async()=>{
+    const b=window.__rvBridge,basis=new Float32Array(512);basis[0]=1;
+    const context={version:1,profile:'balanced',track:'preview-track',maxSpeed:15,traction:.5,seconds:20};
+    const brain=f=>Array.from({length:244},(_,i)=>Math.sin(i*f)*.2);
+    b.hydrateFromFixture({tracks:[{id:'preview-t',vec:Array.from(basis),meta:{}}],brains:[
+      {id:'pv-a',vec:brain(1),meta:{fitness:6,trackId:'preview-t',learningContext:context,parentIds:[]}},
+      {id:'pv-b',vec:brain(2),meta:{fitness:3,trackId:'preview-t',learningContext:context,parentIds:[]}},
+      {id:'pv-c',vec:brain(3),meta:{fitness:5,trackId:'preview-t',learningContext:{...context,profile:'wild'},parentIds:[]}}
+    ],observations:[]});
+    b.setLearningContext(context);b.setBypassLora(false);b.setUseDynamics(false);b.setFederationEnabled(false);
+    b.setConsistencyMode('fresh');b.setRerankerMode('ema');
+    const ranked=list=>list.map(s=>s.id+':'+s.score.toFixed(9));
+    const outcomes=['pv-a','pv-b','pv-c'].map(id=>({id,meanFitness:7,count:3}));
+    const graphCount=()=>{const g=b.info().graphLearning;return g.trained+g.heldOut;};
+    const snap=()=>JSON.stringify({reranker:b.info().reranker,lora:b.info().lora,index:b.getIndexStats()});
+    b.recommendSeeds(basis,3);b.observeOffspring(outcomes,context); // a live selection, then its outcome
+    const before=snap(),previews=[];
+    for(let i=0;i<5;i++)previews.push(ranked(b.previewSeeds(basis,3)));
+    const unchanged=snap()===before,live=ranked(b.recommendSeeds(basis,3));
+    // A live selection is remembered for graph learning; a preview is not.
+    const g0=graphCount();b.observeOffspring(outcomes,context);const liveTrained=graphCount()-g0;
+    b.previewSeeds(basis,3);const g1=graphCount();b.observeOffspring(outcomes,context);const previewTrained=graphCount()-g1;
+    // Eventual mode: the preview shows the cached live result and counts no call.
+    b.setConsistencyMode('eventual');const cachedLive=ranked(b.recommendSeeds(basis,3));
+    const c0=JSON.stringify(b.getConsistencyStats()),cachedPreview=ranked(b.previewSeeds(basis,3)),countsUnchanged=JSON.stringify(b.getConsistencyStats())===c0;
+    b.setConsistencyMode('fresh');
+    // Federation: same ranking; no stats update and no viewer snapshot (a live call pushes one).
+    let snapshots=0;b.setFederationEnabled(true);b.setFederationCapturer({onSnapshot:()=>snapshots++});
+    const fedLive=ranked(b.recommendSeeds(basis,3)),f0=JSON.stringify(b.getFederationStats()),s0=snapshots;
+    const fedPreview=ranked(b.previewSeeds(basis,3)),fedUnchanged=s0===1&&snapshots===s0&&JSON.stringify(b.getFederationStats())===f0;
+    b.setFederationCapturer(null);b.setFederationEnabled(false);
+    // Under another policy the preview ranks like a live call and reports that mode.
+    b.setRerankerMode('none');const nonePreview=b.previewSeeds(basis,3),noneLive=b.recommendSeeds(basis,3);b.setRerankerMode('ema');
+    const noneMatches=JSON.stringify(ranked(nonePreview))===JSON.stringify(ranked(noneLive))&&nonePreview.rerankerMode==='none';
+    b.recommendSeeds(basis,3);b.observeOffspring(outcomes,context);
+    // A trained adapter changes the query; the preview uses it without caching
+    // anything (a different track vector would move the drift if it did).
+    const adapter=await import('/AI-Car-Racer/lora/trackAdapter.js'),savedLora=adapter.serialize();
+    // Large B weights: at the adapter's usual scale the change is below the
+    // track index's float precision.
+    const wave=(n,p)=>Array.from({length:n},(_,i)=>400*Math.sin(i*p));
+    const loraSet=adapter.deserialize({...savedLora,b0:wave(512,.7),b1:wave(512,1.3)});
+    const other=new Float32Array(512);other[1]=.6;other[2]=.8;
+    const sims=list=>JSON.stringify(list.map(x=>x.id+':'+x.trackSim));
+    const liveLora=sims(b.recommendSeeds(basis,3)),drift0=JSON.stringify(b.info().lora);
+    const previewLora=sims(b.previewSeeds(basis,3));b.previewSeeds(other,3);const loraUntouched=JSON.stringify(b.info().lora)===drift0;
+    b.setBypassLora(true);const bypassed=sims(b.previewSeeds(basis,3));b.setBypassLora(false);
+    const loraUsed=previewLora===liveLora&&previewLora!==bypassed;
+    adapter.deserialize(savedLora);
+    // Eventual mode across the TTL: the preview predicts the next live call,
+    // including a brain added after caching, and never fills the cache.
+    const consistency=await import('/AI-Car-Racer/consistency/mode.js'),ttl0=consistency.getTtl();consistency.setTtl(2);
+    b.setConsistencyMode('eventual');const steps=[];
+    b.recommendSeeds(basis,3);
+    b.archiveBrain(window.__rvUnflatten(new Float32Array(brain(4))),9,basis,9,[],undefined,undefined,{context,styleScore:0});
+    for(let i=0;i<4;i++){const p=ranked(b.previewSeeds(basis,3)),size=b.getConsistencyStats().cacheSize,l=ranked(b.recommendSeeds(basis,3));steps.push({same:JSON.stringify(p)===JSON.stringify(l),size,fresh:l.some(x=>!x.startsWith('pv-'))});}
+    const size0=b.getConsistencyStats().cacheSize;b.previewSeeds(other,3);const missNotCached=b.getConsistencyStats().cacheSize===size0;
+    const ttlTracked=steps.every(x=>x.same)&&steps.some(x=>!x.fresh)&&steps.some(x=>x.fresh)&&missNotCached;
+    consistency.setTtl(ttl0);
+    // Frozen mode: both exclude a brain archived after the freeze.
+    b.setConsistencyMode('frozen');
+    const lateId=b.archiveBrain(window.__rvUnflatten(new Float32Array(brain(6))),12,basis,11,[],undefined,undefined,{context,styleScore:0});
+    const frozenPreview=ranked(b.previewSeeds(basis,5)),frozenLive=ranked(b.recommendSeeds(basis,5));
+    const frozenMatches=JSON.stringify(frozenPreview)===JSON.stringify(frozenLive)&&!frozenPreview.some(x=>x.startsWith(lateId+':'));
+    b.setConsistencyMode('fresh');
+    // Dynamics: a passed query ranks like the same query staged for a live call.
+    const dyn=new Float32Array(64).map((_,i)=>Math.cos(i)),dyn2=new Float32Array(64).map((_,i)=>Math.sin(i*3));
+    b.archiveBrain(window.__rvUnflatten(new Float32Array(brain(5))),4,basis,10,[],undefined,dyn,{context,styleScore:0});
+    b.setUseDynamics(true);b.setQueryDynamicsVec(dyn);const dynLive=b.recommendSeeds(basis,5);
+    const dynPreview=b.previewSeeds(basis,5,{dynamicsVec:dyn}),dynOther=b.previewSeeds(basis,5,{dynamicsVec:dyn2});
+    const dynamicsUsed=JSON.stringify(ranked(dynPreview))===JSON.stringify(ranked(dynLive))&&dynPreview.some(x=>x.dynamicsSim!==0)&&
+      JSON.stringify(dynPreview.map(x=>x.dynamicsSim))!==JSON.stringify(dynOther.map(x=>x.dynamicsSim));
+    b.setUseDynamics(false);
+    // A dynamics query passed to the preview is not staged for live retrieval.
+    b.setQueryDynamicsVec(null);b.previewSeeds(basis,3,{dynamicsVec:new Float32Array(64).fill(.1)});const dynamicsNotStaged=b.info().dynamics.hasQuery===false;
+    // Another reranker policy in a preview leaves info().reranker alone.
+    const r0=b.info().reranker;b.setRerankerMode('none');b.previewSeeds(basis,3);const rerankerKept=b.info().reranker===r0;b.setRerankerMode('auto');
+    return {unchanged,sameAcross:previews.every(p=>JSON.stringify(p)===JSON.stringify(previews[0])),matchesLive:JSON.stringify(previews[0])===JSON.stringify(live),
+      liveTrained,previewTrained,cachedMatches:JSON.stringify(cachedPreview)===JSON.stringify(cachedLive),countsUnchanged,
+      fedMatches:JSON.stringify(fedPreview)===JSON.stringify(fedLive),fedUnchanged,rerankerKept,r0,dynamicsNotStaged,
+      noneMatches,loraSet,loraUntouched,loraUsed,ttlTracked,steps,dynamicsUsed,frozenMatches,
+      loraReady:b.info().lora.ready,previewLength:previews[0].length};
+  });
+  assert.deepEqual({...preview,r0:undefined,steps:undefined},{unchanged:true,sameAcross:true,matchesLive:true,liveTrained:preview.liveTrained,previewTrained:0,
+    cachedMatches:true,countsUnchanged:true,fedMatches:true,fedUnchanged:true,rerankerKept:true,r0:undefined,dynamicsNotStaged:true,
+    noneMatches:true,loraSet:true,loraUntouched:true,loraUsed:true,ttlTracked:true,steps:undefined,dynamicsUsed:true,frozenMatches:true,loraReady:true,previewLength:3},JSON.stringify(preview));
+  assert.ok(preview.liveTrained>0,'positive control: a live selection plus an outcome reaches graph learning');
+  // The panel itself: re-renders (forced by a policy change) must not count as
+  // live calls, and its reranker row follows the policy while idle.
+  const panelBefore=await page.evaluate(()=>{const b=window.__rvBridge;b.setConsistencyMode('eventual');b.recommendSeeds(new Float32Array(512).fill(.04),3);
+    b.setRerankerMode('none');return {calls:b.getConsistencyStats().callCount,reranker:b.info().reranker};});
+  await page.waitForFunction(()=>document.querySelector('[data-rv="reranker-mode-value"]')?.textContent==='none',{},{timeout:10000});
+  await page.evaluate(()=>window.__rvBridge.setRerankerMode('ema'));
+  await page.waitForFunction(()=>document.querySelector('[data-rv="reranker-mode-value"]')?.textContent==='ema',{},{timeout:10000});
+  const panelAfter=await page.evaluate(()=>{const b=window.__rvBridge,r={calls:b.getConsistencyStats().callCount,reranker:b.info().reranker};
+    b.setConsistencyMode('fresh');b.setRerankerMode('auto');return r;});
+  assert.deepEqual(panelAfter,panelBefore,'panel re-renders make no live calls and leave info().reranker alone');
   mark('trainable graph uses descendant feedback and survives real browser reload');
   const graphSaved=await page.evaluate(async()=>{
     const graph=await import('/AI-Car-Racer/gnnReranker.js'),features=await import('/AI-Car-Racer/learning/graph-features.js');
@@ -254,10 +352,10 @@ try{
     // A 4-second context differs from every archived run, so all memories are transfer candidates.
     L.prepare({road,maxSpeed,traction,seconds:4});
     const seeds=b.transferCandidates(window.currentTrackVec||null,6);
-    // Not info().reranker: it is the path the last recommendSeeds() call took,
-    // and the Vector Memory panel polls recommendSeeds() every 500 ms, so it
-    // can change while the check runs (on CI: 'none' -> 'ema').
-    const state=()=>({learning:b.info().learning,graph:b.info().graphLearning,brains:b.info().brains});
+    // info().reranker is the path the last live recommendSeeds() call took. The
+    // Vector Memory panel's poll once set it too (CI: 'none' -> 'ema' during
+    // the check); it now uses the read-only previewSeeds().
+    const state=()=>({learning:b.info().learning,graph:b.info().graphLearning,brains:b.info().brains,reranker:b.info().reranker});
     const before=state(),result=await L.checkTransfer({trialsPerRun:3,generations:2,population:6}),after=state();
     // Name what changed, so a failure says why.
     const changed=Object.keys(before).filter(k=>JSON.stringify(before[k])!==JSON.stringify(after[k])).map(k=>({field:k,before:before[k],after:after[k]}));
@@ -267,7 +365,7 @@ try{
       summary:L.transferSummary()};
   });
   assert.ok(transfer.seedCount>0,'archived memories from other contexts are offered');assert.ok(transfer.allTransfer);
-  assert.deepEqual(transfer.changed,[],'the transfer check does not change archive, feedback, or graph-learning state');
+  assert.deepEqual(transfer.changed,[],'the transfer check does not change archive, feedback, or reranker state');
   assert.equal(transfer.result.trials,3);assert.equal(transfer.result.state,'inconclusive','Three trials cannot reach 20x evidence');
   assert.equal(transfer.result.memoryWins+transfer.result.freshWins+transfer.result.ties,3);
   assert.match(transfer.status,/inconclusive/);assert.equal(transfer.label,'Continue check');assert.equal(transfer.busy,'false');
