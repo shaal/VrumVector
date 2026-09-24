@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "window": 8,
+  "generations": 40,
+  "thresholds": {
+    "tuned": [
+      0.001,
+      0.05,
+      0.01,
+      0.5,
+      0.8
+    ],
+    "upstreamDefaults": [
+      0.001,
+      0.5,
+      0.1,
+      0.5,
+      0.8
+    ]
+  },
+  "sets": {
+    "tuning": {
+      "tracks": [
+        "Rectangle",
+        "Triangle"
+      ],
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "population": 48,
+      "seconds": 8,
+      "traces": 12,
+      "tuned": {
+        "agreement": 1,
+        "windows": 384,
+        "confusion": {
+          "plateau → NeedsReplan": 150,
+          "improving → Healthy": 104,
+          "plateau → Stuck": 130
+        }
+      },
+      "upstreamDefaults": {
+        "agreement": 0.9921875,
+        "windows": 384,
+        "confusion": {
+          "plateau → NeedsReplan": 150,
+          "improving → Healthy": 101,
+          "plateau → Stuck": 130,
+          "improving → Drifting": 3
+        }
+      }
+    },
+    "heldOut": {
+      "tracks": [
+        "Monza",
+        "Rectangle",
+        "Triangle"
+      ],
+      "seeds": [
+        100,
+        101,
+        102
+      ],
+      "population": 128,
+      "seconds": 12,
+      "traces": 9,
+      "tuned": {
+        "agreement": 1,
+        "windows": 288,
+        "confusion": {
+          "plateau → NeedsReplan": 118,
+          "improving → Healthy": 56,
+          "plateau → Stuck": 114
+        }
+      },
+      "upstreamDefaults": {
+        "agreement": 1,
+        "windows": 288,
+        "confusion": {
+          "plateau → NeedsReplan": 118,
+          "improving → Healthy": 56,
+          "plateau → Stuck": 114
+        }
+      }
+    }
+  }
+}

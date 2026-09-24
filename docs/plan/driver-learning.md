@@ -34,6 +34,7 @@ Archive identity is checked against the restored mirror, with exact genome compa
 ## What the learning panel shows
 
 - Current exploration stage and effective mutation rate.
+- A diagnostic **Training health** pill (Improving, Plateau, Plateau while exploring) from ruvector's emergent-time clock. See [training health](../validation/training-health.md).
 - Best checkpoint progress, latest generation survival, and the last 20 generations' progress.
 - Counts of memory-derived, saved, and fresh drivers.
 - The top recalled memories with an explanation of how their conditions match.

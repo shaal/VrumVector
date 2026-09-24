@@ -26,3 +26,10 @@
  .learning-panel {position:fixed;top:190px;right:16px;max-height:calc(100dvh - 310px);width:310px;}
 }
 .learning-transfer {border-top:1px solid #526a5c;margin-top:12px;padding-top:2px;}
+.learning-panel p.learning-health {display:inline-flex;align-items:center;gap:6px;margin:4px 0 0;padding:3px 9px;border:1px solid #526a5c;border-radius:999px;font-size:10px;color:#eef3e9;}
+.learning-health::before {content:'';flex:none;width:7px;height:7px;border-radius:50%;background:#aac5b7;}
+.learning-health[data-state="Drifting"]::before {background:#d8e08c;}
+.learning-health[data-state="Healthy"]::before {background:#a0e0c5;}
+.learning-health[data-state="Stuck"]::before,.learning-health[data-state="NeedsReplan"]::before {background:#f4d59c;}
+.learning-health[data-state="Contradicting"]::before,.learning-health[data-state="Collapsing"]::before,.learning-health[data-state="NeedsHumanReview"]::before {background:#f0a09a;}
+.learning-panel p.learning-health[hidden] {display:none;}

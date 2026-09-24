@@ -173,6 +173,7 @@ vendor/ruvector/           # pre-built WASM, committed so no toolchain needed
 ├── ruvector_learning_wasm/# P1.B MicroLoRA track adapter
 ├── ruvector_hyperbolic_hnsw_wasm/ # P3.A Poincaré-ball HNSW (opt-in)
 ├── ruvector_temporal_tensor_wasm/ # P1.C dynamics-trajectory embedding
+├── emergent_time_wasm/    # training-health clock (upstream prebuilt)
 └── sona/                  # P2.A SONA engine (trajectories + ReasoningBank)
 scripts/vendor-ruvector.sh # maintainer-only: rebuild + recommit a WASM crate
 scripts/ruvector-patches/  # in-repo patches applied before each vendor build
