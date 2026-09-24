@@ -195,6 +195,29 @@ disappears — the emergency bunker option.
 
 ---
 
+## Decision (2026-09-24): patches plus fork-held sources
+
+The trigger in "Decision needed" (more than two patches, none upstreamed) is
+met: three patch files, plus the HNSW backend branch. Upstream also rewrote
+`main`, which orphaned the old base. Decision: keep Option 3 for patches, and
+use the fork only to preserve sources that upstream no longer serves. Do not
+maintain a patched fork branch (full Option 2): the patches still apply to
+upstream `main` with small rebases, and a fork branch would add rebase work
+without adding reproducibility.
+
+- `scripts/build-learning-wasm.sh` and `scripts/build-gnn-wasm.sh` build from
+  upstream `5356a84e2` plus the patch files. If upstream stops serving a SHA,
+  they fetch it from `shaal/ruvector`.
+- `shaal/ruvector` tags every base this repo has vendored:
+  `vv/vendored-base-d5d3296c`, `vv/sona-gnn-base-5356a84e`, and
+  `vv/hnsw-wasm-backend-5f2a9a75` (the HNSW backend, also on branch
+  `feat/hnsw-wasm-backend`). Never delete `vv/*` tags.
+- Both scripts remap the build folder and the Cargo home in panic strings, so
+  a build is byte-reproducible and carries no local paths.
+- Option 1 (upstream PRs for `find_patterns`, the checkpoint bindings, the
+  online GNN, and the HNSW backend) is still open and still needs the
+  user's approval, because it posts to a third-party repository.
+
 ## What shipped (2026-04-21)
 
 **Option 3 is live.** `scripts/ruvector-patches/sona-find-patterns.patch`

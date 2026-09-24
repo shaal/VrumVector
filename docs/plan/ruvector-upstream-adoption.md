@@ -75,3 +75,12 @@ task's own doc or proof file, not in this checklist.
   the brain archive into species, and offer species-diverse seeding as an
   explicit experiment. Keep the current default unless a paired benchmark
   supports a change.
+- [ ] **T9 — Rebuild the older locally built WASM packages reproducibly.**
+  Found during T3: `ruvector_wasm`, `ruvector_cnn_wasm`, `ruvector_dag_wasm`,
+  `ruvector_hyperbolic_hnsw_wasm`, `ruvector_learning_wasm`, and the unused
+  `ruvector_gnn_wasm` were built on a local machine in April. Their panic
+  strings embed the local Cargo registry path, including the home folder name.
+  Rebuild each one from a pinned source (the `vv/*` tags on `shaal/ruvector`)
+  with the path-remapped build, prove that its behaviour is unchanged, and
+  remove `ruvector_gnn_wasm` if nothing uses it. Note: `VENDORED.md` for
+  several of them says the April source tree was "-dirty".
