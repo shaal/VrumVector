@@ -25,3 +25,4 @@
  #driver-learning {font-size:10px;}
  .learning-panel {position:fixed;top:190px;right:16px;max-height:calc(100dvh - 310px);width:310px;}
 }
+.learning-transfer {border-top:1px solid #526a5c;margin-top:12px;padding-top:2px;}

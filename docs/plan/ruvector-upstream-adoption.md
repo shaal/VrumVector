@@ -57,7 +57,10 @@ task's own doc or proof file, not in this checklist.
   `scripts/benchmark-gnn.mjs`. Enforce the n ≥ 5 per arm floor. *(Shipped with
   n ≥ 6 independent units, this project's rule, plus cluster resampling and a
   small-sample interval correction; see `docs/plan/learning-proof/README.md`.)*
-- [ ] **T5 — Sequential verdict for the A/B comparison and a transfer guard.**
+- [x] **T5 — Sequential verdict for the A/B comparison and a transfer guard.**
+  *(Shipped as independent paired trials in the driver-learning panel, not live
+  A/B generations: successive generations are not independent, so the betting
+  test would give false verdicts. See `docs/validation/transfer-check.md`.)*
   Port the paired sequential test (anytime-valid e-value, accept at 20×) from
   `ruvector-typesafe-core` `loop_gate`. Feed it paired per-generation outcomes
   from the A/B mode (vector memory vs. no retrieval). Show the verdict in the

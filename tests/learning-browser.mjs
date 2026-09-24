@@ -243,6 +243,52 @@ try{
   await page.evaluate(()=>window.__rvBridge.persist());
   await page.unroute('**/ruvector_gnn_trainable_wasm_bg.wasm*');await page.reload();await ready();
   assert.deepEqual(await page.evaluate(async()=>(await import('/AI-Car-Racer/gnnReranker.js')).serialize()),graphSaved.checkpoint);
+  mark('transfer check runs real paired trials and a paused guard holds back transferred memories');
+  const transfer=await page.evaluate(async()=>{
+    const L=window.DriverLearning,b=window.__rvBridge;
+    // A 4-second context differs from every archived run, so all memories are transfer candidates.
+    L.prepare({road,maxSpeed,traction,seconds:4});
+    const seeds=b.transferCandidates(window.currentTrackVec||null,6);
+    const state=()=>JSON.stringify({learning:b.info().learning,graph:b.info().graphLearning,brains:b.info().brains,reranker:b.info().reranker});
+    const before=state(),result=await L.checkTransfer({trialsPerRun:3,generations:2,population:6});
+    return {seedCount:seeds.length,allTransfer:seeds.every(s=>s.exactContext===false&&s.vector?.length===244),
+      unchanged:before===state(),result,status:document.querySelector('[data-transfer-status]').textContent,
+      label:document.querySelector('[data-transfer-check]').textContent,busy:document.querySelector('[data-transfer-status]').getAttribute('aria-busy'),
+      summary:L.transferSummary()};
+  });
+  assert.ok(transfer.seedCount>0,'archived memories from other contexts are offered');assert.ok(transfer.allTransfer);
+  assert.ok(transfer.unchanged,'the transfer check does not change archive, feedback, or reranker state');
+  assert.equal(transfer.result.trials,3);assert.equal(transfer.result.state,'inconclusive','Three trials cannot reach 20x evidence');
+  assert.equal(transfer.result.memoryWins+transfer.result.freshWins+transfer.result.ties,3);
+  assert.match(transfer.status,/inconclusive/);assert.equal(transfer.label,'Continue check');assert.equal(transfer.busy,'false');
+  assert.equal(transfer.summary,'Transfer check inconclusive after 3 trials');
+  const held=await page.evaluate(async()=>{
+    const L=window.DriverLearning,{contextKey}=await import('/AI-Car-Racer/learning/policy.js');
+    const verdict={state:'paused',identity:'browser-test',trials:14,memoryWins:0,freshWins:14,ties:0,evidence:{memory:.02,fresh:22.7},threshold:20};
+    localStorage.setItem('vv.transferGuard',JSON.stringify({[contextKey(L.context)]:{verdict,test:null,at:Date.now()}}));
+    const brain=new Float32Array(244).fill(.1),other=brain.map(v=>-v);
+    const batch=L.build(8,[{id:'same',vector:brain,exactContext:true},{id:'other',vector:other,exactContext:false}],null,.2,.65);
+    const result={parents:[...new Set(batch.parents.filter(Boolean))],held:L.transferHeld,
+      text:document.querySelector('[data-transfer-status]').textContent,resume:!document.querySelector('[data-transfer-resume]').hidden};
+    // A saved driver from another context is held back too; one from this context is kept.
+    const foreignPrior=L.build(8,[{id:'other',vector:other,exactContext:false}],brain,.2,.65,{...L.context,track:'another-track'}).counts.localStorage_prior;
+    const samePrior=L.build(8,[{id:'other',vector:other,exactContext:false}],brain,.2,.65,L.context).counts.localStorage_prior;
+    // A driver the user loads explicitly is used even while transfer is paused.
+    L.forceSaved=true;
+    const loadedPrior=L.build(8,[{id:'other',vector:other,exactContext:false}],brain,.2,.65,{...L.context,track:'another-track'}).counts.localStorage_prior;
+    document.querySelector('#driver-learning').open=true; // a user clicks Resume inside the open panel
+    document.querySelector('[data-transfer-resume]').click();
+    const cleared=!JSON.parse(localStorage.getItem('vv.transferGuard')||'{}')[contextKey(L.context)];
+    const focused=document.activeElement===document.querySelector('[data-transfer-check]');
+    localStorage.setItem('vv.transferGuard',JSON.stringify({[contextKey(L.context)]:{verdict,test:null,at:Date.now()}}));
+    const pausedBeforeReset=document.querySelector('[data-transfer-resume]')&&(await import('/AI-Car-Racer/learning/transferCheck.js')).isTransferPaused(L.context);
+    L.resetMemories();document.querySelector('#driver-learning').open=false;
+    return {...result,foreignPrior,samePrior,loadedPrior,cleared,focused,pausedBeforeReset,resetCleared:localStorage.getItem('vv.transferGuard')===null};
+  });
+  assert.deepEqual(held.parents,['same']);assert.equal(held.held,1);assert.match(held.text,/Transfer paused/);
+  assert.ok(held.resume);assert.ok(held.cleared);assert.ok(held.focused,'focus moves to the check button');
+  assert.equal(held.foreignPrior,0);assert.ok(held.samePrior>0);assert.ok(held.loadedPrior>0,'an explicitly loaded driver is kept');
+  assert.ok(held.pausedBeforeReset);assert.ok(held.resetCleared,'Start Fresh clears transfer pauses');
   mark('crash-map recall reports cosine similarity in every index geometry');
   const crashRecall=await page.evaluate(()=>{
     const b=window.__rvBridge,C=window.CrashMapCodec,runs={};

@@ -1160,7 +1160,9 @@ function buildBrainsBuffer(N){
                 prior=flattenBrainInline(reviveBrain(JSON.parse(localStorage.getItem('bestBrain'))));
             }
         }catch(error){console.warn('[learning] saved driver skipped',error);}
-        const batch=window.DriverLearning.build(N,seeds,prior,mutateValue,conservativeInit);
+        let priorContext=null;
+        try{priorContext=JSON.parse(localStorage.getItem('bestBrainLearningContext')||'null');}catch(_){}
+        const batch=window.DriverLearning.build(N,seeds,prior,mutateValue,conservativeInit,priorContext);
         currentSeedIds=[...new Set(batch.parents.filter(Boolean))];
         window.__rvBridge?.setLastSeedSources?.({...batch.counts,generation});
         return batch.flat;
@@ -2165,6 +2167,15 @@ window.__downloadCSV = function(label, rows){
                 ' · max cp ' + sign(dMaxCp) + '</div>';
         } else {
             abHudDelta.innerHTML = '<div style="opacity:.6;">(Δ ready after both sides post a gen)</div>';
+        }
+        // Live generations cannot give a valid verdict (see docs/validation/transfer-check.md);
+        // show the paired-trial transfer check's state instead.
+        var transferLine = window.DriverLearning && window.DriverLearning.transferSummary ? window.DriverLearning.transferSummary() : '';
+        if (transferLine){
+            var line = document.createElement('div');
+            line.style.marginTop = '3px'; line.style.opacity = '.85';
+            line.textContent = transferLine;
+            abHudDelta.appendChild(line);
         }
     }
 

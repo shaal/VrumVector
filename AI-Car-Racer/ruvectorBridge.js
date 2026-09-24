@@ -1000,6 +1000,34 @@ export function recommendSeeds(trackVec, k = 5) {
   return out;
 }
 
+// Read-only retrieval for the transfer check: the memories that live
+// retrieval would offer from *other* contexts (other tracks, styles, physics,
+// or durations), ranked by the same track-similarity x fitness terms and the
+// same diversity preference. Unlike recommendSeeds, it does not adapt the query
+// through LoRA, remember a selection for reranker feedback, fill the
+// consistency cache, or record observability timings.
+export function transferCandidates(trackVec, k = 6) {
+  if (!_brainDB || !_learningContext || _brainMirror.size === 0) return [];
+  const memory = contextualArchive();
+  // Frozen consistency mode: offer only brains that live retrieval can return.
+  const frozenIds = (_consistencyGetMode() === 'frozen' && _consistencyStats().frozen) ? _getFrozenBrainIdSet() : null;
+  const trackSim = new Map();
+  if (trackVec && _trackDB && !_trackDB.isEmpty()) {
+    for (const hit of _trackDB.search(trackVec, Math.min(5, Number(_trackDB.len())))) trackSim.set(hit.id, 1 - hit.score);
+  }
+  const scored = [];
+  for (const [id, entry] of memory) {
+    if (frozenIds && !frozenIds.has(id)) continue;
+    const match = matchContext(entry.meta, _learningContext);
+    if (match.exact) continue;
+    const sim = trackSim.get(entry.meta && entry.meta.trackId) ?? 0;
+    const fit = Math.tanh(((entry.meta && entry.meta.fitness) || 0) / 100);
+    scored.push({ id, vector: entry.vector, meta: entry.meta, trackSim: sim, matchLabel: match.label, exactContext: false,
+      score: (0.5 + 0.5 * sim) * (0.5 + 0.5 * fit) * match.factor });
+  }
+  return selectDiverse(scored, k);
+}
+
 // Phase 2A — F2. Federated retrieval path. Fans out to all active brain
 // shards in parallel, unions by content hash (F5), applies the 1C
 // frozen-ids filter to the UNIONED set, reranks the union via the same

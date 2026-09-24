@@ -1,0 +1,178 @@
+{
+  "version": 1,
+  "config": {
+    "pairs": [
+      [
+        "Rectangle",
+        "Triangle"
+      ],
+      [
+        "Triangle",
+        "Rectangle"
+      ],
+      [
+        "random",
+        "Rectangle"
+      ],
+      [
+        "random",
+        "Triangle"
+      ]
+    ],
+    "seconds": 8,
+    "sources": 6,
+    "sourceGenerations": 15,
+    "sourcePopulation": 24,
+    "profile": "balanced",
+    "trialsPerRun": 60,
+    "generations": 6,
+    "population": 24
+  },
+  "method": "Paired trials: both arms restart from generation 0 with shared seeded streams; arm A seeds from source-track champions, arm B starts fresh. Anytime-valid betting test (alpha .05 each direction, lambda .5) stops at 20x evidence; inconclusive checks are continued up to 300 trials. Trial winner: final best progress, then summed best progress over generations. Timing covers trials only.",
+  "results": [
+    {
+      "source": "Rectangle",
+      "target": "Triangle",
+      "state": "inconclusive",
+      "identity": "cad7d8b5.0ea090e7.2ab2df51.e5ec30f9.c3b51ca7.8e4b32f9|m0.22|c0.65|g6|p24|s8",
+      "trials": 300,
+      "memoryWins": 95,
+      "freshWins": 93,
+      "ties": 112,
+      "evidence": {
+        "memory": 1.9424462038841739,
+        "fresh": 1
+      },
+      "threshold": 20,
+      "restarted": false,
+      "meanBest": {
+        "memory": 3.2733333333333334,
+        "fresh": 3.3466666666666667
+      },
+      "runs": [
+        {
+          "state": "inconclusive",
+          "trials": 60
+        },
+        {
+          "state": "inconclusive",
+          "trials": 120
+        },
+        {
+          "state": "inconclusive",
+          "trials": 180
+        },
+        {
+          "state": "inconclusive",
+          "trials": 240
+        },
+        {
+          "state": "inconclusive",
+          "trials": 300
+        }
+      ],
+      "secondsPerTrial": 2.09843
+    },
+    {
+      "source": "Triangle",
+      "target": "Rectangle",
+      "state": "confirmed",
+      "identity": "55b372e3.4071ed67.94997ab7.be41cd5b.704b320a.987345c6|m0.22|c0.65|g6|p24|s8",
+      "trials": 25,
+      "memoryWins": 19,
+      "freshWins": 4,
+      "ties": 2,
+      "evidence": {
+        "memory": 21.955093992831465,
+        "fresh": 1
+      },
+      "threshold": 20,
+      "restarted": false,
+      "meanBest": {
+        "memory": 3.12,
+        "fresh": 2.52
+      },
+      "runs": [
+        {
+          "state": "confirmed",
+          "trials": 25
+        }
+      ],
+      "secondsPerTrial": 1.7844
+    },
+    {
+      "source": "random",
+      "target": "Rectangle",
+      "state": "inconclusive",
+      "identity": "67d04c03.e2eb9dbd.3b67ac0a.8eb29ece.095659f1.b9accbc2|m0.22|c0.65|g6|p24|s8",
+      "trials": 300,
+      "memoryWins": 93,
+      "freshWins": 98,
+      "ties": 109,
+      "evidence": {
+        "memory": 2.2763041451767663,
+        "fresh": 1
+      },
+      "threshold": 20,
+      "restarted": false,
+      "meanBest": {
+        "memory": 2.41,
+        "fresh": 2.3433333333333333
+      },
+      "runs": [
+        {
+          "state": "inconclusive",
+          "trials": 60
+        },
+        {
+          "state": "inconclusive",
+          "trials": 120
+        },
+        {
+          "state": "inconclusive",
+          "trials": 180
+        },
+        {
+          "state": "inconclusive",
+          "trials": 240
+        },
+        {
+          "state": "inconclusive",
+          "trials": 300
+        }
+      ],
+      "secondsPerTrial": 1.7438166666666666
+    },
+    {
+      "source": "random",
+      "target": "Triangle",
+      "state": "paused",
+      "identity": "67d04c03.e2eb9dbd.3b67ac0a.8eb29ece.095659f1.b9accbc2|m0.22|c0.65|g6|p24|s8",
+      "trials": 89,
+      "memoryWins": 21,
+      "freshWins": 41,
+      "ties": 27,
+      "evidence": {
+        "memory": 1,
+        "fresh": 22.3664503168626
+      },
+      "threshold": 20,
+      "restarted": false,
+      "meanBest": {
+        "memory": 3.2134831460674156,
+        "fresh": 3.5168539325842696
+      },
+      "runs": [
+        {
+          "state": "inconclusive",
+          "trials": 60
+        },
+        {
+          "state": "paused",
+          "trials": 89
+        }
+      ],
+      "secondsPerTrial": 1.696820224719101
+    }
+  ]
+}
