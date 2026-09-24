@@ -79,6 +79,22 @@ export function adapt(trackVec) {
   // we hand to adapt_with_reward() at reward() time. We copy because the caller
   // may mutate or the underlying buffer may be a view into a transient image.
   _lastRaw = new Float32Array(trackVec);
+  const out = forward(trackVec);
+  _lastAdapted = out;
+  recordDrift();
+  return out;
+}
+
+// The same transform for a read-only preview: caches nothing, so reward()
+// and the drift history still refer to the last real adapt() call.
+export function preview(trackVec) {
+  if (!isReady() || !(trackVec instanceof Float32Array) || trackVec.length !== FULL_DIM) {
+    return trackVec;
+  }
+  return forward(trackVec);
+}
+
+function forward(trackVec) {
   const lo = trackVec.subarray(0, HALF_DIM);
   const hi = trackVec.subarray(HALF_DIM, FULL_DIM);
   const outLo = _loraLo.forward_array(lo);
@@ -90,8 +106,6 @@ export function adapt(trackVec) {
   // so re-normalise post-adaptation to stay on the unit sphere. This also
   // keeps cosine distance well-behaved when the LoRA delta is large.
   l2NormaliseInPlace(out);
-  _lastAdapted = out;
-  recordDrift();
   return out;
 }
 

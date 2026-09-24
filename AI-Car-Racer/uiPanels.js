@@ -8,11 +8,18 @@
 //   rvDisabled             — true when URL has ?rv=0 (main.js)
 //
 // The panel is polled at REFRESH_MS and re-renders only when the inputs change.
-// It never mutates bridge state; recommendSeeds() is a pure read.
+// It never mutates bridge state: it ranks seeds with previewSeeds(), which is
+// read-only. (recommendSeeds() records a selection for reranker feedback,
+// caches the LoRA query, and counts toward the consistency cache's TTL.)
 
 (function () {
   const REFRESH_MS = 500;
   const BADGE_K = 10; // matches main.js begin()'s recommendSeeds k
+
+  // The reranker the panel's own preview ranked with. info.reranker only
+  // follows live (training) calls, so it lags a policy change made while idle.
+  let previewRerankerMode = null;
+  const rerankerModeOf = (info) => previewRerankerMode || info.reranker;
 
   const root = document.getElementById('rv-panel');
   if (!root) {
@@ -805,7 +812,7 @@
       info.brains + ' brain' + (info.brains === 1 ? '' : 's') +
       ' · ' + info.tracks + ' track' + (info.tracks === 1 ? '' : 's') +
       ' · ' + info.observations + ' obs' +
-      ' · ' + (info.reranker || (info.gnn ? 'gnn' : 'ema'));
+      ' · ' + (rerankerModeOf(info) || (info.gnn ? 'gnn' : 'ema'));
     el.info.className = 'rv-info';
   }
 
@@ -861,7 +868,7 @@
   function renderRerankerMode(info) {
     // The `reranker: gnn | ema | none` one-liner row. Hidden when the bridge
     // is disabled via ?rv=0 (everything about the bridge is silenced then) or
-    // before the first recommendSeeds() call populates info.reranker.
+    // is not ready yet.
     if (window.rvDisabled) {
       el.rerankerMode.hidden = true;
       return;
@@ -870,8 +877,8 @@
       el.rerankerMode.hidden = true;
       return;
     }
-    const mode = (info.reranker === 'gnn' || info.reranker === 'ema' || info.reranker === 'none')
-      ? info.reranker : 'none';
+    const current = rerankerModeOf(info);
+    const mode = (current === 'gnn' || current === 'ema' || current === 'none') ? current : 'none';
     el.rerankerMode.hidden = false;
     el.rerankerModeValue.textContent = mode;
     el.rerankerModeValue.className = 'rv-reranker-mode-value rv-reranker-mode-' + mode;
@@ -1323,7 +1330,7 @@
     renderConsistency();
     renderFederation();
 
-    // Fast-path: nothing changed → no DOM writes, no recommendSeeds call.
+    // Fast-path: nothing changed → no DOM writes, no previewSeeds call.
     if (
       last.ready === ready &&
       info &&
@@ -1350,28 +1357,23 @@
       last.seedSourcesGen === seedSourcesGen
     ) return;
 
-    // Stage the current dynamics query vector so recommendSeeds can mix it
-    // in when the toggle is on. queryVector() returns null when no frames
-    // have been captured yet (pre-phase-4 or first load), which the bridge
-    // interprets as "no dynamics signal available this tick" and silently
-    // drops the term for the upcoming call.
-    if (ready && window.__rvDynamics && typeof window.__rvBridge.setQueryDynamicsVec === 'function') {
-      try {
-        window.__rvBridge.setQueryDynamicsVec(window.__rvDynamics.queryVector());
-      } catch (_) { /* best-effort */ }
-    }
-
-    // Recompute seeds for the badge/list. recommendSeeds is cheap (in-memory
-    // cosine over a few hundred entries), and only runs when one of the
-    // above inputs has moved.
+    // Recompute seeds for the badge/list with the current dynamics query
+    // (null before any frames are captured, which drops that term). The
+    // preview is cheap (in-memory cosine over a few hundred entries), is
+    // read-only, and only runs when one of the above inputs has moved.
     let seeds = [];
     if (ready && info && info.brains > 0) {
       try {
-        seeds = window.__rvBridge.recommendSeeds(trackVec, BADGE_K) || [];
+        let dynamicsVec = null;
+        try { dynamicsVec = window.__rvDynamics ? window.__rvDynamics.queryVector() : null; } catch (_) { /* best-effort */ }
+        seeds = window.__rvBridge.previewSeeds(trackVec, BADGE_K, { dynamicsVec }) || [];
+        previewRerankerMode = seeds.rerankerMode || null;
       } catch (e) {
-        console.warn('[rv-panel] recommendSeeds failed', e);
+        console.warn('[rv-panel] previewSeeds failed', e);
         seeds = [];
       }
+    } else {
+      previewRerankerMode = null;
     }
 
     // Reranker diff (P5.C). When the observation-event count rises, compare
