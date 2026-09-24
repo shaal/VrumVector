@@ -153,6 +153,22 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
   checkpoint of the teacher); same seed gives the same weights. About 3–4
   hours.
   depends: H2
+  Built before H2 (2026-09-24). H2 must produce this dataset for
+  `trainClone()` and `trainCloneInWorker()` in `learning/clone.js`:
+  `{inputs: Float32Array(n·10), keys: Uint8Array(n·4), episode: Uint32Array(n)}`.
+  Row `t` is one physics step: the 10 inputs sensed at the end of step `t`
+  (`Car.lastInputs`) and the keys held during step `t` (forward, left,
+  right, reverse; each 0 or 1). Rows stay unpaired; the trainer pairs inputs
+  `t` with keys `t + k`. Rows of one run are consecutive steps: start a new
+  `episode` id at every gap. From H1's store, that is wherever
+  `sampleSteps[i] ≠ sampleSteps[i − 1] + 1`, and the key bitmask unpacks as
+  1 forward, 2 left, 4 right, 8 reverse. The trainer already makes the
+  2-second time-block split (`splitBlocks`), so H2's "time-block splits" is
+  done; H2 does filtering and mirroring. For mirrored runs, set the optional
+  `sameSplitAs: Int32Array(n)` (row of the original, −1 for originals) so a
+  block and its mirror land on the same side of the split; otherwise
+  held-out scores are inflated. Results:
+  `docs/validation/behavioural-cloning.md`.
 - [ ] **H4 — Seed from a demonstration.** "Use my driving" in the panel, the
   `demonstration` seed kind, the source count, and the per-context offer
   rule. About 2 hours.
