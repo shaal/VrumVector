@@ -1,6 +1,6 @@
 diff --git a/crates/sona/src/checkpoint.rs b/crates/sona/src/checkpoint.rs
 new file mode 100644
-index 0000000..76405ac
+index 000000000..76405aca4
 --- /dev/null
 +++ b/crates/sona/src/checkpoint.rs
 @@ -0,0 +1,234 @@
@@ -190,7 +190,7 @@ index 0000000..76405ac
 +        let mut a=agent();
 +        for n in 0..31 {
 +            // A real multi-step trajectory has a nonzero reward advantage;
-+            // process_task's single-step baseline deliberately cancels out.
++            // Explicit two-step trajectories keep this gradient controlled.
 +            let mut t=a.engine.begin_trajectory(vec![(n as f32+1.)/32.;8]);
 +            t.add_step(vec![0.1;8],vec![],0.2); t.add_step(vec![0.8;8],vec![],0.9);
 +            a.engine.end_trajectory(t,0.8);
@@ -239,7 +239,7 @@ index 0000000..76405ac
 +    }
 +}
 diff --git a/crates/sona/src/engine.rs b/crates/sona/src/engine.rs
-index 9589ef3..ef49227 100644
+index 555fcc300..0a27b010a 100644
 --- a/crates/sona/src/engine.rs
 +++ b/crates/sona/src/engine.rs
 @@ -7,11 +7,11 @@ use crate::types::{QueryTrajectory, SonaConfig};
@@ -258,7 +258,7 @@ index 9589ef3..ef49227 100644
  
  impl std::fmt::Debug for SonaEngine {
 diff --git a/crates/sona/src/ewc.rs b/crates/sona/src/ewc.rs
-index 7197c33..581c5c7 100644
+index 7197c33b0..581c5c771 100644
 --- a/crates/sona/src/ewc.rs
 +++ b/crates/sona/src/ewc.rs
 @@ -65,25 +65,25 @@ pub struct TaskFisher {
@@ -298,7 +298,7 @@ index 7197c33..581c5c7 100644
  
  impl EwcPlusPlus {
 diff --git a/crates/sona/src/lib.rs b/crates/sona/src/lib.rs
-index e7b8228..c268fe3 100644
+index 154bebdff..468fec52d 100644
 --- a/crates/sona/src/lib.rs
 +++ b/crates/sona/src/lib.rs
 @@ -45,6 +45,9 @@
@@ -308,11 +308,11 @@ index e7b8228..c268fe3 100644
 +#[cfg(feature = "serde-support")]
 +pub mod checkpoint;
 +
+ pub mod auto_tuner;
+ pub mod darwin_guard;
  pub mod engine;
- pub mod ewc;
- pub mod loops;
 diff --git a/crates/sona/src/loops/background.rs b/crates/sona/src/loops/background.rs
-index 3e29167..a65cc85 100644
+index 3e2916763..a65cc854a 100644
 --- a/crates/sona/src/loops/background.rs
 +++ b/crates/sona/src/loops/background.rs
 @@ -71,15 +71,16 @@ impl BackgroundResult {
@@ -361,7 +361,7 @@ index 3e29167..a65cc85 100644
          BackgroundResult {
              trajectories_processed: trajectories.len(),
 diff --git a/crates/sona/src/loops/coordinator.rs b/crates/sona/src/loops/coordinator.rs
-index e412b9a..b2244c9 100644
+index 07be2b07f..8f8efdca7 100644
 --- a/crates/sona/src/loops/coordinator.rs
 +++ b/crates/sona/src/loops/coordinator.rs
 @@ -12,18 +12,18 @@ use std::sync::Arc;
@@ -392,7 +392,7 @@ index e412b9a..b2244c9 100644
  
  impl LoopCoordinator {
 diff --git a/crates/sona/src/loops/instant.rs b/crates/sona/src/loops/instant.rs
-index fb40f31..f628c87 100644
+index fb40f3176..f628c87f0 100644
 --- a/crates/sona/src/loops/instant.rs
 +++ b/crates/sona/src/loops/instant.rs
 @@ -60,15 +60,15 @@ pub struct InstantLoopMetrics {
@@ -417,7 +417,7 @@ index fb40f31..f628c87 100644
      pub metrics: InstantLoopMetrics,
  }
 diff --git a/crates/sona/src/lora.rs b/crates/sona/src/lora.rs
-index 87aac54..56df347 100644
+index 87aac544e..56df34756 100644
 --- a/crates/sona/src/lora.rs
 +++ b/crates/sona/src/lora.rs
 @@ -22,24 +22,24 @@ pub const OPTIMAL_BATCH_SIZE: usize = 32;
@@ -454,7 +454,7 @@ index 87aac54..56df347 100644
  
  impl MicroLoRA {
 diff --git a/crates/sona/src/reasoning_bank.rs b/crates/sona/src/reasoning_bank.rs
-index c117f59..c3b74b7 100644
+index fa6a6f4a7..449a9fbb3 100644
 --- a/crates/sona/src/reasoning_bank.rs
 +++ b/crates/sona/src/reasoning_bank.rs
 @@ -44,31 +44,31 @@ impl Default for PatternConfig {
@@ -502,7 +502,7 @@ index c117f59..c3b74b7 100644
  
  impl ReasoningBank {
 diff --git a/crates/sona/src/training/federated.rs b/crates/sona/src/training/federated.rs
-index a95943f..8fa0cea 100644
+index 3ac79bc66..301025be1 100644
 --- a/crates/sona/src/training/federated.rs
 +++ b/crates/sona/src/training/federated.rs
 @@ -72,15 +72,15 @@ pub struct AgentExportStats {
@@ -527,7 +527,7 @@ index a95943f..8fa0cea 100644
  
  impl EphemeralAgent {
 diff --git a/crates/sona/src/trajectory.rs b/crates/sona/src/trajectory.rs
-index a6f4fe4..4576d3b 100644
+index a6f4fe425..4576d3b25 100644
 --- a/crates/sona/src/trajectory.rs
 +++ b/crates/sona/src/trajectory.rs
 @@ -10,13 +10,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
@@ -549,10 +549,10 @@ index a6f4fe4..4576d3b 100644
  
  impl TrajectoryBuffer {
 diff --git a/crates/sona/src/wasm.rs b/crates/sona/src/wasm.rs
-index d665842..7792d82 100644
+index 109c0efb8..c50bf6d55 100644
 --- a/crates/sona/src/wasm.rs
 +++ b/crates/sona/src/wasm.rs
-@@ -477,6 +477,18 @@ impl WasmEphemeralAgent {
+@@ -523,6 +523,18 @@ impl WasmEphemeralAgent {
          serde_wasm_bindgen::to_value(&export).unwrap_or(JsValue::NULL)
      }
  

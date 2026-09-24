@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$(mktemp -d)"
 trap 'rm -rf "$BUILD"' EXIT
-UPSTREAM=d5d3296cd90d688afae838d06a5fc2c023dd9107
+UPSTREAM=5356a84e2f784a33fa497da2e73440d469eb5542
 git -C "$BUILD" init -q upstream
 git -C "$BUILD/upstream" remote add origin https://github.com/ruvnet/ruvector.git
 git -C "$BUILD/upstream" fetch -q --depth 1 origin "$UPSTREAM"

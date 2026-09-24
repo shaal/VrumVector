@@ -6,6 +6,13 @@ requires pushing to `shaal/ruvector` and opening a PR against
 `ruvnet/ruvector`, so it's gated on explicit user approval rather than
 sitting in the backlog forever. See "Decision needed" at the bottom.
 
+**Update 2026-09-24:** SONA is rebuilt on upstream `5356a84e2` (CI, Rust
+1.85.0, wasm-pack 0.13.1). Upstream #481 fixed the `get_patterns` stub, so
+`sona-find-patterns.patch` now only adds `find_patterns(query, k)` and its
+`findPatterns` binding. An upstream PR would now carry `find_patterns` and the
+checkpoint bindings only. Upstream also rewrote its `main` history: the old
+base `d5d3296cd` is no longer an ancestor of `origin/main`.
+
 ---
 
 ## What this document is
@@ -81,7 +88,8 @@ machine after a clean `git clean -xfd` in the upstream tree — re-runs
 `scripts/vendor-ruvector.sh` against mainline ruvector:
 
 - `WasmEphemeralAgent.findPatterns` will disappear from the binding.
-- `EphemeralAgent::get_patterns` will return empty again.
+- `EphemeralAgent::get_patterns` will return empty again. *(No longer
+  true since upstream #481; the rest of this list still applies.)*
 - The "Similar circuits" panel will silently regress to hidden.
 - `info.sona.patterns` will still show counts (that reads `getStats`,
   which works), so nobody looking at the stats row will notice.
@@ -228,6 +236,9 @@ files (`mcp-brain-server/*`, `learning-wasm/lora.rs`,
   recent commit is days old as of this doc).
 - Push branch: `shaal/ruvector` (fork already configured as `fork`
   remote in `~/code/utilities/ruvector/`).
+- *(2026-09-24: upstream #481 fixed `get_patterns`, so the PR now only
+  needs `find_patterns(query, k)` and its binding; the title and body below
+  predate that.)*
 - Suggested branch name: `fix/sona-ephemeral-get-patterns`.
 - Suggested PR title: "fix(sona): `EphemeralAgent::get_patterns` returned
   empty; expose `find_patterns(query, k)` + wasm binding".

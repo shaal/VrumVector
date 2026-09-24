@@ -22,4 +22,21 @@ for(const change of [s=>s.schema=99,s=>s.ewc.current_fisher=[],s=>s.grad_up[0]=n
  assert.throws(()=>b.importCheckpoint(JSON.stringify(bad)));
  assert.deepEqual(JSON.parse(b.exportCheckpoint()).micro,before.micro);
 }
-a.free();b.free();console.log('Real SONA WASM: exact state, pattern retrieval, optimizer continuation, and atomic rejection passed');
+// A checkpoint saved by the previous vendored build (d5d3296cd) still restores
+// exactly: 24 patterns, trained base LoRA, and a pending trajectory. (The app's
+// agent never feeds EWC; the native checkpoint tests cover nonzero Fisher.)
+const legacy=JSON.parse(readFileSync(new URL('./fixtures/sona-checkpoint-d5d3296c.json',import.meta.url),'utf8'));
+assert.ok(legacy.checkpoint.base.layers.some(l=>l.up_proj.some(v=>v!==0)),'fixture carries trained base LoRA');
+const restored=WasmEphemeralAgent.withConfig('legacy',JSON.stringify(legacy.config));
+restored.importCheckpoint(JSON.stringify(legacy.checkpoint));
+const reexported=JSON.parse(restored.exportCheckpoint());
+for(const key of Object.keys(legacy.checkpoint))if(key!=='background_elapsed_ms')assert.deepEqual(reexported[key],legacy.checkpoint[key],'legacy '+key);
+// Re-export adds the time since import to the background timer.
+assert.ok(reexported.background_elapsed_ms>=legacy.checkpoint.background_elapsed_ms&&reexported.background_elapsed_ms<=legacy.checkpoint.background_elapsed_ms+60000);
+assert.deepEqual(JSON.parse(restored.getStats()),legacy.stats);
+const legacyQuery=new Float32Array(legacy.query),ids=list=>list.map(p=>p.id).sort((x,y)=>x-y);
+// The top three are tied and come back in any order; the fourth is strictly lower.
+assert.deepEqual(ids(JSON.parse(restored.findPatterns(legacyQuery,4))),ids(legacy.top4));
+for(let i=0;i<105;i++)restored.processTask(legacyQuery,.7);
+const {micro}=JSON.parse(restored.exportCheckpoint());assert.ok([...micro.up_proj,...micro.down_proj].every(Number.isFinite));
+a.free();b.free();restored.free();console.log('Real SONA WASM: exact state, pattern retrieval, optimizer continuation, atomic rejection, and legacy checkpoint import passed');

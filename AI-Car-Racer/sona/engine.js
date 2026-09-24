@@ -9,13 +9,13 @@
 // Why they're wired side-by-side, not as one engine:
 //   The upstream `ruvector-sona` WASM crate ships *two* wrapper classes —
 //   `WasmSonaEngine` and `WasmEphemeralAgent` — over the same underlying
-//   `SonaEngine`. `WasmSonaEngine.applyLora` is real but its trajectory
-//   bindings (`recordStep`, `endTrajectory`) are console-logging stubs, so
-//   its micro-LoRA B matrix never actually updates. `WasmEphemeralAgent`
-//   is the opposite: `process_task(embedding, quality)` drives the real
-//   learning loop (→ reasoning-bank pattern extraction, EWC++ consolidation)
-//   but it doesn't expose `applyLora`. So we use the ephemeral agent for
-//   the trajectory/pattern surface the plan calls for, and keep the existing
+//   `SonaEngine`. `WasmEphemeralAgent` exposes `process_task(embedding,
+//   quality)`, which drives the real learning loop (→ reasoning-bank pattern
+//   extraction, EWC++ consolidation), plus our patched `findPatterns` and
+//   exact checkpoint export/import, but no `applyLora`. Upstream #552 made
+//   `WasmSonaEngine`'s trajectory bindings real, but that class has no
+//   checkpoint bindings. So we use the ephemeral agent for the
+//   trajectory/pattern surface the plan calls for, and keep the existing
 //   P1.B adapter for the query-side transform — the adapter is the part that
 //   actually *shows* change to the user (drift sparkline, retrieval effect),
 //   and the SONA agent adds the "similar circuits" panel + extra stats.
@@ -32,7 +32,14 @@
 //   findPatterns(trackVec, k)        — top-k ReasoningBank clusters by cosine
 //   info()                           — merged {lora: …, sona: …} snapshot
 
-import initSona, { WasmEphemeralAgent } from '../../vendor/ruvector/sona/ruvector_sona.js';
+// The version query is the first 8 hex digits of ruvector_sona_bg.wasm's
+// SHA-256 (npm run test:learning enforces it), so every rebuild changes it.
+// /vendor is cached for an hour, and a cached glue file with a newer .wasm
+// (or the reverse) can fail to link. Tests import SONA_MODULE_URL so that
+// they patch this same module instance.
+import initSona, { WasmEphemeralAgent } from '../../vendor/ruvector/sona/ruvector_sona.js?v=sona-5832ba69';
+export const SONA_MODULE_URL = new URL('../../vendor/ruvector/sona/ruvector_sona.js?v=sona-5832ba69', import.meta.url).href;
+const SONA_WASM_URL = new URL('../../vendor/ruvector/sona/ruvector_sona_bg.wasm?v=sona-5832ba69', import.meta.url);
 import {qualityFromFitness} from '../learning/policy.js';
 import {CircuitJournal} from './journal.js';
 import {
@@ -122,7 +129,7 @@ export function loadEngine() {
     const [loraRes, sonaRes] = await Promise.allSettled([
       loadLora(),
       (async () => {
-        await initSona();
+        await initSona({ module_or_path: SONA_WASM_URL });
         // `withConfig` takes a JSON-serialised string on the WASM binding
         // (see crates/sona/src/wasm.rs lines 700–718 — it defines its own
         // serde_wasm_bindgen shim that only accepts JsValue::from_str). Pass

@@ -96,7 +96,7 @@ try{
   mark('failed checkpoint export recovers newest examples without claiming exact restoration');
   const recovery=await page.evaluate(async()=>{
     const engine=await import('/AI-Car-Racer/sona/engine.js'),adapter=await import('/AI-Car-Racer/lora/trackAdapter.js');
-    const {WasmEphemeralAgent}=await import('/vendor/ruvector/sona/ruvector_sona.js');
+    const {WasmEphemeralAgent}=await import(engine.SONA_MODULE_URL);
     const original=engine.serialize(),lora=adapter.serialize(),vector=new Float32Array(512);vector[511]=1;
     const invalidShapes=[new Array(513).fill(0),Array.from({length:512},()=>null),new Array(512).fill(Infinity)];
     const rejected=invalidShapes.every(b0=>adapter.deserialize({...lora,b0})===false);
@@ -139,14 +139,14 @@ try{
   assert.equal(await page.evaluate(()=>window.__rvBridge.info().lora.ready),true);
   mark('unavailable SONA retains its exact checkpoint across saves');
   const retained=await page.evaluate(async()=> (await import('/AI-Car-Racer/sona/engine.js')).serialize().sona);
-  await page.route('**/ruvector_sona_bg.wasm',route=>route.abort());
+  await page.route('**/ruvector_sona_bg.wasm*',route=>route.abort());
   for(let reload=0;reload<2;reload++){
     await page.reload();await ready();
     assert.equal(await page.evaluate(()=>window.__rvBridge.info().sona.ready),false);
     await page.evaluate(()=>window.__rvBridge.persist());
     assert.deepEqual(await page.evaluate(async()=> (await import('/AI-Car-Racer/sona/engine.js')).serialize().sona),retained);
   }
-  await page.unroute('**/ruvector_sona_bg.wasm');await page.reload();await ready();
+  await page.unroute('**/ruvector_sona_bg.wasm*');await page.reload();await ready();
   assert.equal(await page.evaluate(()=>window.__rvBridge.info().sona.restoration),'exact');
   assert.equal(await page.evaluate(()=>window.DriverLearning.profile),'wild');
   assert.equal(await page.evaluate(()=>window.DriverLearning.adaptive),false);

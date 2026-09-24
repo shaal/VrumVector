@@ -408,7 +408,7 @@ export class WasmSonaEngine {
      * engine.record_step(trajectoryId, 42, 0.8, 1000);
      * ```
      */
-    recordStep(trajectory_id: bigint, node_id: number, score: number, latency_us: bigint): void;
+    recordStep(trajectory_id: bigint, node_id: number, score: number, _latency_us: bigint): void;
     /**
      * Run instant learning cycle
      *
