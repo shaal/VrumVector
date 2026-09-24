@@ -146,7 +146,9 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
   filtering, mirror augmentation with a symmetry test on a mirrored track, and
   time-block splits. About 2 hours. (H1 already skips the idle start and the
   damaged steps, and stores `crashSteps`; H2 decides what else to drop around
-  a crash.)
+  a crash.) Also record the start: keep the last 0.5 s (30 steps) of the car
+  at rest before it first moves, so a clone learns to pull away from a stop.
+  Every race starts from rest. (Decided 2026-09-24.)
   depends: H1
 - [ ] **H3 — Behavioural-cloning trainer.** Sigmoid stand-in, BCE, rare-key
   weights, Adam, early stop, key lag `k` chosen on held-out blocks, in a
@@ -186,4 +188,5 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
    and the transfer check, never directly.
 4. **Raw data:** keep raw demonstrations (within the 10 × 5-minute cap), so a
    clone can be retrained after a trainer change. H1 keeps the newest 10: a
-   new recording replaces the oldest, and the panel says so first.
+   new recording replaces the oldest, and the panel says so first. (Kept on
+   2026-09-24; no delete button is needed.)
