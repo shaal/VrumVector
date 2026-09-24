@@ -67,7 +67,7 @@ task's own doc or proof file, not in this checklist.
   A/B panel. When memory trails the control with evidence, pause cross-context
   (transfer) seeds for that learning context.
   depends: T4 (shared statistics module)
-- [ ] **T6 — Training-health states from `emergent-time-wasm`.** Vendor the
+- [x] **T6 — Training-health states from `emergent-time-wasm`.** Vendor the
   prebuilt browser package, feed it per-generation learning metrics, tune the
   thresholds so that steady improvement does not read as "Drifting", and show a
   training-health pill in the driver-learning panel.

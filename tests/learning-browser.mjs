@@ -47,6 +47,11 @@ try{
   assert.ok(trained.history.length>=3);assert.equal(trained.context.profile,'careful');
   assert.ok(trained.archive.some(meta=>meta.learningContext?.profile==='careful'));
   assert.ok(trained.feedback.length>0,'Mutated descendants must provide real seed feedback');
+  const pill=await page.evaluate(()=>{const p=document.querySelector('[data-learning-health]');
+    return {hidden:p.hidden,display:getComputedStyle(p).display,text:p.textContent,state:p.dataset.state,generations:window.DriverLearning.healthState?.generations};});
+  assert.equal(pill.hidden,false);assert.notEqual(pill.display,'none');assert.match(pill.text,/^Training health: /);
+  assert.ok(['Healthy','Drifting','Stuck','NeedsReplan','Contradicting','Collapsing','NeedsHumanReview'].includes(pill.state));
+  assert.ok(pill.generations>=3,'the health clock sees every generation');
   mark('profile-assisted car still obeys manual input');
   await page.evaluate(()=>{setSeconds(60);setSimSpeed(1);begin(true);});
   await page.waitForFunction(()=>playerCar2.aiDriving&&window.PlayerAssist.brain&&window.PlayerAssist.run===presentationRunSerial);

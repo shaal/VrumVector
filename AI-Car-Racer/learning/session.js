@@ -1,6 +1,7 @@
 import {LearningCoach,buildPopulation,cleanContext,contextKey,validBrain} from './policy.js';
 import {trackKey} from '../graphics/state.js';
 import {applyTransferGuard,transferGuard,isTransferPaused,resumeTransfer,runTransferCheck,clearTransferGuards} from './transferCheck.js';
+import {TrainingHealth,loadHealth,HEALTH_WINDOW} from './health.js';
 
 // Sliders store strings; accept a finite number in [0, 1] or use the default.
 const liveNumber=(value,fallback)=>{const n=Number(value);return Number.isFinite(n)&&n>=0&&n<=1?n:fallback;};
@@ -12,6 +13,8 @@ function geometryKey(road){
 class DriverLearning {
   constructor(){
     this.profile='balanced';this.adaptive=false;this.coach=new LearningCoach();this.consolidations=0;
+    // Diagnostic training health (emergent-time); the pill stays hidden if the wasm cannot load.
+    this.health=new TrainingHealth();this.healthState=null;loadHealth().then(()=>this.render());
     try{const saved=JSON.parse(localStorage.getItem('vv.driverLearning')||'null');if(saved){this.profile=DriverProfiles.get(saved.profile).id;this.adaptive=saved.adaptive===true;}}catch{}
   }
   restoreChampion(){
@@ -41,6 +44,7 @@ class DriverLearning {
     try{localStorage.removeItem('vv.driverChampions');}catch{}
     // Pauses were decided on memories that no longer exist.
     this.cancelTransferCheck();clearTransferGuards();this.transferStatus=null;this.transferHeld=0;
+    this.health.reset();this.healthState=null;
     this.render();
   }
   setProfile(id){
@@ -53,7 +57,7 @@ class DriverLearning {
     const context=cleanContext({profile:this.profile,track:geometryKey(road),maxSpeed,traction,seconds});
     if(this.context&&contextKey(context)!==contextKey(this.context))this.consolidate();
     const changed=this.coach.key!==contextKey(context);
-    if(changed){this.transferStatus=null;this.transferHeld=0;}
+    if(changed){this.transferStatus=null;this.transferHeld=0;this.health.reset();this.healthState=null;}
     this.context=context;this.coach.setContext(context);if(changed)this.restoreChampion();
     window.__rvBridge?.setLearningContext?.(context);
     return context;
@@ -78,6 +82,9 @@ class DriverLearning {
     // A track/profile change must never accept a late result from the old run.
     if(result.learningContext&&contextKey(result.learningContext)!==this.coach.key)return;
     if(this.coach.record(result,vector,id))this.persistChampion();
+    const gates=typeof road!=='undefined'&&road?.checkPointList?.length||0;
+    this.healthState=this.health.observe({best:this.coach.incumbent?.fitness,genBest:result.fitness,gates,
+      mutation:this.lastPlan?.mutation,champion:this.coach.incumbent?.vector});
     if(this.coach.rounds%8===0)this.consolidate();
     this.render();
   }
@@ -166,6 +173,18 @@ class DriverLearning {
     chart.setAttribute('aria-label',history.length?`Checkpoint progress over ${history.length} generations. Latest ${last.fitness}, best ${this.coach.incumbent.fitness}.`:'No completed generations yet');
     const memories=this.root.querySelector('[data-learning-memories]');memories.replaceChildren();
     for(const seed of (this.seeds||[]).slice(0,3)){const item=document.createElement('li');item.textContent=`${seed.matchLabel||'Saved driver'} · ${Number(seed.meta?.fitness||0).toFixed(0)} gates`;memories.append(item);}
+    const pill=this.root.querySelector('[data-learning-health]');
+    if(pill){
+      const h=this.healthState;pill.hidden=!h;this.root.querySelector('[data-learning-health-note]').hidden=!h;
+      if(h){
+        pill.dataset.state=h.state;
+        const ago=n=>`${n} generation${n===1?'':'s'}`;
+        const detail=h.state==='Healthy'?(h.sinceProgress?`last gain ${ago(h.sinceProgress)} ago`:'gained this generation'):
+          h.sinceProgress?`no gain for ${ago(h.sinceProgress)}`:'';
+        pill.textContent=`Training health: ${h.label}`+(detail?` · ${detail}`:'');
+        pill.title=`Diagnostic over the last ${HEALTH_WINDOW} generations (ruvector emergent-time): Improving = the champion gained; Slow progress = a small gain for a lot of change; Plateau = no gain and no change; Plateau while exploring = the champion or mutation rate changed without a gain.`;
+      }
+    }
     const transfer=this.root.querySelector('[data-transfer-status]');
     if(transfer){
       transfer.textContent=this.transferText()+(this.transferHeld?` ${this.transferHeld} transferred memories held back this generation.`:'');
@@ -195,7 +214,7 @@ export function attachLearningControls(host){
       <p data-profile-description></p><p class="learning-note">Applies to AI rivals and your AI co-driver. Manual WASD input always takes priority. Changing style starts a new AI generation.</p>
       <label class="learning-check"><input type="checkbox" id="adaptive-learning"> Adaptive exploration</label>
       <p class="learning-note">Protect the best driver. Try more variation when progress stalls.</p>
-      <p data-learning-status role="status"></p>
+      <p data-learning-status role="status"></p><p class="learning-health" data-learning-health aria-describedby="learning-health-note" hidden></p><p class="learning-note" id="learning-health-note" data-learning-health-note hidden>Diagnostic over the last ${HEALTH_WINDOW} generations: Improving means the champion gained; Plateau means it did not.</p>
       <div class="learning-stats"><span>BEST GATES<b data-learning-best>—</b></span><span>SURVIVED<b data-learning-survival>—</b></span><span>MUTATION<b data-learning-mutation>—</b></span></div>
       <div class="learning-chart" data-learning-chart role="img"></div>
       <p data-learning-sources></p><ol data-learning-memories></ol>
