@@ -129,7 +129,11 @@ test('controller: presets follow the phase, a new track restarts at Fresh, moved
       batchSize:600,nextSeconds:15,mutateValue:.18,conservativeInit:.5,simSpeed:20});
     const before=applied.length;assert.equal(autoTrain.onGeneration({...gen(5),runSerial:12}),null);assert.equal(applied.length,before,'no drift, no apply');
     simSpeed=1;window.LiveSession={enabled:true};autoTrain.onGeneration({...gen(5),runSerial:12});assert.equal(applied.length,before,'multiplayer keeps 1×');
-    window.LiveSession.enabled=false;autoTrain.onGeneration({...gen(5),runSerial:12});assert.deepEqual(applied.slice(before),['grind']);
+    window.LiveSession.enabled=false;window.DemonstrationRecorder={recording:true};
+    autoTrain.onGeneration({...gen(5),runSerial:12});assert.equal(applied.length,before,'recording your driving keeps 1×');
+    // Recording exempts only the speed: another changed knob is still re-applied.
+    batchSize=599;autoTrain.onGeneration({...gen(5),runSerial:12});assert.deepEqual(applied.slice(before),['grind']);batchSize=600;
+    window.DemonstrationRecorder.recording=false;autoTrain.onGeneration({...gen(5),runSerial:12});assert.deepEqual(applied.slice(before),['grind','grind']);
     autoTrain.setEnabled(false,'off');assert.equal(autoTrain.syncTrack(),false);assert.equal(autoTrain.onGeneration(gen(9,1)),null);
   }finally{for(const key of ['window','applyTrainingPreset','road','presentationRunSerial','TRAINING_PRESETS','batchSize','nextSeconds','mutateValue','conservativeInit','simSpeed'])delete globalThis[key];}
 });

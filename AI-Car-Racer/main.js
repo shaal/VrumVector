@@ -1302,8 +1302,8 @@ function begin(preservePause = false, resetPlayers = false){
     }
     if (!preservePause) pause = false;
     computeStartInfoInPlace(currentCheckpointList());
-    // Automatic AI generations must not interrupt a human's live lap.
-    if (resetPlayers || !(preservePause && (window.LiveSession?.enabled || window.PlayerAssist?.enabled) && playerCar && playerCar2)) {
+    // Automatic AI generations must not interrupt a human's live lap or recording.
+    if (resetPlayers || !(preservePause && (window.LiveSession?.enabled || window.PlayerAssist?.enabled || window.DemonstrationRecorder?.recording) && playerCar && playerCar2)) {
         playerCar?.controls?.dispose?.();playerCar2?.controls?.dispose?.();
         playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
         playerCar2 = new Car(startInfo.x, startInfo.y, 30, 50, "WASD", maxSpeed, startInfo.heading);
@@ -1654,8 +1654,13 @@ function animate(){
             for (let s = 0; s < playerSteps; s++){
                 playerCar.update(road.borders, road.checkPointList);
                 playerCar2.update(road.borders, road.checkPointList);
+                window.DemonstrationRecorder?.step(playerCar2);
                 window.LiveSession?.step(playerCar2, road.checkPointList);
             }
+        } else {
+            // A paused human car must not catch up the paused time on Play.
+            _lastTickWall = performance.now();
+            window.DemonstrationRecorder?.interrupt();
         }
 
         if (shouldDrawCars){

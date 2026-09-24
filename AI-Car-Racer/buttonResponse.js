@@ -578,12 +578,17 @@ function applyTrainingPreset(name){
 
 function setSimSpeed(value){
     const n = Number(value);
-    simSpeed = window.LiveSession?.enabled ? 1 : (Number.isFinite(n) && n > 0) ? n : 1;
+    // Multiplayer and recording your driving both run in real time.
+    const fixed = window.LiveSession?.enabled ? "Multiplayer runs at 1×" : window.DemonstrationRecorder?.recording ? "Recording runs at 1×" : "";
+    const wanted = (Number.isFinite(n) && n > 0) ? n : 1;
+    // Stopping a recording applies the last speed asked for (a preset, demo mode).
+    if (fixed && !window.LiveSession?.enabled) window.DemonstrationRecorder.speedBefore = wanted;
+    simSpeed = fixed ? 1 : wanted;
     const selector = document.getElementById("simSpeedInput");
     if (selector){
         selector.value = String(simSpeed);
-        selector.disabled = !!window.LiveSession?.enabled;
-        selector.title = selector.disabled ? "Multiplayer runs at 1×" : "Simulation speed";
+        selector.disabled = !!fixed;
+        selector.title = fixed || "Simulation speed";
     }
     _simStepAccum = 0;
     _lastTickWall = performance.now();

@@ -244,7 +244,8 @@ try{
   await a.locator('[data-live-close]').click();
   await a.locator('[data-action="classic-top"]').click();
   await a.waitForFunction(()=>!window.CircuitStudio.active);
-  assert.equal(await a.locator('#graphics-toggle').isVisible(),true);
+  // The studio shows the button on the frame after it turns off; wait for that frame.
+  await a.locator('#graphics-toggle').waitFor({state:'visible',timeout:10000});
   await a.reload();await a.waitForFunction(()=>!!window.PlayerAssist?.info&&!!window.CircuitStudio?.info);
   assert.equal(await a.evaluate(()=>window.PlayerAssist.enabled||window.CircuitStudio.enabled),false);
   assert.deepEqual(errors,[]);

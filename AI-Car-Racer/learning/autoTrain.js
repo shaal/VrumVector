@@ -101,12 +101,13 @@ class AutoTrain {
   }
   // Other code can change a knob without a user event: turning multiplayer on
   // forces 1× and turning it off does not restore the speed. Re-apply the
-  // phase's preset before the next generation. Multiplayer's 1× stays.
+  // phase's preset before the next generation. The 1× of multiplayer and of
+  // recording your driving stays.
   drifted(){
     const p=typeof TRAINING_PRESETS!=='undefined'&&TRAINING_PRESETS[this.policy.phase];
     if(!p||typeof batchSize==='undefined')return false;
     return batchSize!==p.N||Number(nextSeconds)!==p.seconds||Number(mutateValue)!==p.mutate||
-      Number(conservativeInit)!==p.conservativeInit||(!window.LiveSession?.enabled&&simSpeed!==p.simSpeed);
+      Number(conservativeInit)!==p.conservativeInit||(!(window.LiveSession?.enabled||window.DemonstrationRecorder?.recording)&&simSpeed!==p.simSpeed);
   }
   render(){
     const button=typeof document!=='undefined'&&document.getElementById('autoTrainToggle');if(!button)return;
