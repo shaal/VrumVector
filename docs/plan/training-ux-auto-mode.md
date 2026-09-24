@@ -11,13 +11,13 @@ Shipped so far (as of 2026-04-21):
   the same setters the sliders use, then reflects the values in the DOM
   so the user sees what changed.
 
-Preset values (as shipped):
+Preset values (current, from `TRAINING_PRESETS` in `buttonResponse.js`):
 
-| Preset | N | simSpeed | seconds | mutate | purpose |
-|---|---:|---:|---:|---:|---|
-| Fresh  |  500 |  2× | 10 | 0.30 | random brains → "the car can turn" |
-| Grind  |  500 | 20× | 15 | 0.20 | elite finishes laps → grind lap time |
-| Polish | 1000 |  2× | 25 | 0.05 | competent brain → refine |
+| Preset | N | simSpeed | seconds | mutate | conservative init | purpose |
+|---|---:|---:|---:|---:|---:|---|
+| Fresh  | 500 |  2× | 15 | 0.25 | 0.70 | random brains → "the car can turn" |
+| Grind  | 600 | 20× | 15 | 0.18 | 0.50 | elite finishes laps → grind lap time |
+| Polish | 800 |  2× | 25 | 0.05 | 0.30 | competent brain → refine |
 
 Rationale for the numbers is in the conversation transcript of 2026-04-21;
 short version: N=500 is where step cost stays ≪ 20 ms tick budget so
@@ -28,7 +28,36 @@ shattering a good elite.
 
 ---
 
-## Option 2 — Auto mode (next up)
+## Option 2 — Auto mode (shipped 2026-09-24)
+
+Shipped as `AI-Car-Racer/learning/autoTrain.js` (T7 in
+`ruvector-upstream-adoption.md`). Measured behaviour and limits:
+[`docs/validation/auto-train.md`](../validation/auto-train.md). What differs
+from the sketch below:
+
+- **Fresh → Grind needs a checkpoint past the start line** (fitness ≥ 2).
+  Cars spawn touching the start gate (`main.js` `computeStartInfoInPlace`),
+  so every generation already scores 1; "≥ 1 checkpoint" would always fire.
+- **Plateau = the T6 health snapshot.** Bounce when the champion has not
+  gained for 20 Polish generations (`sinceProgress`) and the clock does not
+  read improving. The flat-generation counter is used only while the clock is
+  not loaded.
+- **After a bounce, Grind runs at least 8 generations** before a lap returns it
+  to Polish. Without this, a lapping elite goes back after one Grind
+  generation. 8 is a first guess, like the 20.
+- **A new track (new walls) starts again at Fresh**, before its first
+  generation when the track is set through the editor. Moved gates (Adaptive
+  gates) are not a new track.
+- **Only generations built after Auto Train set their preset are judged.** The
+  generation that is running when the toggle is turned on, or when a track
+  change is found at the end of a generation, is skipped.
+- **What turns it off:** moving a tuning control (the four sliders, the 1–5
+  car buttons, the sim-speed select), choosing a preset, demo mode, and a
+  `__runBenchmark` run. It is not saved across reloads.
+- The lock is a 🔒 after each tuning control's value plus one note at the top
+  of the tuning section, and the preset in use is outlined.
+
+Original sketch:
 
 A `🤖 Auto Train` toggle. When on, main.js watches `bestCar` fitness
 across generations and advances phases automatically:
@@ -103,6 +132,9 @@ after auto mode lands so we don't double-build the same warnings.
    exploration but the population might already be half-competent.
    Auto mode might want to skip Fresh entirely when ruvector returns
    strong seeds. Punt until we have data from real sessions.
+   *Measured (2026-09-24):* with 500 cars, Fresh already lasts only one
+   generation, even from random brains, so there is little to skip. See
+   [Auto Train](../validation/auto-train.md).
 
 ---
 

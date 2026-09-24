@@ -63,15 +63,13 @@ NeedsReplan on plateau windows. [Raw report](training-health.json).
 Plateau windows split into Stuck (130 tuning, 114 held out) and NeedsReplan
 (150 and 118). Each trace is 40 generations with adaptive exploration on.
 
-Plateau windows split into Stuck (130 tuning, 114 held out) and NeedsReplan
-(150 and 118). Each trace is 40 generations with adaptive exploration on.
-
 The agreement is high by construction: the ground truth is the same "gain
 within 8 generations" rule, and a plain counter would also score 100%. The
 benchmark shows that the mapping does not misread real runs; it does not show
 that the clock predicts anything. What the clock adds is the split of plateaus
 into "no change" and "exploring without a gain", and a shared vocabulary for
-the Auto Train mode.
+the Auto Train mode. Auto Train bounces out of Polish on this snapshot's gain
+counter; see [Auto Train](auto-train.md).
 
 ## Tests
 

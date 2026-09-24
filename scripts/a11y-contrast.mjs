@@ -239,6 +239,15 @@ const scenarios = [
     },
   },
   {
+    name: 'auto-train-on',
+    setup: async (page) => {
+      if (await page.locator('#panelToggle').getAttribute('aria-expanded') === 'false') await page.click('#panelToggle');
+      await page.locator('#autoTrainToggle').click();
+      await page.locator('#trainingTuning summary').click();
+      await page.waitForTimeout(300);
+    },
+  },
+  {
     name: 'classic-controls',
     setup: async (page) => {
       await page.locator('#ai-drive-toggle').click();

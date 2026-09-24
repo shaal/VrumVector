@@ -1040,6 +1040,10 @@
     // Align demo with product defaults (survival + ruvector-friendly), then
     // bump speed a bit so the swarm story is visible without thrashing fitness.
     try {
+      // Demo mode sets its own knobs; Auto Train must not change them later.
+      if (window.AutoTrain && window.AutoTrain.enabled) {
+        window.AutoTrain.setEnabled(false, 'Auto Train off: demo mode sets its own training values.');
+      }
       if (typeof applyTrainingPreset === 'function') {
         applyTrainingPreset('fresh');
       }

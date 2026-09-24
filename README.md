@@ -152,6 +152,14 @@ These are the friction points you may hit on a fresh clone:
   Loading a preset clears `bestBrain`/`progress` (the old brain is bound to
   the old sensor geometry), but the ruvector archive is intentionally kept —
   that cross-track recall is the whole point of the bridge.
+- **🤖 Auto Train** (off by default) sits under the 🌱 Fresh / 🏎️ Grind /
+  ✨ Polish presets. It starts at Fresh, moves to Grind when a car passes a
+  checkpoint beyond the start line and to Polish at the first lap, and
+  bounces back to Grind after 20 Polish generations without a champion gain
+  (the training-health pill then shows a plateau). A new track starts again at
+  Fresh. The preset it runs is outlined and the tuning controls show 🔒.
+  Moving a tuning control, choosing a preset, demo mode, or a benchmark run
+  turns it off. See `docs/validation/auto-train.md`.
 
 ## What's in this repo
 

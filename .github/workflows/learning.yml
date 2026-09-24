@@ -23,9 +23,13 @@ jobs:
       - run: npm run test:gnn
       - run: npx playwright install --with-deps chromium
       - run: npm run test:learning:browser
+      - run: npm run test:auto-train:browser
+        if: ${{ !cancelled() }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: driver-profiles-learning
-          path: test-results/learning/
+          path: |
+            test-results/learning/
+            test-results/auto-train/
           retention-days: 14

@@ -1398,6 +1398,7 @@ window.applyMultiplayerSetup = function(setup){
     window.DemoPresentation?.invalidateRoad?.();
     window.AdaptiveGates?.onTrackChange();
     if(typeof embedCurrentTrack==='function')embedCurrentTrack();
+    try { window.AutoTrain?.syncTrack(); } catch (_) {}
     begin(true,true);
     return {road,players:[playerCar,playerCar2],maxSpeed,traction,invincible,paused:pause,awaitingStart:window.__awaitingStart,snapshot:null};
 };
@@ -1514,6 +1515,9 @@ function performNextBatch(genData){
     }
     window.DriverLearning?.record({...genData,generation},bestBrainFlat,archivedBrainId);
     _times.archive = performance.now() - _tArchive;
+    // Auto Train reads the health state that record() just updated, and its
+    // preset change must land before begin() builds the next generation.
+    try { window.AutoTrain?.onGeneration(genData); } catch (e) { console.warn('[autoTrain] generation hook failed', e); }
     generation += 1;
 
     const _tGraph = performance.now();
@@ -1859,6 +1863,10 @@ window.__runBenchmark = async function(gens, opts){
         console.warn('[bench] simSpeed=' + simSpeed + ' is low — ' + gens + ' gens will take ' + Math.round(gens * (typeof nextSeconds !== 'undefined' ? nextSeconds : 15) / simSpeed) + 's wall time. Raise simSpeed to ~100 for fast benchmarks.');
     }
 
+    // Benchmark rows must come from one fixed setting, not Auto Train phases.
+    if (window.AutoTrain && window.AutoTrain.enabled){
+        window.AutoTrain.setEnabled(false, 'Auto Train off: a benchmark run sets its own training values.');
+    }
     if (opts.cold){
         await window.__clearArchive();
         generation = 0;

@@ -753,6 +753,46 @@ p { line-height: 1.5; margin: 0 0 .6em 0; }
     font-size: 0.85rem;
     padding: 0.55em 0.6em;
 }
+/* Auto Train (learning/autoTrain.js): the toggle and its status take full
+   rows under the presets; the preset it is running is outlined, and the
+   tuning controls it sets carry a lock while it is on. */
+#trainingPresets .auto-train-toggle { flex: 1 1 100% !important; }
+#trainingPresets .auto-train-toggle[aria-pressed="true"] {
+    background: var(--amber-100);
+    border-color: var(--amber-700);
+    color: var(--ink-900);
+}
+#trainingPresets .controlButton.auto-active {
+    outline: 2px solid var(--amber-700);
+    outline-offset: 1px;
+}
+.auto-train-status {
+    flex: 1 1 100%;
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: var(--ink-700);
+}
+/* Empty: out of the layout but kept in the accessibility tree, so the live
+   region announces its first message. */
+.auto-train-status:empty {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+}
+.auto-train-lock {
+    margin: 0 0 var(--sp-2);
+    font-size: 0.78rem;
+    color: var(--ink-700);
+}
+#trainingTuning.auto-locked output::after,
+#trainingTuning.auto-locked #simSpeedLabel > span::after { content: " 🔒"; }
+@media (prefers-color-scheme: dark) {
+    #trainingPresets .auto-train-toggle[aria-pressed="true"],
+    #trainingPresets .controlButton.auto-active { border-color: var(--amber-400); outline-color: var(--amber-400); }
+}
 
 /* ---------- Titles & bottom banner ----------------------------------
    Floats over the bottom-center of the canvas rather than occupying its

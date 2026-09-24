@@ -542,6 +542,9 @@ const TRAINING_PRESETS = {
 function applyTrainingPreset(name){
     const p = TRAINING_PRESETS[name];
     if (!p) return;
+    // A preset chosen before the Auto Train module loaded cancels a pending
+    // Auto Train click (learning/autoTrain.js consumes the flag on load).
+    window.__autoTrainPending = false;
     // Drive the same code paths the sliders use so every downstream
     // consumer (worker, graphProgress, etc.) sees the change exactly as
     // if the user had dragged them.
@@ -567,6 +570,10 @@ function applyTrainingPreset(name){
     }
     const ss = document.getElementById('simSpeedInput');
     if (ss){ ss.value = String(simSpeed); }
+    // Setting .value fires no event, so the slider fill (index.html) would keep
+    // the old position. A synthetic input event is ignored by Auto Train's
+    // user-intent check and only re-applies the same values.
+    for (const el of [bs, se, mv, ci]) if (el) el.dispatchEvent(new Event('input', {bubbles:true}));
 }
 
 function setSimSpeed(value){
