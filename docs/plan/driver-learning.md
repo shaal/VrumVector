@@ -47,7 +47,7 @@ The A/B baseline now uses a real genetic loop with the same profile, initializat
 
 ## Verification
 
-`npm run test:learning` checks profile control behavior, manual priority, actual car physics, checkpoint-dominant selection, small populations, champion preservation, plateau recovery, context changes, diverse retrieval, feedback, and SONA quality. `npm run test:learning:browser` uses the real worker and vendored WASM to check profile changes, persistence, actual offspring feedback, A/B evolution, contextual retrieval, archive round trips, cross-tab metadata, and desktop/mobile controls in both views.
+`npm run test:learning` checks profile control behavior, manual priority, actual car physics, checkpoint-dominant selection, small populations, champion preservation, plateau recovery, context changes, diverse retrieval, feedback, and SONA quality. `npm run test:learning:browser` uses the real worker and vendored WASM to check profile changes, persistence, actual offspring feedback, A/B evolution, contextual retrieval, archive round trips, cross-tab metadata, crash-map recall similarity in both index geometries (see `docs/validation/crash-similarity.md`), and desktop/mobile controls in both views.
 
 The existing graphics, multiplayer, and contrast checks continue to run. The contrast suite includes the new profile panel in 2D and 3D.
 

@@ -31,7 +31,7 @@ task's own doc or proof file, not in this checklist.
 
 ## Tasks
 
-- [ ] **T1 — Fix crash-map similarity.** `AI-Car-Racer/ruvectorBridge.js`
+- [x] **T1 — Fix crash-map similarity.** `AI-Car-Racer/ruvectorBridge.js`
   converts crash-map cosine distance with `1 - dist/2`, while tracks, dynamics,
   and upstream use `1 - dist`. Crash grids are non-negative, so the value never
   falls below 0.5 and `CRASH_SIM_MIN = 0.55` (`adaptiveGates.js`) accepted any
