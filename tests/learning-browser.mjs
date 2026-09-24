@@ -18,7 +18,7 @@ try{
   await waitForServer(origin,server);
   browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   page=await browser.newPage({viewport:{width:1120,height:800}});page.setDefaultTimeout(30000);
-  page.on('pageerror',error=>errors.push(error.message));
+  page.on('pageerror',error=>errors.push(error.stack||error.message));
   await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
   // These checks exercise accelerated solo training; live racing has a separate suite.
   await page.addInitScript(()=>localStorage.setItem('vv.multiplayer',JSON.stringify({enabled:false,showDrivers:false})));
