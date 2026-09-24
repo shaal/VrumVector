@@ -38,9 +38,11 @@ Rebuild with `bash scripts/build-learning-wasm.sh`. The dedicated CI workflow
 runs native continuation/rejection tests and actual WASM tests before committing
 generated bindings. Run it from a `ship/*` or `codex/*` branch with
 `gh workflow run learning-wasm.yml --ref <branch> -f target=sona`. Both build scripts
-remap the build folder and the Cargo home (`--remap-path-prefix`), so a local
-build with the pinned toolchain is byte-identical to the CI build and carries
-no local paths. CI remains the reference build. After a rebuild,
+remap the build folder and the Cargo home (`--remap-path-prefix`), so a build
+carries no local paths and repeats byte for byte on the same host. Builds on
+different hosts (macOS vs the Linux CI runner) differ only in Rust symbol
+hashes, because Cargo hashes the host triple into crate metadata. CI is the
+reference build: commit only CI-built binaries. After a rebuild,
 set the `?v=sona-…` query in `AI-Car-Racer/sona/engine.js` to the first 8 hex
 digits of the new wasm SHA-256 (`npm run test:learning` fails until you do).
 `tests/fixtures/sona-checkpoint-d5d3296c.json` is a checkpoint saved by the
