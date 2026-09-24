@@ -254,7 +254,10 @@ try{
     // A 4-second context differs from every archived run, so all memories are transfer candidates.
     L.prepare({road,maxSpeed,traction,seconds:4});
     const seeds=b.transferCandidates(window.currentTrackVec||null,6);
-    const state=()=>({learning:b.info().learning,graph:b.info().graphLearning,brains:b.info().brains,reranker:b.info().reranker});
+    // Not info().reranker: it is the path the last recommendSeeds() call took,
+    // and the Vector Memory panel polls recommendSeeds() every 500 ms, so it
+    // can change while the check runs (on CI: 'none' -> 'ema').
+    const state=()=>({learning:b.info().learning,graph:b.info().graphLearning,brains:b.info().brains});
     const before=state(),result=await L.checkTransfer({trialsPerRun:3,generations:2,population:6}),after=state();
     // Name what changed, so a failure says why.
     const changed=Object.keys(before).filter(k=>JSON.stringify(before[k])!==JSON.stringify(after[k])).map(k=>({field:k,before:before[k],after:after[k]}));
@@ -264,7 +267,7 @@ try{
       summary:L.transferSummary()};
   });
   assert.ok(transfer.seedCount>0,'archived memories from other contexts are offered');assert.ok(transfer.allTransfer);
-  assert.deepEqual(transfer.changed,[],'the transfer check does not change archive, feedback, or reranker state');
+  assert.deepEqual(transfer.changed,[],'the transfer check does not change archive, feedback, or graph-learning state');
   assert.equal(transfer.result.trials,3);assert.equal(transfer.result.state,'inconclusive','Three trials cannot reach 20x evidence');
   assert.equal(transfer.result.memoryWins+transfer.result.freshWins+transfer.result.ties,3);
   assert.match(transfer.status,/inconclusive/);assert.equal(transfer.label,'Continue check');assert.equal(transfer.busy,'false');
