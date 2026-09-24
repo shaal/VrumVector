@@ -21,7 +21,9 @@
     "seconds": 4,
     "mutation": 0.22,
     "modelSeed": 20260919,
-    "epochs": 30
+    "epochs": 30,
+    "minimumEffect": 0.1,
+    "minimumErrorGain": 0.001
   },
   "method": "60 Hz real sensors, collisions, checkpoints, and inherited neural networks. Train and test separated by complete track/profile/physics context before optimization. Fixed model evaluated against causal per-parent EMA (alpha .3); no held-out labels train model. Both rank identical candidates using track/parent fitness and their feedback prediction. No rendering or vector-index timing measured.",
   "trainingSamples": 200,
@@ -34,7 +36,26 @@
     "emaSelectedFitness": 1.8066666666666666,
     "graphWins": 6,
     "emaWins": 10,
-    "ties": 9
+    "ties": 9,
+    "retrievalDecision": {
+      "meanDelta": -0.12666666666666665,
+      "lower95": null,
+      "upper95": null,
+      "outcome": "inconclusive",
+      "pairs": 25,
+      "units": 3,
+      "samples": 0,
+      "reason": "too-few-pairs"
+    },
+    "errorDecision": {
+      "meanDelta": -0.0030510696177985697,
+      "lower95": -0.012989759822125886,
+      "upper95": 0.006408290647121092,
+      "outcome": "inconclusive",
+      "pairs": 100,
+      "units": 12,
+      "samples": 10000
+    }
   },
   "byContext": [
     {

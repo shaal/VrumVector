@@ -7,11 +7,15 @@ import {Simulation} from '../tests/helpers/simulation.mjs';
 import {LearningCoach,buildPopulation,offspringFeedback,contextKey} from '../AI-Car-Racer/learning/policy.js';
 import {seededRandom} from '../AI-Car-Racer/graphics/state.js';
 import {graphFeatures,heldOut,GRAPH_DIM} from '../AI-Car-Racer/learning/graph-features.js';
+import {pairedBootstrapDecision} from '../AI-Car-Racer/learning/decision.js';
 import init,{WasmGraphRanker} from '../vendor/ruvector/ruvector_gnn_trainable_wasm/ruvector_gnn_trainable_wasm.js';
 await init({module_or_path:readFileSync(new URL('../vendor/ruvector/ruvector_gnn_trainable_wasm/ruvector_gnn_trainable_wasm_bg.wasm',import.meta.url))});
 const output=process.argv[2]||'test-results/gnn-benchmark.json';
 const config={tracks:['Rectangle','Triangle','Monza'],profiles:['balanced','calm','careful','wild','reckless'],
- roots:4,pretrainGenerations:3,population:12,children:6,rounds:5,seconds:4,mutation:.22,modelSeed:20260919,epochs:30};
+ roots:4,pretrainGenerations:3,population:12,children:6,rounds:5,seconds:4,mutation:.22,modelSeed:20260919,epochs:30,
+ // Smallest gains that count as a pass: mean descendant checkpoint progress,
+ // and reduction in squared feedback error (about 5% of the observed MSE).
+ minimumEffect:.1,minimumErrorGain:.001};
 const rows=[];
 for(const track of config.tracks)for(const profile of config.profiles){
  const context={track,profile,maxSpeed:15,traction:.5,seconds:config.seconds};
@@ -67,6 +71,16 @@ summary.emaSelectedFitness=retrieval.reduce((s,r)=>s+r.emaFitness,0)/retrieval.l
 summary.graphWins=retrieval.filter(r=>r.graphFitness>r.emaFitness).length;
 summary.emaWins=retrieval.filter(r=>r.emaFitness>r.graphFitness).length;
 summary.ties=retrieval.filter(r=>r.emaFitness===r.graphFitness).length;
+// Paired bootstrap verdicts, graph against EMA on identical held-out candidates;
+// positive means the graph is better. Rounds within a context reuse the same
+// fixed model and candidates, and every profile on a track starts from the same
+// seeded root population, so the independent units are tracks (selection) and
+// (track, root) seeds (squared error).
+const trackOf=context=>predictions.find(r=>r.context===context).track;
+summary.retrievalDecision=pairedBootstrapDecision(retrieval.map(r=>r.emaFitness),retrieval.map(r=>r.graphFitness),
+ {minimumEffect:config.minimumEffect,clusters:retrieval.map(r=>trackOf(r.context))});
+summary.errorDecision=pairedBootstrapDecision(predictions.map(r=>-((r.ema-r.target)**2)),predictions.map(r=>-((r.prediction-r.target)**2)),
+ {minimumEffect:config.minimumErrorGain,clusters:predictions.map(r=>`${r.track}:${r.root}`)});
 const report={version:1,config,method:'60 Hz real sensors, collisions, checkpoints, and inherited neural networks. Train and test separated by complete track/profile/physics context before optimization. Fixed model evaluated against causal per-parent EMA (alpha .3); no held-out labels train model. Both rank identical candidates using track/parent fitness and their feedback prediction. No rendering or vector-index timing measured.',
  trainingSamples:training.length,evaluationSamples:evaluation.length,summary,byContext,retrieval,rows:predictions};
 await mkdir(dirname(output),{recursive:true});await writeFile(output,JSON.stringify(report,null,2)+'\n');model.free();

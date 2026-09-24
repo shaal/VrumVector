@@ -20,7 +20,8 @@
     "maxSpeed": 15,
     "traction": 0.5,
     "mutation": 0.22,
-    "conservative": 0.65
+    "conservative": 0.65,
+    "minimumEffect": 0.25
   },
   "method": "60 Hz full sensor updates; real car, collisions, checkpoints, and track geometry; shared initial seeds; no vector archive",
   "summary": [
@@ -34,7 +35,17 @@
       "fixedSurvival": 0.7361111111111112,
       "adaptiveSurvival": 0.625,
       "pairedWins": 0,
-      "pairedTies": 3
+      "pairedTies": 3,
+      "decision": {
+        "meanDelta": 0,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Rectangle",
@@ -46,7 +57,17 @@
       "fixedSurvival": 0.7638888888888888,
       "adaptiveSurvival": 0.7638888888888888,
       "pairedWins": 0,
-      "pairedTies": 3
+      "pairedTies": 3,
+      "decision": {
+        "meanDelta": 0,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Rectangle",
@@ -58,7 +79,17 @@
       "fixedSurvival": 0.9305555555555555,
       "adaptiveSurvival": 0.75,
       "pairedWins": 2,
-      "pairedTies": 1
+      "pairedTies": 1,
+      "decision": {
+        "meanDelta": 0.6666666666666666,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Rectangle",
@@ -70,7 +101,17 @@
       "fixedSurvival": 0.5833333333333334,
       "adaptiveSurvival": 0.6527777777777778,
       "pairedWins": 1,
-      "pairedTies": 2
+      "pairedTies": 2,
+      "decision": {
+        "meanDelta": 0.3333333333333333,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Rectangle",
@@ -82,7 +123,17 @@
       "fixedSurvival": 0.5,
       "adaptiveSurvival": 0.4444444444444445,
       "pairedWins": 0,
-      "pairedTies": 1
+      "pairedTies": 1,
+      "decision": {
+        "meanDelta": -0.6666666666666666,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Triangle",
@@ -94,7 +145,17 @@
       "fixedSurvival": 0.5972222222222222,
       "adaptiveSurvival": 0.5694444444444444,
       "pairedWins": 0,
-      "pairedTies": 3
+      "pairedTies": 3,
+      "decision": {
+        "meanDelta": 0,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Triangle",
@@ -106,7 +167,17 @@
       "fixedSurvival": 0.34722222222222215,
       "adaptiveSurvival": 0.5833333333333334,
       "pairedWins": 2,
-      "pairedTies": 1
+      "pairedTies": 1,
+      "decision": {
+        "meanDelta": 0.6666666666666666,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Triangle",
@@ -118,7 +189,17 @@
       "fixedSurvival": 0.638888888888889,
       "adaptiveSurvival": 0.5138888888888888,
       "pairedWins": 1,
-      "pairedTies": 2
+      "pairedTies": 2,
+      "decision": {
+        "meanDelta": 0.6666666666666666,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Triangle",
@@ -130,7 +211,17 @@
       "fixedSurvival": 0.4583333333333333,
       "adaptiveSurvival": 0.5416666666666666,
       "pairedWins": 0,
-      "pairedTies": 2
+      "pairedTies": 2,
+      "decision": {
+        "meanDelta": -0.3333333333333333,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Triangle",
@@ -142,7 +233,17 @@
       "fixedSurvival": 0.27777777777777773,
       "adaptiveSurvival": 0.513888888888889,
       "pairedWins": 0,
-      "pairedTies": 3
+      "pairedTies": 3,
+      "decision": {
+        "meanDelta": 0,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Monza",
@@ -154,7 +255,17 @@
       "fixedSurvival": 0.6527777777777778,
       "adaptiveSurvival": 0.4861111111111111,
       "pairedWins": 0,
-      "pairedTies": 2
+      "pairedTies": 2,
+      "decision": {
+        "meanDelta": -0.3333333333333333,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Monza",
@@ -166,7 +277,17 @@
       "fixedSurvival": 0.34722222222222227,
       "adaptiveSurvival": 0.6805555555555555,
       "pairedWins": 0,
-      "pairedTies": 3
+      "pairedTies": 3,
+      "decision": {
+        "meanDelta": 0,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Monza",
@@ -178,7 +299,17 @@
       "fixedSurvival": 0.8611111111111112,
       "adaptiveSurvival": 0.7222222222222222,
       "pairedWins": 0,
-      "pairedTies": 3
+      "pairedTies": 3,
+      "decision": {
+        "meanDelta": 0,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Monza",
@@ -190,7 +321,17 @@
       "fixedSurvival": 0.5555555555555555,
       "adaptiveSurvival": 0.5138888888888888,
       "pairedWins": 0,
-      "pairedTies": 3
+      "pairedTies": 3,
+      "decision": {
+        "meanDelta": 0,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     },
     {
       "track": "Monza",
@@ -202,9 +343,64 @@
       "fixedSurvival": 0.4444444444444444,
       "adaptiveSurvival": 0.3333333333333333,
       "pairedWins": 1,
-      "pairedTies": 2
+      "pairedTies": 2,
+      "decision": {
+        "meanDelta": 0.3333333333333333,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 3,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
     }
   ],
+  "decisions": {
+    "method": "Paired bootstrap of adaptive minus fixed final best progress, resampling whole (track, seed) clusters (10000 resamples; expanded percentile 95% interval). pass: lower bound at or above minimumEffect; fail: upper bound below minimumEffect (a gain of that size is ruled out; exact ties give [0, 0]); otherwise inconclusive. Fewer than 6 clusters is always inconclusive. A track whose interval lies below 0 vetoes a pooled pass.",
+    "tracks": {
+      "Rectangle": {
+        "meanDelta": 0.06666666666666667,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 15,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      },
+      "Triangle": {
+        "meanDelta": 0.2,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 15,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      },
+      "Monza": {
+        "meanDelta": 0,
+        "lower95": null,
+        "upper95": null,
+        "outcome": "inconclusive",
+        "pairs": 15,
+        "units": 3,
+        "samples": 0,
+        "reason": "too-few-pairs"
+      }
+    },
+    "overall": {
+      "meanDelta": 0.08888888888888889,
+      "lower95": -0.0775007220852084,
+      "upper95": 0.3111111111111111,
+      "outcome": "inconclusive",
+      "pairs": 45,
+      "units": 9,
+      "samples": 10000,
+      "vetoes": []
+    }
+  },
   "records": [
     {
       "track": "Rectangle",
