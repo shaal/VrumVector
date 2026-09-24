@@ -5,7 +5,7 @@
     "RuVector Team <team@ruvector.dev>"
   ],
   "description": "Self-Optimizing Neural Architecture - Runtime-adaptive learning for LLM routers with two-tier LoRA, EWC++, and ReasoningBank",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",

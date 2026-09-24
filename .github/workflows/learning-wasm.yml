@@ -20,6 +20,9 @@ jobs:
     if: github.repository == 'shaal/VrumVector' && (startsWith(github.ref, 'refs/heads/codex/') || startsWith(github.ref, 'refs/heads/ship/'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # One target per run: the dispatch input, else the branch's own binding.
+      TARGET: ${{ inputs.target || (github.ref_name == 'codex/trainable-gnn' && 'gnn' || 'sona') }}
     permissions:
       contents: write
     steps:
@@ -40,16 +43,14 @@ jobs:
           rustup default 1.85.0
           if [[ "$(wasm-pack --version 2>/dev/null || true)" != "wasm-pack 0.13.1" ]]; then cargo install wasm-pack --version 0.13.1 --locked; fi
       - run: bash scripts/build-learning-wasm.sh
-        if: github.ref_name == 'codex/sona-checkpoints' || inputs.target == 'sona'
+        if: env.TARGET == 'sona'
       - run: bash scripts/build-gnn-wasm.sh
-        if: github.ref_name == 'codex/trainable-gnn' || inputs.target == 'gnn'
+        if: env.TARGET == 'gnn'
       - name: Commit generated bindings and lockfile
-        env:
-          TARGET: ${{ inputs.target }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          if [[ "$GITHUB_REF_NAME" == 'codex/sona-checkpoints' || "$TARGET" == 'sona' ]]; then
+          if [[ "$TARGET" == 'sona' ]]; then
             git add vendor/ruvector/sona scripts/ruvector-patches/sona.Cargo.lock
           else
             git add vendor/ruvector/ruvector_gnn_trainable_wasm scripts/ruvector-patches/gnn.Cargo.lock

@@ -32,13 +32,14 @@
 //   findPatterns(trackVec, k)        — top-k ReasoningBank clusters by cosine
 //   info()                           — merged {lora: …, sona: …} snapshot
 
-// The version query must change with every rebuild of vendor/ruvector/sona.
+// The version query is the first 8 hex digits of ruvector_sona_bg.wasm's
+// SHA-256 (npm run test:learning enforces it), so every rebuild changes it.
 // /vendor is cached for an hour, and a cached glue file with a newer .wasm
 // (or the reverse) can fail to link. Tests import SONA_MODULE_URL so that
 // they patch this same module instance.
-import initSona, { WasmEphemeralAgent } from '../../vendor/ruvector/sona/ruvector_sona.js?v=sona-5356a84e';
-export const SONA_MODULE_URL = new URL('../../vendor/ruvector/sona/ruvector_sona.js?v=sona-5356a84e', import.meta.url).href;
-const SONA_WASM_URL = new URL('../../vendor/ruvector/sona/ruvector_sona_bg.wasm?v=sona-5356a84e', import.meta.url);
+import initSona, { WasmEphemeralAgent } from '../../vendor/ruvector/sona/ruvector_sona.js?v=sona-5832ba69';
+export const SONA_MODULE_URL = new URL('../../vendor/ruvector/sona/ruvector_sona.js?v=sona-5832ba69', import.meta.url).href;
+const SONA_WASM_URL = new URL('../../vendor/ruvector/sona/ruvector_sona_bg.wasm?v=sona-5832ba69', import.meta.url);
 import {qualityFromFitness} from '../learning/policy.js';
 import {CircuitJournal} from './journal.js';
 import {

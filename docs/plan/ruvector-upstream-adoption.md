@@ -37,7 +37,7 @@ task's own doc or proof file, not in this checklist.
   falls below 0.5 and `CRASH_SIM_MIN = 0.55` (`adaptiveGates.js`) accepted any
   layout with cosine ≥ 0.10. Use `1 - dist`, clamp to [0, 1], add a regression
   test, and measure how many recalled layouts pass the gate before and after.
-- [ ] **T2 — Rebuild SONA on upstream `main`.** Rebase
+- [x] **T2 — Rebuild SONA on upstream `main`.** Rebase
   `sona-find-patterns.patch` (drop the `get_patterns` hunk that #481 made
   obsolete; keep `find_patterns`) and `sona-state-checkpoint.patch` (new
   `lib.rs` context). Regenerate `sona.Cargo.lock`, rebuild with the pinned
