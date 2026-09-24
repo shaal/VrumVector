@@ -44,7 +44,7 @@ task's own doc or proof file, not in this checklist.
   toolchain, update `VENDORED.md`, and prove that existing checkpoints still
   import. Update the stale `WasmSonaEngine` stub comment in
   `AI-Car-Racer/sona/engine.js`.
-- [ ] **T3 — Make every ruvector build reproducible without the orphaned SHA.**
+- [x] **T3 — Make every ruvector build reproducible without the orphaned SHA.**
   Move the GNN companion build off `d5d3296cd` onto an upstream `main` SHA
   (prove that the binary is identical or explain the difference). Push
   `feat/hnsw-wasm-backend` to `shaal/ruvector` so the vendored HNSW backend has

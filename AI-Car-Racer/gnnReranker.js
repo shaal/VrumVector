@@ -9,13 +9,18 @@ let _replay=[],_cursor=0,_pending=new Map();
 let _selections=new WeakMap();
 const emptyStats=()=>({trained:0,heldOut:0,modelError:0,emaError:0});
 let _stats=emptyStats();
+// ?v= is the first 8 hex digits of the wasm SHA-256 (test:learning enforces it),
+// so a cached glue file never pairs with a rebuilt wasm. Tests initialise
+// GNN_MODULE_URL themselves, which makes loadGnn's init a no-op.
+export const GNN_MODULE_URL=new URL('../vendor/ruvector/ruvector_gnn_trainable_wasm/ruvector_gnn_trainable_wasm.js?v=gnn-40a52f99',import.meta.url).href;
+const GNN_WASM_URL=new URL('../vendor/ruvector/ruvector_gnn_trainable_wasm/ruvector_gnn_trainable_wasm_bg.wasm?v=gnn-40a52f99',import.meta.url);
 const create=()=>new _module.WasmGraphRanker(GRAPH_DIM,8,20260919);
 export function loadGnn(){
   if(_ready)return _ready;
   _ready=(async()=>{
     try{
-      const mod=await import('../vendor/ruvector/ruvector_gnn_trainable_wasm/ruvector_gnn_trainable_wasm.js');
-      await mod.default();_module=mod;_model=create();return {layer:_model,mod};
+      const mod=await import(GNN_MODULE_URL);
+      await mod.default({module_or_path:GNN_WASM_URL});_module=mod;_model=create();return {layer:_model,mod};
     }catch(error){console.warn('[gnn] trainable model unavailable; using EMA',error);return null;}
   })();return _ready;
 }

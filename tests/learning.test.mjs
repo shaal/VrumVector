@@ -193,11 +193,14 @@ test('real simulation preserves the best progress across genetic generations',()
   }
   assert.equal(coach.rounds,5);assert.ok(previous>=1);
 });
-test('SONA cache-bust tag matches the vendored wasm bytes',async()=>{
-  const {createHash}=await import('node:crypto');
-  const engine=await readFile(new URL('../AI-Car-Racer/sona/engine.js',import.meta.url),'utf8');
-  const tags=[...engine.matchAll(/ruvector_sona(?:_bg\.wasm|\.js)\?v=sona-([0-9a-f]+)'/g)].map(m=>m[1]);
-  assert.equal(tags.length,3,'glue import, SONA_MODULE_URL, and wasm URL');
-  const hash=createHash('sha256').update(await readFile(new URL('../vendor/ruvector/sona/ruvector_sona_bg.wasm',import.meta.url))).digest('hex');
-  for(const tag of tags)assert.equal(tag,hash.slice(0,8),'Set ?v=sona-<first 8 hex of the wasm SHA-256> in sona/engine.js after a rebuild');
-});
+for(const [name,source,file,count] of [
+  ['SONA','../AI-Car-Racer/sona/engine.js','../vendor/ruvector/sona/ruvector_sona_bg.wasm',3],
+  ['trainable GNN','../AI-Car-Racer/gnnReranker.js','../vendor/ruvector/ruvector_gnn_trainable_wasm/ruvector_gnn_trainable_wasm_bg.wasm',2]])
+  test(`${name} cache-bust tag matches the vendored wasm bytes`,async()=>{
+    const {createHash}=await import('node:crypto');
+    const code=await readFile(new URL(source,import.meta.url),'utf8');
+    const tags=[...code.matchAll(/(?:_bg\.wasm|\.js)\?v=(?:sona|gnn)-([0-9a-f]+)'/g)].map(m=>m[1]);
+    assert.equal(tags.length,count,'every glue and wasm URL carries the tag');
+    const hash=createHash('sha256').update(await readFile(new URL(file,import.meta.url))).digest('hex');
+    for(const tag of tags)assert.equal(tag,hash.slice(0,8),`Set ?v=…-<first 8 hex of the wasm SHA-256> in ${source.split('/').pop()} after a rebuild`);
+  });

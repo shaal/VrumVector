@@ -43,8 +43,9 @@ carries no local paths and repeats byte for byte on the same host. Builds on
 different hosts (macOS vs the Linux CI runner) differ only in Rust symbol
 hashes, because Cargo hashes the host triple into crate metadata. CI is the
 reference build: commit only CI-built binaries. After a rebuild,
-set the `?v=sona-…` query in `AI-Car-Racer/sona/engine.js` to the first 8 hex
-digits of the new wasm SHA-256 (`npm run test:learning` fails until you do).
+set the `?v=sona-…` query in `AI-Car-Racer/sona/engine.js` (or `?v=gnn-…` in
+`AI-Car-Racer/gnnReranker.js`) to the first 8 hex digits of the new wasm
+SHA-256 (`npm run test:learning` fails until you do).
 `tests/fixtures/sona-checkpoint-d5d3296c.json` is a checkpoint saved by the
 previous build; `tests/learning-wasm.mjs` proves that it still restores. The pinned upstream SHA, Rust, wasm-pack, Cargo lockfile,
 patch hashes, and binary hash are recorded. Legacy saves recover from the circuit

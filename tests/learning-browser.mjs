@@ -237,11 +237,11 @@ try{
   assert.ok(graphSaved.updates>0);
   await page.reload();await ready();
   assert.deepEqual(await page.evaluate(async()=>(await import('/AI-Car-Racer/gnnReranker.js')).serialize()),graphSaved.checkpoint);
-  await page.route('**/ruvector_gnn_trainable_wasm_bg.wasm',route=>route.abort());
+  await page.route('**/ruvector_gnn_trainable_wasm_bg.wasm*',route=>route.abort());
   await page.reload();await ready();
   assert.equal(await page.evaluate(()=>window.__rvBridge.info().gnnLoaded),false);
   await page.evaluate(()=>window.__rvBridge.persist());
-  await page.unroute('**/ruvector_gnn_trainable_wasm_bg.wasm');await page.reload();await ready();
+  await page.unroute('**/ruvector_gnn_trainable_wasm_bg.wasm*');await page.reload();await ready();
   assert.deepEqual(await page.evaluate(async()=>(await import('/AI-Car-Racer/gnnReranker.js')).serialize()),graphSaved.checkpoint);
   mark('crash-map recall reports cosine similarity in every index geometry');
   const crashRecall=await page.evaluate(()=>{
