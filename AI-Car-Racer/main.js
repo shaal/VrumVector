@@ -73,7 +73,7 @@ window.__poseJitter = window.__poseJitter || { radiusPx: 0, angleDeg: 0, maxAtte
 // physics setting, so a reload without the flag starts with it off. When on,
 // AI cars in the same heat of heatSize are solid; both workers get the mode in
 // 'begin', and the learning context records it, so collision-mode results
-// never mix with normal-mode memories.
+// are kept under their own context key (see learning/policy.js).
 var carCollisions = { enabled: false, heatSize: 8 };
 // The mode of the primary's current generation: the A/B baseline copies it,
 // so both sides of a generation always run, and are labelled, the same way.
