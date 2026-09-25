@@ -12,7 +12,7 @@
     "test:multiplayer": "node --test tests/multiplayer.test.mjs",
     "test:multiplayer:browser": "node tests/multiplayer-browser.mjs",
     "dev:multiplayer": "wrangler dev --config multiplayer/wrangler.jsonc --var ALLOW_LOCAL:true --port 8878",
-    "test:learning": "node --test tests/learning.test.mjs tests/decision.test.mjs tests/sim-worker.test.mjs tests/transfer.test.mjs tests/health.test.mjs tests/auto-train.test.mjs tests/demonstration.test.mjs",
+    "test:learning": "node --test tests/learning.test.mjs tests/decision.test.mjs tests/sim-worker.test.mjs tests/transfer.test.mjs tests/health.test.mjs tests/auto-train.test.mjs tests/demonstration.test.mjs tests/collisions.test.mjs",
     "test:gnn": "node --test tests/graph-learning.test.mjs",
     "test:gnn:wasm": "node tests/gnn-wasm.mjs",
     "benchmark:gnn": "node scripts/benchmark-gnn.mjs",
@@ -27,7 +27,8 @@
     "benchmark:health": "node scripts/benchmark-health.mjs",
     "test:auto-train:browser": "node tests/auto-train-browser.mjs",
     "benchmark:auto-train": "node scripts/benchmark-auto-train.mjs",
-    "test:demonstration:browser": "node tests/demonstration-browser.mjs"
+    "test:demonstration:browser": "node tests/demonstration-browser.mjs",
+    "benchmark:collisions": "node scripts/benchmark-collisions.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

@@ -18,3 +18,16 @@ lineage topology is explicit so the reviewer can verify correctness by eye
 Generator: `tests/fixtures/build-fixtures.mjs` (Node). Re-run with
 `node tests/fixtures/build-fixtures.mjs` after editing to regenerate the JSON
 files.
+
+## car-before-split.js
+
+A byte-exact copy of `AI-Car-Racer/car.js` from before `Car.update()` was
+split into `updatePhysics()` and `updatePerception()` (car collisions, task
+C1). `tests/collisions.test.mjs` runs it and the current `car.js` side by
+side and requires identical results at every step. Do not edit it. If a
+change to `car.js` is meant to change driving, that test fails by design:
+make the same driving change to this copy by hand, in the same commit, and
+say why. Keep the copy's old combined `update()`; the test checks that it has
+no `updatePhysics()`. The copy predates `Car.lastInputs` (human
+demonstrations, H1), which records the network's inputs and changes no
+driving.

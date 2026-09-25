@@ -1,0 +1,168 @@
+{
+  "node": "v22.22.3",
+  "date": "2026-09-25",
+  "runs": [
+    {
+      "track": "Rectangle",
+      "seed": "collisions-bench-1",
+      "N": 500,
+      "K": 8,
+      "heats": 63,
+      "steps": 900,
+      "rowFitted": 8,
+      "contactMsPerStep": {
+        "mean": 0.049,
+        "p95": 0.084,
+        "max": 2.216
+      },
+      "firstSecondContactMsPerStep": 0.363,
+      "carsMsPerStep": 4.394,
+      "pairTestsPerStep": 162.47,
+      "narrowTestsPerStep": 29.029,
+      "contacts": 162,
+      "sweptContacts": 2,
+      "contactCrashes": 172,
+      "aliveEverySecond": [
+        314,
+        251,
+        209,
+        206,
+        202,
+        202,
+        202,
+        202,
+        196,
+        196,
+        196,
+        196,
+        196,
+        196,
+        196
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": "collisions-bench-1",
+      "N": 500,
+      "K": 8,
+      "heats": 63,
+      "steps": 900,
+      "rowFitted": 8,
+      "contactMsPerStep": {
+        "mean": 0.064,
+        "p95": 0.147,
+        "max": 3.156
+      },
+      "firstSecondContactMsPerStep": 0.29,
+      "carsMsPerStep": 4.574,
+      "pairTestsPerStep": 158.788,
+      "narrowTestsPerStep": 27.48,
+      "contacts": 169,
+      "sweptContacts": 1,
+      "contactCrashes": 173,
+      "aliveEverySecond": [
+        326,
+        262,
+        215,
+        195,
+        174,
+        168,
+        168,
+        168,
+        168,
+        168,
+        168,
+        168,
+        168,
+        168,
+        168
+      ]
+    },
+    {
+      "track": "Rectangle",
+      "seed": "collisions-bench-2",
+      "N": 500,
+      "K": 8,
+      "heats": 63,
+      "steps": 900,
+      "rowFitted": 8,
+      "contactMsPerStep": {
+        "mean": 0.064,
+        "p95": 0.157,
+        "max": 1.735
+      },
+      "firstSecondContactMsPerStep": 0.339,
+      "carsMsPerStep": 4.472,
+      "pairTestsPerStep": 163.121,
+      "narrowTestsPerStep": 32.952,
+      "contacts": 147,
+      "sweptContacts": 3,
+      "contactCrashes": 159,
+      "aliveEverySecond": [
+        317,
+        255,
+        223,
+        201,
+        201,
+        200,
+        199,
+        197,
+        194,
+        194,
+        194,
+        194,
+        194,
+        194,
+        194
+      ]
+    },
+    {
+      "track": "Triangle",
+      "seed": "collisions-bench-2",
+      "N": 500,
+      "K": 8,
+      "heats": 63,
+      "steps": 900,
+      "rowFitted": 8,
+      "contactMsPerStep": {
+        "mean": 0.058,
+        "p95": 0.138,
+        "max": 0.865
+      },
+      "firstSecondContactMsPerStep": 0.296,
+      "carsMsPerStep": 4.693,
+      "pairTestsPerStep": 156.477,
+      "narrowTestsPerStep": 29.157,
+      "contacts": 161,
+      "sweptContacts": 2,
+      "contactCrashes": 173,
+      "aliveEverySecond": [
+        322,
+        245,
+        216,
+        196,
+        187,
+        180,
+        178,
+        177,
+        176,
+        175,
+        175,
+        175,
+        175,
+        175,
+        175
+      ]
+    }
+  ],
+  "worstCasePile": {
+    "N": 500,
+    "K": 8,
+    "pairsPerStep": 1736,
+    "msPerStep": 0.996
+  },
+  "trianglesOverlap": {
+    "nsPerCall": 123.28,
+    "hits": 11000000
+  }
+}

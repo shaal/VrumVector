@@ -2,17 +2,18 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {seededRandom} from '../../AI-Car-Racer/graphics/state.js';
 
-const files=['utils.js','spatialGrid.js','network.js','controls.js','sensor.js','driver/profiles.js','car.js'];
+const files=['utils.js','spatialGrid.js','network.js','controls.js','sensor.js','driver/profiles.js','car.js','collisions.js'];
 const sources=await Promise.all(files.map(file=>readFile(new URL('../../AI-Car-Racer/'+file,import.meta.url),'utf8')));
 const presetSource=await readFile(new URL('../../AI-Car-Racer/trackPresets.js',import.meta.url),'utf8');
 const presetScope=vm.createContext({window:{}});
 vm.runInContext(presetSource.slice(0,presetSource.indexOf('\n];')+3),presetScope);
 export const presets=presetScope.window.TRACK_PRESETS;
 export class Simulation {
-  constructor({track='Rectangle',seed='simulation',maxSpeed=15,traction=.5,profile='balanced'}={}){
+  // carScript replaces car.js, e.g. with a saved copy for before/after checks.
+  constructor({track='Rectangle',seed='simulation',maxSpeed=15,traction=.5,profile='balanced',carScript=null}={}){
     const math=Object.create(Math);math.random=seededRandom(seed);
     this.scope=vm.createContext({Math:math,frameCount:0,bestCar:null,traction,invincible:false,SENSOR_STRIDE:1});
-    sources.forEach((source,i)=>vm.runInContext(source,this.scope,{filename:files[i]}));
+    sources.forEach((source,i)=>vm.runInContext(carScript!=null&&files[i]==='car.js'?carScript:source,this.scope,{filename:files[i]}));
     vm.runInContext('globalThis.CarClass=Car;globalThis.GridClass=SpatialGrid;',this.scope);
     const preset=presets.find(p=>p.name===track);if(!preset)throw Error('Unknown track '+track);
     const borders=[];
