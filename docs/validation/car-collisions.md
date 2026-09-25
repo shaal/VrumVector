@@ -43,7 +43,10 @@ head-on hit crashes both". The core reads it like this:
   touches the other car and its own motion carries it into the other car
   (at 0.1 px per step or more along the contact). A nose that reaches the
   other car later in the step, through its body, does not count. A car that
-  is rammed while it reverses away does not strike.
+  is rammed while it reverses away does not strike. When two front corners
+  meet at the same moment, the contact has two directions, and a car that
+  moves into the other along either one strikes. So two mirror-image cars
+  always both crash, and rounding never picks one.
 - **Old contacts.** If the cars already touched at the start of the step,
   the core has no moment of first touch. Then a nose that touches the other
   car at any moment of the step strikes. Each nose is swept along its
@@ -109,7 +112,7 @@ mode (C2) calls the two halves in separate passes, through `step()`.
 
 ### Evidence
 
-`tests/collisions.test.mjs` (part of `npm run test:learning`, 33 tests):
+`tests/collisions.test.mjs` (part of `npm run test:learning`, 36 tests):
 
 | Claim | How the test checks it |
 |---|---|
@@ -120,7 +123,8 @@ mode (C2) calls the two halves in separate passes, through `step()`.
 | The contact test is correct | Touching, containment, near misses, and 20 000 random pairs against an independent edge-crossing-or-containment check |
 | The swept test is correct | 6 000 random moving pairs against 300 sub-steps: no sampled touch is missed. Motion along an edge, infinite motion, and non-finite bodies |
 | The nose rule works | Rear-end, head-on, offset head-on, T-bone, parked, reversing, sliding, glance, and side by side at one speed; symmetry on 20 000 random pairs |
-| Noses are judged at first touch | A crossing where one nose touches first and the other only later, through the body, crashes one car. A car rammed while reversing away, and a creeping car that is T-boned, do not crash. `stallSpeed` from the state sets the slowest nose |
+| Noses are judged at first touch | A crossing where one nose touches first and the other only later, through the body, crashes one car. A car rammed while reversing away, and a creeping car that is T-boned, do not crash. `stallSpeed` from the state sets the slowest nose. A sliding car that pushes into another at 0.07 px per step along the contact does not strike; at 0.15 it does |
+| Corner-to-corner ties | Two mirror-image cars from a traffic run, moved to 300 places on the track: both crash every time |
 | Old contacts are judged over the whole step | Two pairs found by search: a nose that enters halfway through the step, and one that passes through and is clear again at the end |
 | Fast cars cannot pass through | A front edge that jumps a thin tail in one 15 px step crashes; a head-on pass with a 28 px offset at 15 + 15 px per step crashes both |
 | The broad phase drops no contact | 20 000 random pairs of cars of any size and speed, and two pairs found by search that touched early in the step and are now just over two bounding radii apart |
@@ -129,28 +133,43 @@ mode (C2) calls the two halves in separate passes, through `step()`.
 | The contact pass allocates nothing | Young-generation bytes and garbage collections during 50 steps of 504 cars, set up so every path runs: swept-only and present contacts, spinners, stall ghosts, and ghost release. A control loop proves the probe works |
 | The contact pass is deterministic | Two collision runs on each track match step by step; `Math.random` throws during every step |
 | The start row fits | All 10 presets fit 8 cars at 45 px on gate 0. Every car registers gate 0 on frame 1 and survives it with 7 control sets (forward, reverse, idle, and each with a turn). Narrow gates as start gates: Hexagon's 130 px gate fits 3, Triangle's 198 px apex gate fits 3, and Triangle gate 2 fits 5 only at 34 px. A gate almost parallel to the heading still gives each car its own lane |
-| A start slot survives its first step | 1 500 layouts of short walls just outside the car's outline, with and without a spatial grid; 150 corridors with short spikes where the slots are, a second corridor behind the wall, and a gate that may end mid-road; and a fine sweep of a gate's end across a slot's edge. Every accepted slot registers the gate and survives one real step with each of the 7 control sets |
+| A start slot survives its first step | 1 500 layouts of short walls just outside the car's outline, with and without a spatial grid; 150 corridors with short spikes where the slots are, a second corridor behind the wall, and a gate that may end mid-road; a fine sweep of a gate's end across a slot's edge; and a sweep of slots whose front edge is 0.05 to 0.9 px past the gate line. Every accepted slot registers the gate and survives one real step with each of the 7 control sets |
 
 Mutation checks. Skipping perception on the death frame, or scaling the car
 length by 1 + 10⁻¹⁵, makes the lockstep tests fail (at step 51 and step 3).
-Of 20 changes to `collisions.js`, 17 fail at least one test: removing the
-turn from the start check, growing only its width, using `poseClear` in the
-start row, dropping `pathClear`, checking the gate only at the spawn pose,
-a wall check that sees only crossings, judging old contacts at their start
-only, not sweeping the nose, no entering check, no speed threshold for
-noses, a broad phase that ignores motion, no swept contact, no ghost for
-spinning cars, no slot rotation, a never-separating axis for motion along
-an edge, no ghost after a stall, and a stale status after a crash. The 3
-that pass change almost nothing: the moment right after first touch (the
-cut, and its 0.001-step window) and the tolerance for "touching at the
-start". With the entering check in place, the cut is a second guard: in
-1.5 million random pairs (66 097 first touches, `-4` to `15` px per step,
-with sideways slip), judging the noses over the whole step instead gave the
-same result every time.
+Each of these changes to `collisions.js` fails at least one test:
 
-Four reviewers ran more mutations and probes, and the gaps they found have
-tests. The allocation probe found two real allocations during review, a
-`Math.sqrt` call and a helper called with plain numbers, and both are gone.
+- in the start row: no turn in the start check, growing only its width,
+  `poseClear` instead of `startClear`, no `pathClear`, the gate checked only
+  at the spawn pose, only a forward first step, a first step sideways
+  instead of along the heading, and a wall check that sees only crossings;
+- in the striker rule: no entering check, an entering speed of any size
+  above 0, half the threshold, a threshold not scaled to the edge length,
+  the first axis instead of the one that opens last, no second direction
+  for a tie (or ignoring it), no speed threshold for noses, old contacts
+  judged only at their start, and a nose that is not swept;
+- in the contact pass: a broad phase that ignores motion, no swept contact,
+  no ghost for spinning cars or after a stall, no slot rotation, a
+  never-separating axis for motion along an edge, and a stale status after
+  a crash.
+
+Three changes pass every test and change almost nothing: removing the cut
+right after first touch, its 0.001-step window, and the tolerance for
+"touching at the start". With the entering check in place, the cut is a
+second guard: in 1.5 million random pairs (66 097 first touches, `-4` to
+`15` px per step, with sideways slip), judging the noses over the whole
+step instead gave the same result every time. A reviewer found the same
+(0 of 63 783) and showed why: a car that moves into the other across one of
+its sides has that side facing its motion.
+
+Six review passes ran more mutations and probes, and the gaps they found
+have tests. Against an "enters" oracle (a car strikes when its own motion
+has a part along the contact at first touch), the final review found no
+innocent car crashed in 120 000 random first touches over six populations;
+the only disagreements were cars entering at under 0.1 px per step, which
+the rule spares on purpose. The allocation probe found two real allocations
+during review, a `Math.sqrt` call and a helper called with plain numbers,
+and both are gone.
 In Chromium, the core loaded through `importScripts` from both worker
 folders and crashed the striker in a rear-end.
 
@@ -161,18 +180,19 @@ third scripted drivers at different speeds, two thirds random brains. The
 contact pass runs natively; car physics and sensing run in the Node
 simulator's vm context, which slows every global lookup, so the car times
 are high. [Raw report](car-collisions.json). The machine was shared with
-other jobs, so the times are upper bounds.
+other jobs, so the times are upper bounds: a run a minute earlier gave two
+to three times the worst-case and triangle-test times, with the same counts.
 
 | Run | Contact pass, mean | p95 | First second | Cars (physics + sensing) |
 |---|---:|---:|---:|---:|
-| Rectangle, seed 1 | 0.091 ms | 0.13 ms | 0.83 ms | 7.9 ms |
-| Triangle, seed 1 | 0.059 ms | 0.13 ms | 0.33 ms | 5.6 ms |
-| Rectangle, seed 2 | 0.057 ms | 0.13 ms | 0.30 ms | 5.0 ms |
-| Triangle, seed 2 | 0.072 ms | 0.17 ms | 0.26 ms | 8.1 ms |
+| Rectangle, seed 1 | 0.049 ms | 0.08 ms | 0.36 ms | 4.4 ms |
+| Triangle, seed 1 | 0.064 ms | 0.15 ms | 0.29 ms | 4.6 ms |
+| Rectangle, seed 2 | 0.064 ms | 0.16 ms | 0.34 ms | 4.5 ms |
+| Triangle, seed 2 | 0.058 ms | 0.14 ms | 0.30 ms | 4.7 ms |
 
-The contact pass costs about 1% of the cars' own work. The first second
+The contact pass costs 1.1 to 1.4% of the cars' own work. The first second
 includes compiling the code. Worst case, all 500 cars on one spot so every
-pair in every heat touches (1 736 pairs): 0.97 ms per step. One triangle
+pair in every heat touches (1 736 pairs): 1.0 ms per step. One triangle
 test: about 120 ns. In these runs, 1 to 3 of about 160 contacts per run
 were caught only by the swept test.
 
@@ -205,6 +225,11 @@ n ≥ 6 per arm across at least 2 sessions.
   contacts in one run passed through one.
 - **Creeping cars never strike.** A car slower than 0.1 px per step has no
   nose, so it can push slowly into another car without a crash.
+- **A spared contact becomes an old contact.** If the entering check spares
+  both cars at first touch (both enter slower than 0.1 px per step along
+  the contact), the next step sees an old contact, where any nose that
+  touches counts. So a slow car can still crash a step later. A reviewer
+  saw this only with cars crawling at 0.1 to 0.4 px per step.
 - **Glances are rare.** With straight-line motion, a new contact almost
   always involves a nose. A glance needs a turn, or an overlap left over
   from an earlier step.
@@ -215,3 +240,6 @@ n ≥ 6 per arm across at least 2 sessions.
   collision mode allows jitter.
 - **Top speed.** The start check covers a first step of up to 0.5 px, so a
   top speed up to 25. The slider stops at 15.
+- **For C2.** The H1 demonstration recorder runs right after `car.update()`
+  in `main.js`. If C2 moves `main.js` onto the split, the recorder must run
+  after `updatePerception()`, or it records the inputs of the step before.

@@ -1,6 +1,6 @@
 {
   "node": "v22.22.3",
-  "date": "2026-09-24",
+  "date": "2026-09-25",
   "runs": [
     {
       "track": "Rectangle",
@@ -11,12 +11,12 @@
       "steps": 900,
       "rowFitted": 8,
       "contactMsPerStep": {
-        "mean": 0.091,
-        "p95": 0.126,
-        "max": 11.553
+        "mean": 0.049,
+        "p95": 0.084,
+        "max": 2.216
       },
-      "firstSecondContactMsPerStep": 0.833,
-      "carsMsPerStep": 7.9,
+      "firstSecondContactMsPerStep": 0.363,
+      "carsMsPerStep": 4.394,
       "pairTestsPerStep": 162.47,
       "narrowTestsPerStep": 29.029,
       "contacts": 162,
@@ -49,12 +49,12 @@
       "steps": 900,
       "rowFitted": 8,
       "contactMsPerStep": {
-        "mean": 0.059,
-        "p95": 0.126,
-        "max": 1.385
+        "mean": 0.064,
+        "p95": 0.147,
+        "max": 3.156
       },
-      "firstSecondContactMsPerStep": 0.331,
-      "carsMsPerStep": 5.593,
+      "firstSecondContactMsPerStep": 0.29,
+      "carsMsPerStep": 4.574,
       "pairTestsPerStep": 158.788,
       "narrowTestsPerStep": 27.48,
       "contacts": 169,
@@ -87,12 +87,12 @@
       "steps": 900,
       "rowFitted": 8,
       "contactMsPerStep": {
-        "mean": 0.057,
-        "p95": 0.125,
-        "max": 1.556
+        "mean": 0.064,
+        "p95": 0.157,
+        "max": 1.735
       },
-      "firstSecondContactMsPerStep": 0.302,
-      "carsMsPerStep": 4.973,
+      "firstSecondContactMsPerStep": 0.339,
+      "carsMsPerStep": 4.472,
       "pairTestsPerStep": 163.121,
       "narrowTestsPerStep": 32.952,
       "contacts": 147,
@@ -125,17 +125,17 @@
       "steps": 900,
       "rowFitted": 8,
       "contactMsPerStep": {
-        "mean": 0.072,
-        "p95": 0.172,
-        "max": 1.17
+        "mean": 0.058,
+        "p95": 0.138,
+        "max": 0.865
       },
-      "firstSecondContactMsPerStep": 0.256,
-      "carsMsPerStep": 8.1,
-      "pairTestsPerStep": 156.654,
-      "narrowTestsPerStep": 29.166,
+      "firstSecondContactMsPerStep": 0.296,
+      "carsMsPerStep": 4.693,
+      "pairTestsPerStep": 156.477,
+      "narrowTestsPerStep": 29.157,
       "contacts": 161,
       "sweptContacts": 2,
-      "contactCrashes": 172,
+      "contactCrashes": 173,
       "aliveEverySecond": [
         322,
         245,
@@ -159,10 +159,10 @@
     "N": 500,
     "K": 8,
     "pairsPerStep": 1736,
-    "msPerStep": 0.969
+    "msPerStep": 0.996
   },
   "trianglesOverlap": {
-    "nsPerCall": 122.909,
+    "nsPerCall": 123.28,
     "hits": 11000000
   }
 }

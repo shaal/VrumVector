@@ -256,6 +256,8 @@ Smaller defaults (change them at C1 review if needed):
   - `sim-worker.js` `poseInCorridor` must then call `CarCollisions.poseClear`,
     so the wall check has one copy. Its polygon copy is already gone: it
     uses `Car.polygonAt`.
+  - If `main.js` moves onto the split too, the H1 demonstration recorder
+    must run after `updatePerception()`, where `car.lastInputs` is set.
 - [ ] **C3 — Rays see cars.** Rays hit solid heat-mates; readings carry a
   `kind`; contact and near-car statistics in `DriverProfiles.summarize`.
   About 3 hours.

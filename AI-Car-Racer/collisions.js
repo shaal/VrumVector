@@ -136,15 +136,19 @@
 
   // Scratch, reused so the contact pass allocates nothing: typed arrays and
   // the fields of plain objects hold numbers without boxing them.
-  // span: [first touch, last touch, normal x, normal y, normal known]
+  // span: [first touch, last touch, normal x, normal y, normal known,
+  //        second normal x, second normal y, second normal known]
   // nose: [cut, slowest nose speed squared, normal known, normal x,
-  //        normal y, side (+1 for the first car, -1 for the second)]
-  const span = new Float64Array(5);
-  const nose = new Float64Array(6);
+  //        normal y, side (+1 for the first car, -1 for the second),
+  //        second normal known, second normal x, second normal y]
+  const span = new Float64Array(8);
+  const nose = new Float64Array(9);
+  const axisEnter = new Float64Array(6), axisNormal = new Float64Array(12);
   const motion = {x: 0, y: 0};
   const band = [{x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}];
   const EARLY = 1e-3;   // noses are checked up to this far (of a step) past first touch
   const AT_START = 1e-9;  // a first touch this close to the step start counts as "already touching"
+  const TIE = 1e-9;       // axes that open this close together open at the same moment
 
   // Triangle p moves straight by m = {x, y} during the step and ends where it
   // is now; triangle q stays put. Do they touch at some moment of the step?
@@ -154,12 +158,14 @@
   // and span[4] is 1. Exact for two triangles: at each moment they touch
   // unless one of the six edge normals separates them, and on each normal the
   // moments of overlap form one interval; the normal that opens last is the
-  // one they touch across. One loop and no helper calls: numbers passed to a
-  // call that is not inlined are boxed, which allocates.
+  // one they touch across. When two open at the same moment (a corner meets
+  // a corner), both are contact normals: span[5..6] gets the second and
+  // span[7] is 1, so rounding cannot pick one. No helper calls: numbers passed
+  // to a call that is not inlined are boxed, which allocates.
   function contactSpan(p, m, q) {
     const mx = m.x, my = m.y;
     if (!(isFinite(mx) && isFinite(my))) return false;
-    let tIn = 0, tOut = 1, cx = 0, cy = 0, axes = 0;
+    let tIn = 0, tOut = 1, axes = 0;
     for (let k = 0; k < 6; k++) {
       const t = k < 3 ? p : q, i = k % 3, j = i === 2 ? 0 : i + 1;
       const nx = t[j].y - t[i].y, ny = t[i].x - t[j].x;
@@ -175,6 +181,7 @@
       }
       if (!(pLo <= pHi && qLo <= qHi)) return false;   // a non-finite vertex
       axes++;
+      axisEnter[k] = -INF;
       // At moment tau, p projects to [pLo, pHi] + (tau - 1) d.
       const d = mx * nx + my * ny;
       if (d === 0) {
@@ -183,18 +190,23 @@
       }
       let enter = 1 + (qLo - pHi) / d, leave = 1 + (qHi - pLo) / d;
       if (d < 0) { const e = enter; enter = leave; leave = e; }
-      if (enter > tIn) {
-        tIn = enter;
-        // Relative motion carries p toward q along this normal.
-        if (d > 0) { cx = nx; cy = ny; } else { cx = -nx; cy = -ny; }
-      }
+      // Relative motion carries p toward q along this normal.
+      axisEnter[k] = enter;
+      axisNormal[2 * k] = d > 0 ? nx : -nx; axisNormal[2 * k + 1] = d > 0 ? ny : -ny;
+      if (enter > tIn) tIn = enter;
       if (leave < tOut) tOut = leave;
       if (!(tIn <= tOut)) return false;
     }
     if (axes === 0) return false;
     const fresh = tIn > AT_START;
-    span[0] = fresh ? tIn : 0; span[1] = tOut;
-    span[2] = cx; span[3] = cy; span[4] = fresh ? 1 : 0;
+    span[0] = fresh ? tIn : 0; span[1] = tOut; span[4] = 0; span[7] = 0;
+    if (fresh) {
+      for (let k = 0; k < 6; k++) {
+        if (!(axisEnter[k] >= tIn - TIE)) continue;
+        if (span[4] === 0) { span[2] = axisNormal[2 * k]; span[3] = axisNormal[2 * k + 1]; span[4] = 1; }
+        else if (span[7] === 0) { span[5] = axisNormal[2 * k]; span[6] = axisNormal[2 * k + 1]; span[7] = 1; }
+      }
+    }
     return true;
   }
   // Does triangle p, moving straight by m = {x, y} and ending where it is
@@ -212,8 +224,9 @@
   //     relative to the other car, and the band must touch the other car.
   //   - When the moment of first touch is known (nose[2]), the car must also
   //     be moving into the other car there: its own motion along the contact
-  //     normal (nose[3..4], times the side nose[5]) is at least stallSpeed. A
-  //     car reversing away from a car that rams its front does not strike.
+  //     normal (nose[3..4], or the second one nose[7..8] after a tie, times
+  //     the side nose[5]) is at least stallSpeed. A car reversing away from a
+  //     car that rams its front does not strike.
   // Turning is not part of the motion: a front corner of a turning car moves
   // under 1 px per step because of it.
   function noseTouches(car, other) {
@@ -221,8 +234,13 @@
     const m2 = mx * mx + my * my, slow2 = nose[1];
     if (!(m2 > 0 && m2 >= slow2)) return false;
     if (nose[2]) {
-      const nx = nose[5] * nose[3], ny = nose[5] * nose[4], into = mx * nx + my * ny;
-      if (!(into > 0 && into * into >= slow2 * (nx * nx + ny * ny))) return false;
+      let nx = nose[5] * nose[3], ny = nose[5] * nose[4], into = mx * nx + my * ny;
+      let entering = into > 0 && into * into >= slow2 * (nx * nx + ny * ny);
+      if (!entering && nose[6]) {
+        nx = nose[5] * nose[7]; ny = nose[5] * nose[8]; into = mx * nx + my * ny;
+        entering = into > 0 && into * into >= slow2 * (nx * nx + ny * ny);
+      }
+      if (!entering) return false;
     }
     const rx = mx + other.velocity.x, ry = my + other.velocity.y;   // motion relative to other
     const back = 1 - nose[0];
@@ -254,12 +272,17 @@
   // that moment and against its contact normal: whoever's nose made the
   // contact strikes, not a nose that reaches the other car later, through its
   // body. If they already touched at the start of the step (or no touch was
-  // found), any moment of the step counts.
+  // found), any moment of the step counts. With the entering check the cut
+  // is a second guard: a car that moves into the other across one of its
+  // sides has that side facing its motion, so its nose touches at first
+  // touch; the cut keeps rounding from letting a later nose count.
   function judgeFrom(touched) {
     const fresh = touched && span[4] === 1;
     nose[0] = fresh ? (span[0] + EARLY < 1 ? span[0] + EARLY : 1) : 1;
     nose[2] = fresh ? 1 : 0;
     nose[3] = span[2]; nose[4] = span[3];
+    nose[6] = fresh && span[7] === 1 ? 1 : 0;
+    nose[7] = span[5]; nose[8] = span[6];
   }
   // Who crashes when cars a and b touch: STRIKE.A, STRIKE.B, STRIKE.BOTH
   // (head-on), or STRIKE.NONE (a glance). Symmetric in a and b. `state`
@@ -273,7 +296,7 @@
   }
   // Did car's nose touch the other car at any moment of this step?
   function leadingSideTouches(car, other) {
-    nose[0] = 1; nose[1] = DEFAULTS.stallSpeed * DEFAULTS.stallSpeed; nose[2] = 0;
+    nose[0] = 1; nose[1] = DEFAULTS.stallSpeed * DEFAULTS.stallSpeed; nose[2] = 0; nose[6] = 0;
     return noseTouches(car, other);
   }
 

@@ -311,6 +311,33 @@ test('striker rule: cars already touching at the start of the step are judged ov
   assert.equal(C.strikeOutcome(c, d), C.STRIKE.B);
 });
 
+test('striker rule: the entering speed is measured along the contact, at least stallSpeed', () => {
+  // Car a slides sideways at 5 px per step and creeps f px per step toward
+  // b's tail, which its front edge meets halfway through the step. The
+  // contact normal is a's front edge, so a enters b at f px per step.
+  const slide = f => {
+    const a = body(0, 48, 0, f, 5), b = body(0, -2 + f / 2, 0, 0);
+    assert.equal(freshContact(a, b), true, 'f = ' + f);
+    return C.strikeOutcome(a, b);
+  };
+  assert.equal(slide(0.07), C.STRIKE.NONE, 'into b at 0.07 px per step: below stallSpeed');
+  assert.equal(slide(0.15), C.STRIKE.A, 'into b at 0.15 px per step');
+  assert.equal(slide(3), C.STRIKE.A);
+});
+
+test('striker rule: two mirror-image cars that meet corner to corner both crash, wherever they meet', () => {
+  // From a traffic run: both front corners reach the other car at the same
+  // moment, so two axes open together. Rounding must not pick a winner.
+  const R = {x: 24.2755446641336, y: 1191.2463720813582, angle: 0.6000000000000003, vx: 2.664427805463006, vy: 3.894583324527475};
+  const make = (x, y, angle, vx, vy) => ({x, y, angle, width: 30, height: 50, damaged: false, velocity: {x: vx, y: vy}, polygon: polygonAt(x, y, angle)});
+  for (let k = 0; k < 300; k++) {
+    const cx = (k * 37.3) % 3000 + 50, cy = (k * 71.9) % 1600 + 50 - R.y;
+    const right = make(cx + R.x, cy + R.y, R.angle, R.vx, R.vy), left = make(cx - R.x, cy + R.y, -R.angle, -R.vx, R.vy);
+    assert.equal(C.strikeOutcome(right, left), C.STRIKE.BOTH, `placement ${k}`);
+    assert.equal(C.resolveContacts([left, right], C.createState(2, {heatSize: 2})), 2, `placement ${k}`);
+  }
+});
+
 test('striker rule is symmetric on 20 000 random touching pairs', () => {
   const random = seededRandom('striker-fuzz');
   let touching = 0, both = 0, none = 0;
@@ -752,6 +779,34 @@ test('start row: a gate that ends near a slot only keeps the slot if the car sti
     }
   }
   assert.ok(kept > 5 && dropped > 5, `kept ${kept}, dropped ${dropped}`);
+});
+
+test('start row: a slot just past the gate line is kept only if a reverse first step still touches the gate', () => {
+  // Heading 0 drives toward -y; the gate runs along y = 0. Slot 0 (and so
+  // every slot) has its front edge d px past the gate line. A first step in
+  // reverse moves the car back about 0.25 px.
+  const sim = new Simulation({track: 'Rectangle', seed: 'front-edge'});
+  const far = [[{x: -2000, y: -900}, {x: 2000, y: -900}], [{x: -2000, y: 900}, {x: 2000, y: 900}]];
+  const gate = [{x: -300, y: 0}, {x: 300, y: 0}], gates = [gate, [{x: -1500, y: -900}, {x: -1500, y: 900}]];
+  const road = {borders: far, checkPointList: gates, borderGrid: null, cpGrid: null, left: 0, right: 3200, top: 0, bottom: 1800};
+  sim.scope.road = road;
+  let kept = 0, dropped = 0;
+  for (let d = 0.05; d <= 0.9; d += 0.05) {
+    const row = C.startRow({x: 0, y: 25 - d, heading: 0, gate, count: 3, road, minPitch: 45});
+    if (row.fitted < 3) { dropped++; continue; }
+    kept++;
+    for (const p of row.poses.slice(1)) {
+      for (const controls of Object.values(CONTROLS)) {
+        sim.begin(brains(1, 'front-edge'));
+        const c = sim.cars[0];
+        c.x = p.x; c.y = p.y; c.angle = p.angle; c.polygon = polygonAt(p.x, p.y, p.angle); c.useBrain = false; Object.assign(c.controls, controls);
+        sim.scope.frameCount = 1;
+        c.update(far, gates);
+        assert.equal(c.checkPointsCount, 1, `d = ${d.toFixed(2)}: ${JSON.stringify(controls)} missed the gate`);
+      }
+    }
+  }
+  assert.ok(kept > 3 && dropped > 3, `kept ${kept}, dropped ${dropped}`);
 });
 
 test('start row: slots near short wall spikes, beyond a wall, and near a gate end still start cleanly', () => {
