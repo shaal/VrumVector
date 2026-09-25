@@ -210,7 +210,11 @@ try {
   }
 
   assert.deepEqual(errors, [], 'page errors');
-  await page.screenshot({path: `${out}/collisions.png`});
+  mark('screenshot');
+  // Best effort: a busy software-GPU runner can take longer than the
+  // screenshot timeout, and the picture is only for people to look at.
+  await page.evaluate(() => { if (!pause) pauseGame(); });
+  await page.screenshot({path: `${out}/collisions.png`, timeout: 60000}).catch(error => console.warn('screenshot skipped:', error.message.split('\n')[0]));
   console.log('collisions browser: ok' + (report ? ` (step cost: ${out}/step-cost.json)` : ''));
 } catch (error) {
   console.error('failed at:', stage);
