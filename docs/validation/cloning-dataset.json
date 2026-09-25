@@ -1,0 +1,5978 @@
+{
+ "generated": "node scripts/benchmark-dataset.mjs summary",
+ "node": "v22.22.3",
+ "genetic": {
+  "generations": 24,
+  "population": 24,
+  "seconds": 15
+ },
+ "recording": {
+  "runs": 40,
+  "rows": 18000,
+  "seconds": 15,
+  "wait": 40
+ },
+ "slips": {
+  "every": 180,
+  "min": 10,
+  "max": 30
+ },
+ "trainers": {
+  "default": {},
+  "lag1": {
+   "lags": [
+    1
+   ]
+  }
+ },
+ "sessions": [
+  1,
+  2
+ ],
+ "tracks": {
+  "Rectangle": {
+   "teachers": 12,
+   "refused": [
+    "h2-s1-2",
+    "h2-s1-4",
+    "h2-s2-1",
+    "h2-s2-2",
+    "h2-s2-3"
+   ],
+   "keyBalance": [
+    0.686,
+    0.539,
+    0.398,
+    0.408
+   ],
+   "teacher": {
+    "checkpoints": 53.67,
+    "mirrorTrack": 53.42,
+    "pulledAway": 150,
+    "pulledAwayAll": 10,
+    "onMirrorTrack": 29.25,
+    "crashes": 9.75
+   },
+   "forwardOnly": {
+    "checkpoints": 26
+   },
+   "recordings": {
+    "clean": {
+     "crashes": 20.5,
+     "rows": 16560,
+     "runs": 28.9,
+     "crashedRuns": 0.643
+    },
+    "swap": {
+     "crashes": 26.2,
+     "rows": 15226,
+     "runs": 33.4,
+     "crashedRuns": 0.732,
+     "mistakeShare": 0.07,
+     "crashesAfterMistake": 0.561,
+     "stepsAfterMistake": 0.26,
+     "pooled": {
+      "mistakeRows": 12692,
+      "rows": 182709,
+      "trim30": {
+       "droppedRows": 9420,
+       "droppedMistakes": 1662,
+       "mistakeShareOfDropped": 0.176,
+       "shareOfMistakesRemoved": 0.131
+      },
+      "trim60": {
+       "droppedRows": 18840,
+       "droppedMistakes": 3359,
+       "mistakeShareOfDropped": 0.178,
+       "shareOfMistakesRemoved": 0.265
+      }
+     },
+     "mistakeShareOfDropped": {
+      "30": 0.158,
+      "60": 0.158
+     }
+    },
+    "late": {
+     "crashes": 25.4,
+     "rows": 16165,
+     "runs": 32.3,
+     "crashedRuns": 0.753,
+     "mistakeShare": 0.034,
+     "crashesAfterMistake": 0.378,
+     "stepsAfterMistake": 0.157,
+     "pooled": {
+      "mistakeRows": 6801,
+      "rows": 193981,
+      "trim30": {
+       "droppedRows": 9150,
+       "droppedMistakes": 790,
+       "mistakeShareOfDropped": 0.086,
+       "shareOfMistakesRemoved": 0.116
+      },
+      "trim60": {
+       "droppedRows": 18300,
+       "droppedMistakes": 1570,
+       "mistakeShareOfDropped": 0.086,
+       "shareOfMistakesRemoved": 0.231
+      }
+     },
+     "mistakeShareOfDropped": {
+      "30": 0.084,
+      "60": 0.094
+     }
+    }
+   },
+   "arms": {
+    "rest-keep": {
+     "n": 12,
+     "base": "label",
+     "default": {
+      "fresh": 0.9767,
+      "heldOut": 0.979,
+      "keysForwardAtRest": 0,
+      "pulledAwayAll": 0,
+      "pulledAway": 1,
+      "checkpoints": 12.58,
+      "miss": 41.08,
+      "crashes": 0.08,
+      "mirrorTrack": 12,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 37.7,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0003,
+        "better": 6,
+        "same": 0,
+        "worse": 6
+       },
+       "checkpoints": {
+        "mean": -42.5833,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "mirrorTrack": {
+        "mean": -16.5833,
+        "better": 0,
+        "same": 2,
+        "worse": 10
+       },
+       "pulledAway": {
+        "mean": -12.75,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "bySession": {
+        "fresh": {
+         "1": 0.0086,
+         "2": -0.0091
+        },
+        "checkpoints": {
+         "1": -30.1667,
+         "2": -55
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.9774,
+      "heldOut": 0.9795,
+      "keysForwardAtRest": 0,
+      "pulledAwayAll": 0,
+      "pulledAway": 1,
+      "checkpoints": 12.58,
+      "miss": 41.08,
+      "crashes": 0.08,
+      "mirrorTrack": 12,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 38,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0033,
+        "better": 5,
+        "same": 1,
+        "worse": 6
+       },
+       "checkpoints": {
+        "mean": -42.0833,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "mirrorTrack": {
+        "mean": -16.5833,
+        "better": 0,
+        "same": 2,
+        "worse": 10
+       },
+       "pulledAway": {
+        "mean": -12.75,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "bySession": {
+        "fresh": {
+         "1": 0.0013,
+         "2": -0.0079
+        },
+        "checkpoints": {
+         "1": -30,
+         "2": -54.1667
+        }
+       }
+      }
+     }
+    },
+    "rest-drop": {
+     "n": 12,
+     "base": "label",
+     "default": {
+      "fresh": 0.9798,
+      "heldOut": 0.9819,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 10,
+      "pulledAway": 151,
+      "checkpoints": 53.67,
+      "miss": 3.5,
+      "crashes": 9.92,
+      "mirrorTrack": 28.83,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       2,
+       1,
+       1
+      ],
+      "lagNot1": 1,
+      "maxAbsWeight": 37,
+      "vsBase": {
+       "fresh": {
+        "mean": 0.0028,
+        "better": 5,
+        "same": 0,
+        "worse": 7
+       },
+       "checkpoints": {
+        "mean": -1.5,
+        "better": 2,
+        "same": 4,
+        "worse": 6
+       },
+       "mirrorTrack": {
+        "mean": 0.25,
+        "better": 1,
+        "same": 8,
+        "worse": 3
+       },
+       "pulledAway": {
+        "mean": -0.25,
+        "better": 0,
+        "same": 10,
+        "worse": 2
+       },
+       "bySession": {
+        "fresh": {
+         "1": 0.0124,
+         "2": -0.0067
+        },
+        "checkpoints": {
+         "1": -2,
+         "2": -1
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.9811,
+      "heldOut": 0.9816,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 10,
+      "pulledAway": 150,
+      "checkpoints": 53.58,
+      "miss": 3.25,
+      "crashes": 9.92,
+      "mirrorTrack": 29,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 39.3,
+      "vsBase": {
+       "fresh": {
+        "mean": 0.0005,
+        "better": 7,
+        "same": 0,
+        "worse": 5
+       },
+       "checkpoints": {
+        "mean": -1.0833,
+        "better": 2,
+        "same": 2,
+        "worse": 8
+       },
+       "mirrorTrack": {
+        "mean": 0.4167,
+        "better": 2,
+        "same": 8,
+        "worse": 2
+       },
+       "pulledAway": {
+        "mean": -0.3333,
+        "better": 0,
+        "same": 10,
+        "worse": 2
+       },
+       "bySession": {
+        "fresh": {
+         "1": 0.0043,
+         "2": -0.0034
+        },
+        "checkpoints": {
+         "1": -2,
+         "2": -0.1667
+        }
+       }
+      }
+     }
+    },
+    "label": {
+     "n": 12,
+     "base": null,
+     "default": {
+      "fresh": 0.977,
+      "heldOut": 0.9856,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 11,
+      "pulledAway": 154,
+      "checkpoints": 55.17,
+      "miss": 3.17,
+      "crashes": 10.17,
+      "mirrorTrack": 28.58,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 31.8,
+      "vsBase": null
+     },
+     "lag1": {
+      "fresh": 0.9807,
+      "heldOut": 0.985,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 11,
+      "pulledAway": 154,
+      "checkpoints": 54.67,
+      "miss": 2.83,
+      "crashes": 9.92,
+      "mirrorTrack": 28.58,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 32.1,
+      "vsBase": null
+     }
+    },
+    "label-mirror": {
+     "n": 12,
+     "base": "label",
+     "default": {
+      "fresh": 0.8684,
+      "heldOut": 0.9133,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 11,
+      "pulledAway": 155,
+      "checkpoints": 33.58,
+      "miss": 22.08,
+      "crashes": 9.5,
+      "mirrorTrack": 33.5,
+      "lags": [
+       14,
+       1,
+       1,
+       1,
+       14,
+       10,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 3,
+      "maxAbsWeight": 53.4,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.1086,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "checkpoints": {
+        "mean": -21.5833,
+        "better": 1,
+        "same": 3,
+        "worse": 8
+       },
+       "mirrorTrack": {
+        "mean": 4.9167,
+        "better": 7,
+        "same": 3,
+        "worse": 2
+       },
+       "pulledAway": {
+        "mean": 0.0833,
+        "better": 1,
+        "same": 11,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.1582,
+         "2": -0.059
+        },
+        "checkpoints": {
+         "1": -6.3333,
+         "2": -36.8333
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.9207,
+      "heldOut": 0.9218,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 11,
+      "pulledAway": 155,
+      "checkpoints": 32.83,
+      "miss": 23.17,
+      "crashes": 10.5,
+      "mirrorTrack": 32.33,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 49.5,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.06,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "checkpoints": {
+        "mean": -21.8333,
+        "better": 0,
+        "same": 3,
+        "worse": 9
+       },
+       "mirrorTrack": {
+        "mean": 3.75,
+        "better": 7,
+        "same": 2,
+        "worse": 3
+       },
+       "pulledAway": {
+        "mean": 0.0833,
+        "better": 1,
+        "same": 11,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0651,
+         "2": -0.0548
+        },
+        "checkpoints": {
+         "1": -9.5,
+         "2": -34.1667
+        }
+       }
+      }
+     }
+    },
+    "label-trim30": {
+     "n": 12,
+     "base": "label",
+     "default": {
+      "fresh": 0.9693,
+      "heldOut": 0.9835,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 11,
+      "pulledAway": 154,
+      "checkpoints": 53.83,
+      "miss": 2.83,
+      "crashes": 9.42,
+      "mirrorTrack": 29.08,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       2,
+       1,
+       1
+      ],
+      "lagNot1": 1,
+      "maxAbsWeight": 45.4,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0077,
+        "better": 2,
+        "same": 1,
+        "worse": 9
+       },
+       "checkpoints": {
+        "mean": -1.3333,
+        "better": 3,
+        "same": 3,
+        "worse": 6
+       },
+       "mirrorTrack": {
+        "mean": 0.5,
+        "better": 2,
+        "same": 7,
+        "worse": 3
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": 0.0039,
+         "2": -0.0193
+        },
+        "checkpoints": {
+         "1": -1.1667,
+         "2": -1.5
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.9707,
+      "heldOut": 0.9827,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 11,
+      "pulledAway": 154,
+      "checkpoints": 53.83,
+      "miss": 3,
+      "crashes": 9.92,
+      "mirrorTrack": 28.83,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 40.3,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0099,
+        "better": 4,
+        "same": 1,
+        "worse": 7
+       },
+       "checkpoints": {
+        "mean": -0.8333,
+        "better": 2,
+        "same": 5,
+        "worse": 5
+       },
+       "mirrorTrack": {
+        "mean": 0.25,
+        "better": 2,
+        "same": 8,
+        "worse": 2
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0041,
+         "2": -0.0157
+        },
+        "checkpoints": {
+         "1": -0.8333,
+         "2": -0.8333
+        }
+       }
+      }
+     }
+    },
+    "swap-trim0": {
+     "n": 12,
+     "base": null,
+     "default": {
+      "fresh": 0.89,
+      "heldOut": 0.8461,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 47.17,
+      "miss": 9.33,
+      "crashes": 9.33,
+      "mirrorTrack": 23.5,
+      "lags": [
+       1,
+       1,
+       2,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 1,
+      "maxAbsWeight": 24.9,
+      "vsBase": null
+     },
+     "lag1": {
+      "fresh": 0.8929,
+      "heldOut": 0.85,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 48.08,
+      "miss": 9.92,
+      "crashes": 8.67,
+      "mirrorTrack": 24.92,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 23.3,
+      "vsBase": null
+     }
+    },
+    "swap-trim30": {
+     "n": 12,
+     "base": "swap-trim0",
+     "default": {
+      "fresh": 0.894,
+      "heldOut": 0.8699,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 43.83,
+      "miss": 11.83,
+      "crashes": 8.5,
+      "mirrorTrack": 22.92,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 38.9,
+      "vsBase": {
+       "fresh": {
+        "mean": 0.004,
+        "better": 5,
+        "same": 0,
+        "worse": 7
+       },
+       "checkpoints": {
+        "mean": -3.3333,
+        "better": 3,
+        "same": 1,
+        "worse": 8
+       },
+       "mirrorTrack": {
+        "mean": -0.5833,
+        "better": 3,
+        "same": 8,
+        "worse": 1
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": 0.0077,
+         "2": 0.0004
+        },
+        "checkpoints": {
+         "1": -1.1667,
+         "2": -5.5
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.8893,
+      "heldOut": 0.867,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 44.33,
+      "miss": 12.17,
+      "crashes": 8.25,
+      "mirrorTrack": 22.92,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 28.9,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0037,
+        "better": 4,
+        "same": 0,
+        "worse": 8
+       },
+       "checkpoints": {
+        "mean": -3.75,
+        "better": 4,
+        "same": 1,
+        "worse": 7
+       },
+       "mirrorTrack": {
+        "mean": -2,
+        "better": 3,
+        "same": 7,
+        "worse": 2
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": 0.0004,
+         "2": -0.0077
+        },
+        "checkpoints": {
+         "1": -0.1667,
+         "2": -7.3333
+        }
+       }
+      }
+     }
+    },
+    "swap-trim60": {
+     "n": 12,
+     "base": "swap-trim0",
+     "default": {
+      "fresh": 0.8865,
+      "heldOut": 0.8611,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 48.25,
+      "miss": 8.25,
+      "crashes": 8.5,
+      "mirrorTrack": 29.67,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 40.1,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0035,
+        "better": 6,
+        "same": 0,
+        "worse": 6
+       },
+       "checkpoints": {
+        "mean": 1.0833,
+        "better": 5,
+        "same": 1,
+        "worse": 6
+       },
+       "mirrorTrack": {
+        "mean": 6.1667,
+        "better": 3,
+        "same": 8,
+        "worse": 1
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0071,
+         "2": 0.0002
+        },
+        "checkpoints": {
+         "1": 9.3333,
+         "2": -7.1667
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.8903,
+      "heldOut": 0.8645,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 50.17,
+      "miss": 6.5,
+      "crashes": 8.5,
+      "mirrorTrack": 28.67,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 34.9,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0026,
+        "better": 6,
+        "same": 0,
+        "worse": 6
+       },
+       "checkpoints": {
+        "mean": 2.0833,
+        "better": 6,
+        "same": 1,
+        "worse": 5
+       },
+       "mirrorTrack": {
+        "mean": 3.75,
+        "better": 3,
+        "same": 5,
+        "worse": 4
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0052,
+         "2": 0
+        },
+        "checkpoints": {
+         "1": 9.3333,
+         "2": -5.1667
+        }
+       }
+      }
+     }
+    },
+    "late-trim0": {
+     "n": 12,
+     "base": null,
+     "default": {
+      "fresh": 0.8953,
+      "heldOut": 0.9091,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 43.67,
+      "miss": 15.17,
+      "crashes": 10.33,
+      "mirrorTrack": 23.08,
+      "lags": [
+       1,
+       1,
+       1,
+       2,
+       1,
+       12,
+       1,
+       1,
+       1,
+       2,
+       1,
+       1
+      ],
+      "lagNot1": 3,
+      "maxAbsWeight": 25.4,
+      "vsBase": null
+     },
+     "lag1": {
+      "fresh": 0.9144,
+      "heldOut": 0.9134,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 44.5,
+      "miss": 14.17,
+      "crashes": 10.25,
+      "mirrorTrack": 23.25,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 27.3,
+      "vsBase": null
+     }
+    },
+    "late-trim30": {
+     "n": 12,
+     "base": "late-trim0",
+     "default": {
+      "fresh": 0.9097,
+      "heldOut": 0.9152,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 44.92,
+      "miss": 11.92,
+      "crashes": 10.42,
+      "mirrorTrack": 23.75,
+      "lags": [
+       4,
+       1,
+       1,
+       1,
+       1,
+       1,
+       2,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 2,
+      "maxAbsWeight": 31.4,
+      "vsBase": {
+       "fresh": {
+        "mean": 0.0144,
+        "better": 6,
+        "same": 0,
+        "worse": 6
+       },
+       "checkpoints": {
+        "mean": 1.25,
+        "better": 5,
+        "same": 3,
+        "worse": 4
+       },
+       "mirrorTrack": {
+        "mean": 0.6667,
+        "better": 5,
+        "same": 7,
+        "worse": 0
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": 0.0262,
+         "2": 0.0026
+        },
+        "checkpoints": {
+         "1": -2,
+         "2": 4.5
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.9197,
+      "heldOut": 0.9202,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 43.42,
+      "miss": 13.08,
+      "crashes": 10.67,
+      "mirrorTrack": 23.5,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 29.3,
+      "vsBase": {
+       "fresh": {
+        "mean": 0.0052,
+        "better": 7,
+        "same": 0,
+        "worse": 5
+       },
+       "checkpoints": {
+        "mean": -1.0833,
+        "better": 4,
+        "same": 4,
+        "worse": 4
+       },
+       "mirrorTrack": {
+        "mean": 0.25,
+        "better": 2,
+        "same": 10,
+        "worse": 0
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0017,
+         "2": 0.0121
+        },
+        "checkpoints": {
+         "1": -5.3333,
+         "2": 3.1667
+        }
+       }
+      }
+     }
+    },
+    "late-trim60": {
+     "n": 12,
+     "base": "late-trim0",
+     "default": {
+      "fresh": 0.9061,
+      "heldOut": 0.921,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 11,
+      "pulledAway": 155,
+      "checkpoints": 42.67,
+      "miss": 15.67,
+      "crashes": 10.17,
+      "mirrorTrack": 24.83,
+      "lags": [
+       2,
+       4,
+       2,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 3,
+      "maxAbsWeight": 38.5,
+      "vsBase": {
+       "fresh": {
+        "mean": 0.0108,
+        "better": 7,
+        "same": 0,
+        "worse": 5
+       },
+       "checkpoints": {
+        "mean": -1,
+        "better": 4,
+        "same": 3,
+        "worse": 5
+       },
+       "mirrorTrack": {
+        "mean": 1.75,
+        "better": 4,
+        "same": 6,
+        "worse": 2
+       },
+       "pulledAway": {
+        "mean": -0.0833,
+        "better": 0,
+        "same": 11,
+        "worse": 1
+       },
+       "bySession": {
+        "fresh": {
+         "1": 0.0139,
+         "2": 0.0077
+        },
+        "checkpoints": {
+         "1": -4,
+         "2": 2
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.9088,
+      "heldOut": 0.9218,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 43.67,
+      "miss": 14.17,
+      "crashes": 10.25,
+      "mirrorTrack": 24.58,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 33.5,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0056,
+        "better": 5,
+        "same": 0,
+        "worse": 7
+       },
+       "checkpoints": {
+        "mean": -0.8333,
+        "better": 4,
+        "same": 4,
+        "worse": 4
+       },
+       "mirrorTrack": {
+        "mean": 1.3333,
+        "better": 2,
+        "same": 10,
+        "worse": 0
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0144,
+         "2": 0.0032
+        },
+        "checkpoints": {
+         "1": -4.8333,
+         "2": 3.1667
+        }
+       }
+      }
+     }
+    }
+   },
+   "perTeacher": [
+    {
+     "seed": "h2-s1-0",
+     "session": 1,
+     "keyShare": [
+      0.001,
+      1,
+      0.658,
+      0.939
+     ],
+     "teacher": [
+      18,
+      10,
+      "0101"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9821,
+       0,
+       12,
+       1,
+       0.9914,
+       0,
+       12,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9925,
+       11,
+       17,
+       1,
+       0.9925,
+       11,
+       17,
+       1,
+       "0101"
+      ],
+      "label": [
+       0.977,
+       13,
+       22,
+       1,
+       0.9872,
+       13,
+       19,
+       1,
+       "0101"
+      ],
+      "label-mirror": [
+       0.7198,
+       13,
+       12,
+       14,
+       0.9358,
+       13,
+       13,
+       1,
+       "0001"
+      ],
+      "label-trim30": [
+       0.981,
+       13,
+       19,
+       1,
+       0.981,
+       13,
+       19,
+       1,
+       "0101"
+      ],
+      "swap-trim0": [
+       0.9671,
+       13,
+       16,
+       1,
+       0.9671,
+       13,
+       16,
+       1,
+       "0101"
+      ],
+      "swap-trim30": [
+       0.954,
+       13,
+       14,
+       1,
+       0.9261,
+       13,
+       20,
+       1,
+       "0101"
+      ],
+      "swap-trim60": [
+       0.9781,
+       13,
+       18,
+       1,
+       0.9711,
+       13,
+       18,
+       1,
+       "0101"
+      ],
+      "late-trim0": [
+       0.9802,
+       13,
+       19,
+       1,
+       0.9748,
+       13,
+       17,
+       1,
+       "0101"
+      ],
+      "late-trim30": [
+       0.9007,
+       13,
+       21,
+       4,
+       0.9499,
+       13,
+       17,
+       1,
+       "0101"
+      ],
+      "late-trim60": [
+       0.9451,
+       13,
+       19,
+       2,
+       0.9344,
+       13,
+       17,
+       1,
+       "0101"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s1-1",
+     "session": 1,
+     "keyShare": [
+      0.882,
+      0.225,
+      0,
+      0.254
+     ],
+     "teacher": [
+      52,
+      13,
+      "1000"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9928,
+       0,
+       13,
+       1,
+       0.9928,
+       0,
+       13,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9942,
+       13,
+       52,
+       1,
+       0.9941,
+       13,
+       52,
+       1,
+       "1000"
+      ],
+      "label": [
+       0.992,
+       13,
+       52,
+       1,
+       0.9944,
+       13,
+       52,
+       1,
+       "1000"
+      ],
+      "label-mirror": [
+       0.9886,
+       13,
+       52,
+       1,
+       0.9918,
+       13,
+       51,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.9863,
+       13,
+       52,
+       1,
+       0.9845,
+       13,
+       52,
+       1,
+       "1000"
+      ],
+      "swap-trim0": [
+       0.799,
+       13,
+       26,
+       1,
+       0.799,
+       13,
+       26,
+       1,
+       "1000"
+      ],
+      "swap-trim30": [
+       0.8568,
+       13,
+       34,
+       1,
+       0.8568,
+       13,
+       34,
+       1,
+       "1000"
+      ],
+      "swap-trim60": [
+       0.8715,
+       13,
+       52,
+       1,
+       0.8715,
+       13,
+       52,
+       1,
+       "1000"
+      ],
+      "late-trim0": [
+       0.9882,
+       13,
+       52,
+       1,
+       0.9912,
+       13,
+       52,
+       1,
+       "1000"
+      ],
+      "late-trim30": [
+       0.9639,
+       13,
+       52,
+       1,
+       0.9639,
+       13,
+       52,
+       1,
+       "1000"
+      ],
+      "late-trim60": [
+       0.9156,
+       13,
+       39,
+       4,
+       0.961,
+       13,
+       52,
+       1,
+       "1000"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s1-3",
+     "session": 1,
+     "keyShare": [
+      0.69,
+      1,
+      0.54,
+      0.784
+     ],
+     "teacher": [
+      26,
+      13,
+      "1110"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9736,
+       0,
+       12,
+       1,
+       0.9736,
+       0,
+       12,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9812,
+       13,
+       25,
+       1,
+       0.9812,
+       13,
+       25,
+       1,
+       "1110"
+      ],
+      "label": [
+       0.9322,
+       13,
+       25,
+       1,
+       0.973,
+       13,
+       26,
+       1,
+       "1110"
+      ],
+      "label-mirror": [
+       0.8939,
+       13,
+       26,
+       1,
+       0.8939,
+       13,
+       26,
+       1,
+       "1110"
+      ],
+      "label-trim30": [
+       0.9755,
+       13,
+       26,
+       1,
+       0.9755,
+       13,
+       26,
+       1,
+       "1110"
+      ],
+      "swap-trim0": [
+       0.9289,
+       13,
+       25,
+       2,
+       0.9388,
+       13,
+       25,
+       1,
+       "1110"
+      ],
+      "swap-trim30": [
+       0.9448,
+       13,
+       25,
+       1,
+       0.9448,
+       13,
+       25,
+       1,
+       "1110"
+      ],
+      "swap-trim60": [
+       0.938,
+       13,
+       25,
+       1,
+       0.938,
+       13,
+       25,
+       1,
+       "1110"
+      ],
+      "late-trim0": [
+       0.8945,
+       13,
+       26,
+       1,
+       0.8945,
+       13,
+       26,
+       1,
+       "1110"
+      ],
+      "late-trim30": [
+       0.9523,
+       13,
+       26,
+       1,
+       0.9585,
+       13,
+       26,
+       1,
+       "1110"
+      ],
+      "late-trim60": [
+       0.9292,
+       13,
+       26,
+       2,
+       0.9442,
+       13,
+       26,
+       1,
+       "1110"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s1-5",
+     "session": 1,
+     "keyShare": [
+      1,
+      0.83,
+      0.457,
+      0.235
+     ],
+     "teacher": [
+      33,
+      13,
+      "1110"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9906,
+       0,
+       12,
+       1,
+       0.9906,
+       0,
+       12,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9873,
+       13,
+       32,
+       1,
+       0.9906,
+       13,
+       31,
+       1,
+       "1110"
+      ],
+      "label": [
+       0.992,
+       13,
+       31,
+       1,
+       0.9901,
+       13,
+       32,
+       1,
+       "1110"
+      ],
+      "label-mirror": [
+       0.923,
+       13,
+       27,
+       1,
+       0.9221,
+       13,
+       27,
+       1,
+       "1110"
+      ],
+      "label-trim30": [
+       0.9799,
+       13,
+       32,
+       1,
+       0.9805,
+       13,
+       31,
+       1,
+       "1110"
+      ],
+      "swap-trim0": [
+       0.9596,
+       13,
+       30,
+       1,
+       0.9596,
+       13,
+       30,
+       1,
+       "1110"
+      ],
+      "swap-trim30": [
+       0.9373,
+       13,
+       31,
+       1,
+       0.9458,
+       13,
+       31,
+       1,
+       "1110"
+      ],
+      "swap-trim60": [
+       0.8858,
+       13,
+       32,
+       1,
+       0.9142,
+       13,
+       32,
+       1,
+       "1110"
+      ],
+      "late-trim0": [
+       0.9626,
+       13,
+       30,
+       2,
+       0.9714,
+       13,
+       31,
+       1,
+       "1110"
+      ],
+      "late-trim30": [
+       0.9392,
+       13,
+       33,
+       1,
+       0.9392,
+       13,
+       33,
+       1,
+       "1110"
+      ],
+      "late-trim60": [
+       0.9331,
+       13,
+       32,
+       1,
+       0.9331,
+       13,
+       32,
+       1,
+       "1110"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s1-6",
+     "session": 1,
+     "keyShare": [
+      0.68,
+      0,
+      0.273,
+      0.217
+     ],
+     "teacher": [
+      38,
+      13,
+      "1000"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9819,
+       0,
+       12,
+       1,
+       0.9808,
+       0,
+       12,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9861,
+       13,
+       40,
+       1,
+       0.9861,
+       13,
+       40,
+       1,
+       "1000"
+      ],
+      "label": [
+       0.9808,
+       13,
+       43,
+       1,
+       0.9808,
+       13,
+       43,
+       1,
+       "1000"
+      ],
+      "label-mirror": [
+       0.7168,
+       13,
+       26,
+       14,
+       0.9631,
+       13,
+       38,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.9749,
+       13,
+       44,
+       1,
+       0.9749,
+       13,
+       44,
+       1,
+       "1000"
+      ],
+      "swap-trim0": [
+       0.9153,
+       13,
+       26,
+       1,
+       0.9153,
+       13,
+       26,
+       1,
+       "1000"
+      ],
+      "swap-trim30": [
+       0.8981,
+       13,
+       39,
+       1,
+       0.8926,
+       13,
+       36,
+       1,
+       "1000"
+      ],
+      "swap-trim60": [
+       0.9108,
+       13,
+       32,
+       1,
+       0.9108,
+       13,
+       32,
+       1,
+       "1000"
+      ],
+      "late-trim0": [
+       0.965,
+       13,
+       40,
+       1,
+       0.9718,
+       13,
+       41,
+       1,
+       "1000"
+      ],
+      "late-trim30": [
+       0.9625,
+       13,
+       40,
+       1,
+       0.9625,
+       13,
+       40,
+       1,
+       "1000"
+      ],
+      "late-trim60": [
+       0.9522,
+       13,
+       45,
+       1,
+       0.9522,
+       13,
+       45,
+       1,
+       "1000"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s1-7",
+     "session": 1,
+     "keyShare": [
+      1,
+      0.229,
+      0,
+      0.475
+     ],
+     "teacher": [
+      83,
+      13,
+      "1000"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9839,
+       1,
+       18,
+       1,
+       0.9839,
+       1,
+       18,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9865,
+       13,
+       82,
+       1,
+       0.9865,
+       13,
+       82,
+       1,
+       "1000"
+      ],
+      "label": [
+       0.9796,
+       13,
+       87,
+       1,
+       0.9796,
+       13,
+       87,
+       1,
+       "1000"
+      ],
+      "label-mirror": [
+       0.6623,
+       13,
+       79,
+       10,
+       0.8075,
+       13,
+       47,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.9792,
+       13,
+       80,
+       1,
+       0.9838,
+       13,
+       82,
+       1,
+       "1000"
+      ],
+      "swap-trim0": [
+       0.87,
+       13,
+       63,
+       1,
+       0.87,
+       13,
+       63,
+       1,
+       "1000"
+      ],
+      "swap-trim30": [
+       0.8952,
+       13,
+       36,
+       1,
+       0.8863,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "swap-trim60": [
+       0.8129,
+       13,
+       83,
+       1,
+       0.8129,
+       13,
+       83,
+       1,
+       "1000"
+      ],
+      "late-trim0": [
+       0.6709,
+       13,
+       52,
+       12,
+       0.8773,
+       13,
+       68,
+       1,
+       "1000"
+      ],
+      "late-trim30": [
+       0.9001,
+       13,
+       35,
+       1,
+       0.8969,
+       13,
+       35,
+       1,
+       "1000"
+      ],
+      "late-trim60": [
+       0.8696,
+       13,
+       34,
+       1,
+       0.8696,
+       13,
+       34,
+       1,
+       "1000"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s2-0",
+     "session": 2,
+     "keyShare": [
+      0.517,
+      0.351,
+      0.893,
+      0.553
+     ],
+     "teacher": [
+      29,
+      13,
+      "1110"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9476,
+       0,
+       13,
+       1,
+       0.9476,
+       0,
+       13,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9703,
+       13,
+       32,
+       1,
+       0.9703,
+       13,
+       32,
+       1,
+       "1110"
+      ],
+      "label": [
+       0.9714,
+       13,
+       32,
+       1,
+       0.9659,
+       13,
+       27,
+       1,
+       "1110"
+      ],
+      "label-mirror": [
+       0.9076,
+       13,
+       27,
+       1,
+       0.9076,
+       13,
+       27,
+       1,
+       "1110"
+      ],
+      "label-trim30": [
+       0.971,
+       13,
+       29,
+       1,
+       0.971,
+       13,
+       29,
+       1,
+       "1110"
+      ],
+      "swap-trim0": [
+       0.8975,
+       13,
+       29,
+       1,
+       0.8975,
+       13,
+       29,
+       1,
+       "1110"
+      ],
+      "swap-trim30": [
+       0.9067,
+       13,
+       28,
+       1,
+       0.9067,
+       13,
+       28,
+       1,
+       "1110"
+      ],
+      "swap-trim60": [
+       0.9142,
+       13,
+       26,
+       1,
+       0.9142,
+       13,
+       26,
+       1,
+       "1110"
+      ],
+      "late-trim0": [
+       0.9015,
+       13,
+       27,
+       1,
+       0.9015,
+       13,
+       27,
+       1,
+       "1110"
+      ],
+      "late-trim30": [
+       0.9027,
+       13,
+       26,
+       2,
+       0.9262,
+       13,
+       26,
+       1,
+       "1110"
+      ],
+      "late-trim60": [
+       0.921,
+       13,
+       27,
+       1,
+       0.921,
+       13,
+       27,
+       1,
+       "1110"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s2-4",
+     "session": 2,
+     "keyShare": [
+      0.452,
+      0.673,
+      0.522,
+      0
+     ],
+     "teacher": [
+      49,
+      13,
+      "1110"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9796,
+       0,
+       12,
+       1,
+       0.9796,
+       0,
+       12,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.981,
+       13,
+       49,
+       1,
+       0.981,
+       13,
+       49,
+       1,
+       "1110"
+      ],
+      "label": [
+       0.9839,
+       13,
+       50,
+       1,
+       0.982,
+       13,
+       50,
+       1,
+       "1110"
+      ],
+      "label-mirror": [
+       0.9021,
+       13,
+       28,
+       1,
+       0.9036,
+       13,
+       32,
+       1,
+       "1110"
+      ],
+      "label-trim30": [
+       0.9828,
+       13,
+       49,
+       1,
+       0.9828,
+       13,
+       49,
+       1,
+       "1110"
+      ],
+      "swap-trim0": [
+       0.9234,
+       13,
+       30,
+       1,
+       0.9234,
+       13,
+       30,
+       1,
+       "1110"
+      ],
+      "swap-trim30": [
+       0.8834,
+       13,
+       19,
+       1,
+       0.8834,
+       13,
+       19,
+       1,
+       "1110"
+      ],
+      "swap-trim60": [
+       0.8859,
+       13,
+       13,
+       1,
+       0.9345,
+       13,
+       37,
+       1,
+       "1110"
+      ],
+      "late-trim0": [
+       0.8963,
+       13,
+       22,
+       1,
+       0.8941,
+       13,
+       18,
+       1,
+       "1110"
+      ],
+      "late-trim30": [
+       0.8973,
+       13,
+       39,
+       1,
+       0.8973,
+       13,
+       39,
+       1,
+       "1110"
+      ],
+      "late-trim60": [
+       0.9075,
+       12,
+       42,
+       1,
+       0.8908,
+       13,
+       44,
+       1,
+       "1110"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s2-5",
+     "session": 2,
+     "keyShare": [
+      1,
+      0.455,
+      0.064,
+      0.183
+     ],
+     "teacher": [
+      52,
+      13,
+      "1100"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9888,
+       0,
+       13,
+       1,
+       0.9888,
+       0,
+       13,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9818,
+       13,
+       52,
+       1,
+       0.9862,
+       13,
+       52,
+       1,
+       "1100"
+      ],
+      "label": [
+       0.9852,
+       13,
+       52,
+       1,
+       0.9852,
+       13,
+       52,
+       1,
+       "1100"
+      ],
+      "label-mirror": [
+       0.9409,
+       13,
+       24,
+       1,
+       0.9409,
+       13,
+       24,
+       1,
+       "1110"
+      ],
+      "label-trim30": [
+       0.9035,
+       13,
+       52,
+       1,
+       0.9032,
+       13,
+       48,
+       1,
+       "1100"
+      ],
+      "swap-trim0": [
+       0.8478,
+       13,
+       50,
+       1,
+       0.8478,
+       13,
+       50,
+       1,
+       "1100"
+      ],
+      "swap-trim30": [
+       0.8475,
+       13,
+       43,
+       1,
+       0.8475,
+       13,
+       43,
+       1,
+       "1100"
+      ],
+      "swap-trim60": [
+       0.8381,
+       13,
+       40,
+       1,
+       0.8246,
+       13,
+       39,
+       1,
+       "1100"
+      ],
+      "late-trim0": [
+       0.9367,
+       13,
+       43,
+       1,
+       0.9474,
+       13,
+       42,
+       1,
+       "1100"
+      ],
+      "late-trim30": [
+       0.9151,
+       13,
+       49,
+       1,
+       0.931,
+       13,
+       46,
+       1,
+       "1100"
+      ],
+      "late-trim60": [
+       0.8995,
+       13,
+       39,
+       1,
+       0.8995,
+       13,
+       39,
+       1,
+       "1100"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s2-6",
+     "session": 2,
+     "keyShare": [
+      0.32,
+      0.901,
+      1,
+      0.602
+     ],
+     "teacher": [
+      29,
+      10,
+      "1110"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9689,
+       0,
+       10,
+       1,
+       0.9689,
+       0,
+       10,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9684,
+       10,
+       28,
+       2,
+       0.9764,
+       9,
+       28,
+       1,
+       "1110"
+      ],
+      "label": [
+       0.9864,
+       11,
+       32,
+       1,
+       0.9864,
+       11,
+       32,
+       1,
+       "1110"
+      ],
+      "label-mirror": [
+       0.9469,
+       12,
+       32,
+       1,
+       0.9469,
+       12,
+       32,
+       1,
+       "1110"
+      ],
+      "label-trim30": [
+       0.9622,
+       11,
+       29,
+       2,
+       0.9768,
+       11,
+       32,
+       1,
+       "1110"
+      ],
+      "swap-trim0": [
+       0.8434,
+       13,
+       34,
+       1,
+       0.8337,
+       13,
+       37,
+       1,
+       "1110"
+      ],
+      "swap-trim30": [
+       0.8322,
+       13,
+       30,
+       1,
+       0.8322,
+       13,
+       30,
+       1,
+       "1110"
+      ],
+      "swap-trim60": [
+       0.8277,
+       13,
+       24,
+       1,
+       0.8171,
+       13,
+       24,
+       1,
+       "1110"
+      ],
+      "late-trim0": [
+       0.8153,
+       13,
+       38,
+       2,
+       0.8167,
+       13,
+       37,
+       1,
+       "1110"
+      ],
+      "late-trim30": [
+       0.821,
+       13,
+       37,
+       1,
+       0.821,
+       13,
+       37,
+       1,
+       "1110"
+      ],
+      "late-trim60": [
+       0.8228,
+       13,
+       37,
+       1,
+       0.8222,
+       13,
+       36,
+       1,
+       "1110"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s2-7",
+     "session": 2,
+     "keyShare": [
+      0.685,
+      0.622,
+      0.33,
+      0
+     ],
+     "teacher": [
+      195,
+      13,
+      "1100"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9788,
+       0,
+       13,
+       1,
+       0.9788,
+       0,
+       13,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9833,
+       13,
+       195,
+       1,
+       0.9833,
+       13,
+       195,
+       1,
+       "1100"
+      ],
+      "label": [
+       0.9835,
+       13,
+       194,
+       1,
+       0.9835,
+       13,
+       194,
+       1,
+       "1100"
+      ],
+      "label-mirror": [
+       0.9117,
+       13,
+       28,
+       1,
+       0.9101,
+       13,
+       39,
+       1,
+       "1110"
+      ],
+      "label-trim30": [
+       0.9835,
+       13,
+       194,
+       1,
+       0.9835,
+       13,
+       194,
+       1,
+       "1100"
+      ],
+      "swap-trim0": [
+       0.9403,
+       13,
+       195,
+       1,
+       0.9403,
+       13,
+       195,
+       1,
+       "1100"
+      ],
+      "swap-trim30": [
+       0.9353,
+       13,
+       193,
+       1,
+       0.9353,
+       13,
+       193,
+       1,
+       "1100"
+      ],
+      "swap-trim60": [
+       0.9418,
+       13,
+       194,
+       1,
+       0.9418,
+       13,
+       194,
+       1,
+       "1100"
+      ],
+      "late-trim0": [
+       0.9104,
+       13,
+       127,
+       1,
+       0.9104,
+       13,
+       127,
+       1,
+       "1100"
+      ],
+      "late-trim30": [
+       0.9092,
+       13,
+       141,
+       1,
+       0.9368,
+       13,
+       130,
+       1,
+       "1100"
+      ],
+      "late-trim60": [
+       0.934,
+       13,
+       136,
+       1,
+       0.934,
+       13,
+       136,
+       1,
+       "1100"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s2-8",
+     "session": 2,
+     "keyShare": [
+      1,
+      0.18,
+      0.042,
+      0.65
+     ],
+     "teacher": [
+      40,
+      13,
+      "1000"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9521,
+       0,
+       11,
+       1,
+       0.9521,
+       0,
+       11,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9454,
+       13,
+       40,
+       1,
+       0.9454,
+       13,
+       40,
+       1,
+       "1000"
+      ],
+      "label": [
+       0.9601,
+       13,
+       42,
+       1,
+       0.9601,
+       13,
+       42,
+       1,
+       "1000"
+      ],
+      "label-mirror": [
+       0.9073,
+       13,
+       42,
+       1,
+       0.9254,
+       13,
+       38,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.9514,
+       13,
+       40,
+       1,
+       0.9514,
+       13,
+       40,
+       1,
+       "1000"
+      ],
+      "swap-trim0": [
+       0.7874,
+       13,
+       42,
+       1,
+       0.8227,
+       13,
+       50,
+       1,
+       "1000"
+      ],
+      "swap-trim30": [
+       0.8369,
+       13,
+       34,
+       1,
+       0.8139,
+       13,
+       34,
+       1,
+       "1000"
+      ],
+      "swap-trim60": [
+       0.8331,
+       13,
+       40,
+       1,
+       0.8331,
+       13,
+       40,
+       1,
+       "1000"
+      ],
+      "late-trim0": [
+       0.8222,
+       13,
+       48,
+       1,
+       0.8222,
+       13,
+       48,
+       1,
+       "1000"
+      ],
+      "late-trim30": [
+       0.8527,
+       13,
+       40,
+       1,
+       0.8527,
+       13,
+       40,
+       1,
+       "1000"
+      ],
+      "late-trim60": [
+       0.844,
+       13,
+       36,
+       1,
+       0.844,
+       13,
+       36,
+       1,
+       "1000"
+      ]
+     }
+    }
+   ]
+  },
+  "Triangle": {
+   "teachers": 12,
+   "refused": [
+    "h2-s1-1",
+    "h2-s1-5",
+    "h2-s2-4"
+   ],
+   "keyBalance": [
+    0.632,
+    0.414,
+    0.466,
+    0.43
+   ],
+   "teacher": {
+    "checkpoints": 43.83,
+    "mirrorTrack": 43.58,
+    "pulledAway": 155,
+    "pulledAwayAll": 11,
+    "onMirrorTrack": 36.92,
+    "crashes": 7.42
+   },
+   "forwardOnly": {
+    "checkpoints": 39
+   },
+   "recordings": {
+    "clean": {
+     "crashes": 20.3,
+     "rows": 15624,
+     "runs": 30.9,
+     "crashedRuns": 0.537
+    },
+    "swap": {
+     "crashes": 21.5,
+     "rows": 15762,
+     "runs": 32.1,
+     "crashedRuns": 0.589,
+     "mistakeShare": 0.066,
+     "crashesAfterMistake": 0.355,
+     "stepsAfterMistake": 0.245,
+     "pooled": {
+      "mistakeRows": 13382,
+      "rows": 189140,
+      "trim30": {
+       "droppedRows": 7740,
+       "droppedMistakes": 658,
+       "mistakeShareOfDropped": 0.085,
+       "shareOfMistakesRemoved": 0.049
+      },
+      "trim60": {
+       "droppedRows": 15480,
+       "droppedMistakes": 1244,
+       "mistakeShareOfDropped": 0.08,
+       "shareOfMistakesRemoved": 0.093
+      }
+     },
+     "mistakeShareOfDropped": {
+      "30": 0.141,
+      "60": 0.12
+     }
+    },
+    "late": {
+     "crashes": 21.7,
+     "rows": 16005,
+     "runs": 32,
+     "crashedRuns": 0.594,
+     "mistakeShare": 0.024,
+     "crashesAfterMistake": 0.461,
+     "stepsAfterMistake": 0.126,
+     "pooled": {
+      "mistakeRows": 4685,
+      "rows": 192055,
+      "trim30": {
+       "droppedRows": 7800,
+       "droppedMistakes": 855,
+       "mistakeShareOfDropped": 0.11,
+       "shareOfMistakesRemoved": 0.182
+      },
+      "trim60": {
+       "droppedRows": 15600,
+       "droppedMistakes": 1197,
+       "mistakeShareOfDropped": 0.077,
+       "shareOfMistakesRemoved": 0.255
+      }
+     },
+     "mistakeShareOfDropped": {
+      "30": 0.141,
+      "60": 0.12
+     }
+    }
+   },
+   "arms": {
+    "rest-keep": {
+     "n": 12,
+     "base": "label",
+     "default": {
+      "fresh": 0.9604,
+      "heldOut": 0.9755,
+      "keysForwardAtRest": 0,
+      "pulledAwayAll": 0,
+      "pulledAway": 2,
+      "checkpoints": 10.08,
+      "miss": 33.75,
+      "crashes": 0.08,
+      "mirrorTrack": 10.33,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 49.5,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0085,
+        "better": 5,
+        "same": 0,
+        "worse": 7
+       },
+       "checkpoints": {
+        "mean": -35.8333,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "mirrorTrack": {
+        "mean": -25.3333,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "pulledAway": {
+        "mean": -12.8333,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0003,
+         "2": -0.0167
+        },
+        "checkpoints": {
+         "1": -36.3333,
+         "2": -35.3333
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.9604,
+      "heldOut": 0.9753,
+      "keysForwardAtRest": 0,
+      "pulledAwayAll": 0,
+      "pulledAway": 2,
+      "checkpoints": 10.08,
+      "miss": 33.75,
+      "crashes": 0.08,
+      "mirrorTrack": 10.33,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 49.4,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0005,
+        "better": 7,
+        "same": 0,
+        "worse": 5
+       },
+       "checkpoints": {
+        "mean": -35.8333,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "mirrorTrack": {
+        "mean": -25.3333,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "pulledAway": {
+        "mean": -12.8333,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "bySession": {
+        "fresh": {
+         "1": 0.001,
+         "2": -0.002
+        },
+        "checkpoints": {
+         "1": -36.1667,
+         "2": -35.5
+        }
+       }
+      }
+     }
+    },
+    "rest-drop": {
+     "n": 12,
+     "base": "label",
+     "default": {
+      "fresh": 0.9512,
+      "heldOut": 0.9769,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 44,
+      "miss": 3.17,
+      "crashes": 8.75,
+      "mirrorTrack": 35.42,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 49.3,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0178,
+        "better": 3,
+        "same": 0,
+        "worse": 9
+       },
+       "checkpoints": {
+        "mean": -1.9167,
+        "better": 1,
+        "same": 4,
+        "worse": 7
+       },
+       "mirrorTrack": {
+        "mean": -0.25,
+        "better": 4,
+        "same": 6,
+        "worse": 2
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0192,
+         "2": -0.0163
+        },
+        "checkpoints": {
+         "1": -3,
+         "2": -0.8333
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.9516,
+      "heldOut": 0.9773,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 44.08,
+      "miss": 3.25,
+      "crashes": 8.75,
+      "mirrorTrack": 35.42,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 49.4,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0094,
+        "better": 5,
+        "same": 0,
+        "worse": 7
+       },
+       "checkpoints": {
+        "mean": -1.8333,
+        "better": 0,
+        "same": 5,
+        "worse": 7
+       },
+       "mirrorTrack": {
+        "mean": -0.25,
+        "better": 4,
+        "same": 5,
+        "worse": 3
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0179,
+         "2": -0.0008
+        },
+        "checkpoints": {
+         "1": -2.8333,
+         "2": -0.8333
+        }
+       }
+      }
+     }
+    },
+    "label": {
+     "n": 12,
+     "base": null,
+     "default": {
+      "fresh": 0.969,
+      "heldOut": 0.9789,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 45.92,
+      "miss": 4.25,
+      "crashes": 8.25,
+      "mirrorTrack": 35.67,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       2,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 1,
+      "maxAbsWeight": 52.8,
+      "vsBase": null
+     },
+     "lag1": {
+      "fresh": 0.9609,
+      "heldOut": 0.9779,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 45.92,
+      "miss": 4.58,
+      "crashes": 7.83,
+      "mirrorTrack": 35.67,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 48.7,
+      "vsBase": null
+     }
+    },
+    "label-mirror": {
+     "n": 12,
+     "base": "label",
+     "default": {
+      "fresh": 0.8885,
+      "heldOut": 0.9233,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 43.75,
+      "miss": 6.92,
+      "crashes": 8.17,
+      "mirrorTrack": 40.25,
+      "lags": [
+       1,
+       1,
+       2,
+       10,
+       1,
+       8,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 3,
+      "maxAbsWeight": 74.3,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0804,
+        "better": 0,
+        "same": 0,
+        "worse": 12
+       },
+       "checkpoints": {
+        "mean": -2.1667,
+        "better": 6,
+        "same": 1,
+        "worse": 5
+       },
+       "mirrorTrack": {
+        "mean": 4.5833,
+        "better": 10,
+        "same": 0,
+        "worse": 2
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.1213,
+         "2": -0.0396
+        },
+        "checkpoints": {
+         "1": -7.3333,
+         "2": 3
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.9282,
+      "heldOut": 0.928,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 44.42,
+      "miss": 6.92,
+      "crashes": 9.08,
+      "mirrorTrack": 42.83,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 66.6,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0328,
+        "better": 1,
+        "same": 0,
+        "worse": 11
+       },
+       "checkpoints": {
+        "mean": -1.5,
+        "better": 3,
+        "same": 4,
+        "worse": 5
+       },
+       "mirrorTrack": {
+        "mean": 7.1667,
+        "better": 10,
+        "same": 1,
+        "worse": 1
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0552,
+         "2": -0.0103
+        },
+        "checkpoints": {
+         "1": -5.5,
+         "2": 2.5
+        }
+       }
+      }
+     }
+    },
+    "label-trim30": {
+     "n": 12,
+     "base": "label",
+     "default": {
+      "fresh": 0.9575,
+      "heldOut": 0.9747,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 45.33,
+      "miss": 4.17,
+      "crashes": 8.42,
+      "mirrorTrack": 35.17,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       2,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 1,
+      "maxAbsWeight": 57.9,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0115,
+        "better": 3,
+        "same": 2,
+        "worse": 7
+       },
+       "checkpoints": {
+        "mean": -0.5833,
+        "better": 2,
+        "same": 6,
+        "worse": 4
+       },
+       "mirrorTrack": {
+        "mean": -0.5,
+        "better": 3,
+        "same": 5,
+        "worse": 4
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0109,
+         "2": -0.0121
+        },
+        "checkpoints": {
+         "1": -0.1667,
+         "2": -1
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.9502,
+      "heldOut": 0.9748,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 45.33,
+      "miss": 4.17,
+      "crashes": 8,
+      "mirrorTrack": 35.17,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 49.7,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0108,
+        "better": 4,
+        "same": 2,
+        "worse": 6
+       },
+       "checkpoints": {
+        "mean": -0.5833,
+        "better": 2,
+        "same": 7,
+        "worse": 3
+       },
+       "mirrorTrack": {
+        "mean": -0.5,
+        "better": 3,
+        "same": 6,
+        "worse": 3
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0095,
+         "2": -0.012
+        },
+        "checkpoints": {
+         "1": 0.1667,
+         "2": -1.3333
+        }
+       }
+      }
+     }
+    },
+    "swap-trim0": {
+     "n": 12,
+     "base": null,
+     "default": {
+      "fresh": 0.9079,
+      "heldOut": 0.8333,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 41.17,
+      "miss": 6.33,
+      "crashes": 8.83,
+      "mirrorTrack": 35.33,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       2,
+       1,
+       1,
+       2,
+       1,
+       1
+      ],
+      "lagNot1": 2,
+      "maxAbsWeight": 15.1,
+      "vsBase": null
+     },
+     "lag1": {
+      "fresh": 0.9093,
+      "heldOut": 0.8316,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 41,
+      "miss": 6,
+      "crashes": 8.67,
+      "mirrorTrack": 36.67,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 15.4,
+      "vsBase": null
+     }
+    },
+    "swap-trim30": {
+     "n": 12,
+     "base": "swap-trim0",
+     "default": {
+      "fresh": 0.8743,
+      "heldOut": 0.8384,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 40.25,
+      "miss": 7.25,
+      "crashes": 8,
+      "mirrorTrack": 35.75,
+      "lags": [
+       1,
+       1,
+       1,
+       2,
+       1,
+       1,
+       2,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 2,
+      "maxAbsWeight": 25.4,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0335,
+        "better": 2,
+        "same": 1,
+        "worse": 9
+       },
+       "checkpoints": {
+        "mean": -0.9167,
+        "better": 2,
+        "same": 5,
+        "worse": 5
+       },
+       "mirrorTrack": {
+        "mean": 0.4167,
+        "better": 4,
+        "same": 7,
+        "worse": 1
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0397,
+         "2": -0.0273
+        },
+        "checkpoints": {
+         "1": -0.3333,
+         "2": -1.5
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.8878,
+      "heldOut": 0.8372,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 40.08,
+      "miss": 7.42,
+      "crashes": 7.58,
+      "mirrorTrack": 35,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 23.3,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0215,
+        "better": 3,
+        "same": 1,
+        "worse": 8
+       },
+       "checkpoints": {
+        "mean": -0.9167,
+        "better": 3,
+        "same": 4,
+        "worse": 5
+       },
+       "mirrorTrack": {
+        "mean": -1.6667,
+        "better": 3,
+        "same": 7,
+        "worse": 2
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0397,
+         "2": -0.0033
+        },
+        "checkpoints": {
+         "1": -0.3333,
+         "2": -1.5
+        }
+       }
+      }
+     }
+    },
+    "swap-trim60": {
+     "n": 12,
+     "base": "swap-trim0",
+     "default": {
+      "fresh": 0.898,
+      "heldOut": 0.8584,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 41.83,
+      "miss": 6.33,
+      "crashes": 7.17,
+      "mirrorTrack": 37.08,
+      "lags": [
+       1,
+       1,
+       1,
+       2,
+       1,
+       1,
+       1,
+       1,
+       2,
+       1,
+       1,
+       2
+      ],
+      "lagNot1": 3,
+      "maxAbsWeight": 19.6,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0098,
+        "better": 4,
+        "same": 1,
+        "worse": 7
+       },
+       "checkpoints": {
+        "mean": 0.6667,
+        "better": 3,
+        "same": 7,
+        "worse": 2
+       },
+       "mirrorTrack": {
+        "mean": 1.75,
+        "better": 5,
+        "same": 6,
+        "worse": 1
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0297,
+         "2": 0.01
+        },
+        "checkpoints": {
+         "1": 1,
+         "2": 0.3333
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.8871,
+      "heldOut": 0.8588,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 40.75,
+      "miss": 6.42,
+      "crashes": 7.42,
+      "mirrorTrack": 36.5,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 24.6,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0222,
+        "better": 5,
+        "same": 1,
+        "worse": 6
+       },
+       "checkpoints": {
+        "mean": -0.25,
+        "better": 3,
+        "same": 6,
+        "worse": 3
+       },
+       "mirrorTrack": {
+        "mean": -0.1667,
+        "better": 5,
+        "same": 4,
+        "worse": 3
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0303,
+         "2": -0.014
+        },
+        "checkpoints": {
+         "1": -0.5,
+         "2": 0
+        }
+       }
+      }
+     }
+    },
+    "late-trim0": {
+     "n": 12,
+     "base": null,
+     "default": {
+      "fresh": 0.8954,
+      "heldOut": 0.9279,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 42.67,
+      "miss": 5.17,
+      "crashes": 10.58,
+      "mirrorTrack": 35.42,
+      "lags": [
+       1,
+       1,
+       4,
+       2,
+       1,
+       1,
+       1,
+       16,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 3,
+      "maxAbsWeight": 33.9,
+      "vsBase": null
+     },
+     "lag1": {
+      "fresh": 0.9203,
+      "heldOut": 0.9301,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 42.58,
+      "miss": 4.92,
+      "crashes": 10.92,
+      "mirrorTrack": 36.25,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 32.6,
+      "vsBase": null
+     }
+    },
+    "late-trim30": {
+     "n": 12,
+     "base": "late-trim0",
+     "default": {
+      "fresh": 0.901,
+      "heldOut": 0.935,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 42.5,
+      "miss": 7.33,
+      "crashes": 9,
+      "mirrorTrack": 35.83,
+      "lags": [
+       1,
+       1,
+       4,
+       4,
+       1,
+       1,
+       1,
+       16,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 3,
+      "maxAbsWeight": 30.7,
+      "vsBase": {
+       "fresh": {
+        "mean": 0.0056,
+        "better": 6,
+        "same": 1,
+        "worse": 5
+       },
+       "checkpoints": {
+        "mean": -0.1667,
+        "better": 2,
+        "same": 6,
+        "worse": 4
+       },
+       "mirrorTrack": {
+        "mean": 0.4167,
+        "better": 3,
+        "same": 6,
+        "worse": 3
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": 0.0173,
+         "2": -0.006
+        },
+        "checkpoints": {
+         "1": 2.8333,
+         "2": -3.1667
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.906,
+      "heldOut": 0.9373,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 44.5,
+      "miss": 6.83,
+      "crashes": 9.92,
+      "mirrorTrack": 35.58,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 29.9,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0143,
+        "better": 3,
+        "same": 1,
+        "worse": 8
+       },
+       "checkpoints": {
+        "mean": 1.9167,
+        "better": 5,
+        "same": 6,
+        "worse": 1
+       },
+       "mirrorTrack": {
+        "mean": -0.6667,
+        "better": 0,
+        "same": 8,
+        "worse": 4
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0221,
+         "2": -0.0066
+        },
+        "checkpoints": {
+         "1": 3.5,
+         "2": 0.3333
+        }
+       }
+      }
+     }
+    },
+    "late-trim60": {
+     "n": 12,
+     "base": "late-trim0",
+     "default": {
+      "fresh": 0.9117,
+      "heldOut": 0.9394,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 43.5,
+      "miss": 6.83,
+      "crashes": 9,
+      "mirrorTrack": 37.42,
+      "lags": [
+       1,
+       1,
+       2,
+       2,
+       1,
+       1,
+       1,
+       16,
+       1,
+       1,
+       4,
+       1
+      ],
+      "lagNot1": 4,
+      "maxAbsWeight": 34.7,
+      "vsBase": {
+       "fresh": {
+        "mean": 0.0163,
+        "better": 5,
+        "same": 1,
+        "worse": 6
+       },
+       "checkpoints": {
+        "mean": 0.8333,
+        "better": 4,
+        "same": 5,
+        "worse": 3
+       },
+       "mirrorTrack": {
+        "mean": 2,
+        "better": 5,
+        "same": 6,
+        "worse": 1
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": 0.0397,
+         "2": -0.0072
+        },
+        "checkpoints": {
+         "1": 2,
+         "2": -0.3333
+        }
+       }
+      }
+     },
+     "lag1": {
+      "fresh": 0.917,
+      "heldOut": 0.9423,
+      "keysForwardAtRest": 11,
+      "pulledAwayAll": 12,
+      "pulledAway": 156,
+      "checkpoints": 43.5,
+      "miss": 4.5,
+      "crashes": 7.92,
+      "mirrorTrack": 37.08,
+      "lags": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ],
+      "lagNot1": 0,
+      "maxAbsWeight": 33.7,
+      "vsBase": {
+       "fresh": {
+        "mean": -0.0034,
+        "better": 3,
+        "same": 2,
+        "worse": 7
+       },
+       "checkpoints": {
+        "mean": 0.9167,
+        "better": 5,
+        "same": 4,
+        "worse": 3
+       },
+       "mirrorTrack": {
+        "mean": 0.8333,
+        "better": 3,
+        "same": 6,
+        "worse": 3
+       },
+       "pulledAway": {
+        "mean": 0,
+        "better": 0,
+        "same": 12,
+        "worse": 0
+       },
+       "bySession": {
+        "fresh": {
+         "1": -0.0021,
+         "2": -0.0046
+        },
+        "checkpoints": {
+         "1": 1.8333,
+         "2": 0
+        }
+       }
+      }
+     }
+    }
+   },
+   "perTeacher": [
+    {
+     "seed": "h2-s1-0",
+     "session": 1,
+     "keyShare": [
+      0.61,
+      0.35,
+      0.028,
+      0.096
+     ],
+     "teacher": [
+      42,
+      13,
+      "1000"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9808,
+       1,
+       14,
+       1,
+       0.9808,
+       1,
+       14,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9857,
+       13,
+       40,
+       1,
+       0.9857,
+       13,
+       40,
+       1,
+       "1000"
+      ],
+      "label": [
+       0.9875,
+       13,
+       40,
+       1,
+       0.9875,
+       13,
+       40,
+       1,
+       "1000"
+      ],
+      "label-mirror": [
+       0.9593,
+       13,
+       36,
+       1,
+       0.9593,
+       13,
+       36,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.9698,
+       13,
+       40,
+       1,
+       0.9649,
+       13,
+       41,
+       1,
+       "1000"
+      ],
+      "swap-trim0": [
+       0.903,
+       13,
+       39,
+       1,
+       0.903,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "swap-trim30": [
+       0.8611,
+       13,
+       39,
+       1,
+       0.8457,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "swap-trim60": [
+       0.8856,
+       13,
+       51,
+       1,
+       0.8265,
+       13,
+       43,
+       1,
+       "1000"
+      ],
+      "late-trim0": [
+       0.9135,
+       13,
+       39,
+       1,
+       0.9437,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "late-trim30": [
+       0.944,
+       13,
+       39,
+       1,
+       0.944,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "late-trim60": [
+       0.9271,
+       13,
+       39,
+       1,
+       0.9278,
+       13,
+       39,
+       1,
+       "1000"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s1-2",
+     "session": 1,
+     "keyShare": [
+      0.724,
+      0.997,
+      0.501,
+      0.528
+     ],
+     "teacher": [
+      37,
+      13,
+      "1110"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.967,
+       0,
+       8,
+       1,
+       0.967,
+       0,
+       8,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9773,
+       13,
+       35,
+       1,
+       0.9773,
+       13,
+       35,
+       1,
+       "1110"
+      ],
+      "label": [
+       0.9791,
+       13,
+       36,
+       1,
+       0.9729,
+       13,
+       36,
+       1,
+       "1110"
+      ],
+      "label-mirror": [
+       0.88,
+       13,
+       38,
+       1,
+       0.88,
+       13,
+       38,
+       1,
+       "1110"
+      ],
+      "label-trim30": [
+       0.9734,
+       13,
+       37,
+       1,
+       0.9734,
+       13,
+       37,
+       1,
+       "1110"
+      ],
+      "swap-trim0": [
+       0.9515,
+       13,
+       37,
+       1,
+       0.9515,
+       13,
+       37,
+       1,
+       "1110"
+      ],
+      "swap-trim30": [
+       0.9303,
+       13,
+       36,
+       1,
+       0.9303,
+       13,
+       36,
+       1,
+       "1110"
+      ],
+      "swap-trim60": [
+       0.9315,
+       13,
+       37,
+       1,
+       0.942,
+       13,
+       36,
+       1,
+       "1110"
+      ],
+      "late-trim0": [
+       0.5393,
+       13,
+       38,
+       1,
+       0.5393,
+       13,
+       38,
+       1,
+       "1110"
+      ],
+      "late-trim30": [
+       0.538,
+       13,
+       38,
+       1,
+       0.538,
+       13,
+       38,
+       1,
+       "1110"
+      ],
+      "late-trim60": [
+       0.5513,
+       13,
+       40,
+       1,
+       0.5513,
+       13,
+       40,
+       1,
+       "1110"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s1-3",
+     "session": 1,
+     "keyShare": [
+      0.348,
+      0.253,
+      0.662,
+      0.21
+     ],
+     "teacher": [
+      40,
+      13,
+      "1000"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.971,
+       0,
+       10,
+       1,
+       0.971,
+       0,
+       10,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.8711,
+       13,
+       36,
+       1,
+       0.8711,
+       13,
+       36,
+       1,
+       "1000"
+      ],
+      "label": [
+       0.9712,
+       13,
+       40,
+       1,
+       0.9693,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "label-mirror": [
+       0.7626,
+       13,
+       42,
+       2,
+       0.8766,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.9678,
+       13,
+       39,
+       1,
+       0.9678,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "swap-trim0": [
+       0.9614,
+       13,
+       36,
+       1,
+       0.9614,
+       13,
+       36,
+       1,
+       "1000"
+      ],
+      "swap-trim30": [
+       0.9515,
+       13,
+       34,
+       1,
+       0.9515,
+       13,
+       34,
+       1,
+       "1000"
+      ],
+      "swap-trim60": [
+       0.9629,
+       13,
+       36,
+       1,
+       0.9629,
+       13,
+       36,
+       1,
+       "1000"
+      ],
+      "late-trim0": [
+       0.7116,
+       13,
+       37,
+       4,
+       0.9449,
+       13,
+       37,
+       1,
+       "1000"
+      ],
+      "late-trim30": [
+       0.8083,
+       13,
+       34,
+       4,
+       0.8235,
+       13,
+       38,
+       1,
+       "1000"
+      ],
+      "late-trim60": [
+       0.9406,
+       13,
+       36,
+       2,
+       0.9449,
+       13,
+       35,
+       1,
+       "1000"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s1-4",
+     "session": 1,
+     "keyShare": [
+      0.709,
+      0.987,
+      0.927,
+      0.122
+     ],
+     "teacher": [
+      39,
+      13,
+      "1100"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9846,
+       0,
+       11,
+       1,
+       0.9846,
+       0,
+       11,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9721,
+       13,
+       39,
+       1,
+       0.9721,
+       13,
+       39,
+       1,
+       "1100"
+      ],
+      "label": [
+       0.9765,
+       13,
+       39,
+       1,
+       0.9765,
+       13,
+       39,
+       1,
+       "1100"
+      ],
+      "label-mirror": [
+       0.7348,
+       13,
+       36,
+       10,
+       0.9538,
+       13,
+       37,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.9376,
+       13,
+       39,
+       1,
+       0.9376,
+       13,
+       39,
+       1,
+       "1100"
+      ],
+      "swap-trim0": [
+       0.8742,
+       13,
+       39,
+       1,
+       0.8742,
+       13,
+       39,
+       1,
+       "1100"
+      ],
+      "swap-trim30": [
+       0.7432,
+       13,
+       39,
+       2,
+       0.7366,
+       13,
+       39,
+       1,
+       "1100"
+      ],
+      "swap-trim60": [
+       0.7381,
+       13,
+       39,
+       2,
+       0.7828,
+       13,
+       39,
+       1,
+       "1100"
+      ],
+      "late-trim0": [
+       0.9563,
+       13,
+       39,
+       2,
+       0.9607,
+       13,
+       39,
+       1,
+       "1100"
+      ],
+      "late-trim30": [
+       0.9105,
+       13,
+       39,
+       4,
+       0.9629,
+       13,
+       39,
+       1,
+       "1100"
+      ],
+      "late-trim60": [
+       0.9358,
+       13,
+       39,
+       2,
+       0.956,
+       13,
+       39,
+       1,
+       "1100"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s1-6",
+     "session": 1,
+     "keyShare": [
+      0.438,
+      0.041,
+      0.374,
+      0.268
+     ],
+     "teacher": [
+      40,
+      13,
+      "1000"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.968,
+       0,
+       11,
+       1,
+       0.968,
+       0,
+       11,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9688,
+       13,
+       39,
+       1,
+       0.9688,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "label": [
+       0.9669,
+       13,
+       40,
+       1,
+       0.9669,
+       13,
+       40,
+       1,
+       "1000"
+      ],
+      "label-mirror": [
+       0.9464,
+       13,
+       39,
+       1,
+       0.9464,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.9671,
+       13,
+       39,
+       1,
+       0.9722,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "swap-trim0": [
+       0.9149,
+       13,
+       39,
+       1,
+       0.9149,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "swap-trim30": [
+       0.8866,
+       13,
+       39,
+       1,
+       0.9085,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "swap-trim60": [
+       0.9063,
+       13,
+       39,
+       1,
+       0.9063,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "late-trim0": [
+       0.9249,
+       13,
+       39,
+       1,
+       0.9311,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "late-trim30": [
+       0.945,
+       13,
+       39,
+       1,
+       0.9192,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "late-trim60": [
+       0.9397,
+       13,
+       39,
+       1,
+       0.9373,
+       13,
+       39,
+       1,
+       "1000"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s1-7",
+     "session": 1,
+     "keyShare": [
+      0.999,
+      0.069,
+      0,
+      0.966
+     ],
+     "teacher": [
+      65,
+      13,
+      "1000"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.8406,
+       0,
+       9,
+       1,
+       0.8406,
+       0,
+       9,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.8234,
+       13,
+       74,
+       1,
+       0.8234,
+       13,
+       74,
+       1,
+       "1000"
+      ],
+      "label": [
+       0.8326,
+       13,
+       86,
+       1,
+       0.8326,
+       13,
+       86,
+       1,
+       "1000"
+      ],
+      "label-mirror": [
+       0.7031,
+       13,
+       46,
+       8,
+       0.7584,
+       13,
+       58,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.8326,
+       13,
+       86,
+       1,
+       0.8326,
+       13,
+       86,
+       1,
+       "1000"
+      ],
+      "swap-trim0": [
+       0.9045,
+       13,
+       78,
+       1,
+       0.9045,
+       13,
+       78,
+       1,
+       "1000"
+      ],
+      "swap-trim30": [
+       0.8985,
+       13,
+       79,
+       1,
+       0.8985,
+       13,
+       79,
+       1,
+       "1000"
+      ],
+      "swap-trim60": [
+       0.9071,
+       13,
+       72,
+       1,
+       0.9071,
+       13,
+       72,
+       1,
+       "1000"
+      ],
+      "late-trim0": [
+       0.9547,
+       13,
+       57,
+       1,
+       0.9547,
+       13,
+       57,
+       1,
+       "1000"
+      ],
+      "late-trim30": [
+       0.9582,
+       13,
+       77,
+       1,
+       0.9542,
+       13,
+       77,
+       1,
+       "1000"
+      ],
+      "late-trim60": [
+       0.9443,
+       13,
+       68,
+       1,
+       0.9443,
+       13,
+       68,
+       1,
+       "1000"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s2-0",
+     "session": 2,
+     "keyShare": [
+      0.656,
+      0.02,
+      0.401,
+      0
+     ],
+     "teacher": [
+      49,
+      13,
+      "1000"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9846,
+       0,
+       10,
+       1,
+       0.9848,
+       0,
+       10,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9783,
+       13,
+       48,
+       1,
+       0.9783,
+       13,
+       48,
+       1,
+       "1000"
+      ],
+      "label": [
+       0.9851,
+       13,
+       48,
+       1,
+       0.9868,
+       13,
+       48,
+       1,
+       "1000"
+      ],
+      "label-mirror": [
+       0.9686,
+       13,
+       48,
+       1,
+       0.9686,
+       13,
+       48,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.9779,
+       13,
+       48,
+       1,
+       0.9779,
+       13,
+       48,
+       1,
+       "1000"
+      ],
+      "swap-trim0": [
+       0.8636,
+       13,
+       47,
+       2,
+       0.8452,
+       13,
+       48,
+       1,
+       "1000"
+      ],
+      "swap-trim30": [
+       0.8466,
+       13,
+       39,
+       2,
+       0.8473,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "swap-trim60": [
+       0.9441,
+       13,
+       48,
+       1,
+       0.9441,
+       13,
+       48,
+       1,
+       "1000"
+      ],
+      "late-trim0": [
+       0.9756,
+       13,
+       50,
+       1,
+       0.9756,
+       13,
+       50,
+       1,
+       "1000"
+      ],
+      "late-trim30": [
+       0.9709,
+       13,
+       50,
+       1,
+       0.9516,
+       13,
+       52,
+       1,
+       "1000"
+      ],
+      "late-trim60": [
+       0.9549,
+       13,
+       51,
+       1,
+       0.9549,
+       13,
+       51,
+       1,
+       "1000"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s2-1",
+     "session": 2,
+     "keyShare": [
+      0.967,
+      0,
+      0,
+      0.887
+     ],
+     "teacher": [
+      38,
+      13,
+      "1000"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9049,
+       0,
+       10,
+       1,
+       0.9049,
+       0,
+       10,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9039,
+       13,
+       39,
+       1,
+       0.9039,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "label": [
+       0.9857,
+       13,
+       38,
+       2,
+       0.8969,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "label-mirror": [
+       0.8972,
+       13,
+       39,
+       1,
+       0.9876,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.9857,
+       13,
+       38,
+       2,
+       0.8969,
+       13,
+       39,
+       1,
+       "1000"
+      ],
+      "swap-trim0": [
+       0.8737,
+       13,
+       35,
+       1,
+       0.8737,
+       13,
+       35,
+       1,
+       "1000"
+      ],
+      "swap-trim30": [
+       0.8737,
+       13,
+       35,
+       1,
+       0.8737,
+       13,
+       35,
+       1,
+       "1000"
+      ],
+      "swap-trim60": [
+       0.8737,
+       13,
+       35,
+       1,
+       0.8737,
+       13,
+       35,
+       1,
+       "1000"
+      ],
+      "late-trim0": [
+       0.9443,
+       13,
+       35,
+       16,
+       0.987,
+       13,
+       38,
+       1,
+       "1000"
+      ],
+      "late-trim30": [
+       0.9443,
+       13,
+       35,
+       16,
+       0.987,
+       13,
+       38,
+       1,
+       "1000"
+      ],
+      "late-trim60": [
+       0.9443,
+       13,
+       35,
+       16,
+       0.987,
+       13,
+       38,
+       1,
+       "1000"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s2-2",
+     "session": 2,
+     "keyShare": [
+      0.705,
+      0.032,
+      0,
+      0.65
+     ],
+     "teacher": [
+      36,
+      13,
+      "1000"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9937,
+       1,
+       12,
+       1,
+       0.9937,
+       1,
+       12,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9922,
+       13,
+       36,
+       1,
+       0.9933,
+       13,
+       37,
+       1,
+       "1000"
+      ],
+      "label": [
+       0.9913,
+       13,
+       38,
+       1,
+       0.9913,
+       13,
+       38,
+       1,
+       "1000"
+      ],
+      "label-mirror": [
+       0.9748,
+       13,
+       36,
+       1,
+       0.9748,
+       13,
+       36,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.9922,
+       13,
+       38,
+       1,
+       0.9922,
+       13,
+       38,
+       1,
+       "1000"
+      ],
+      "swap-trim0": [
+       0.9679,
+       13,
+       38,
+       1,
+       0.9669,
+       13,
+       33,
+       1,
+       "1000"
+      ],
+      "swap-trim30": [
+       0.9714,
+       13,
+       35,
+       1,
+       0.9714,
+       13,
+       35,
+       1,
+       "1000"
+      ],
+      "swap-trim60": [
+       0.9656,
+       13,
+       34,
+       2,
+       0.9719,
+       13,
+       34,
+       1,
+       "1000"
+      ],
+      "late-trim0": [
+       0.9902,
+       13,
+       39,
+       1,
+       0.9916,
+       13,
+       38,
+       1,
+       "1000"
+      ],
+      "late-trim30": [
+       0.9908,
+       13,
+       38,
+       1,
+       0.9908,
+       13,
+       38,
+       1,
+       "1000"
+      ],
+      "late-trim60": [
+       0.9881,
+       13,
+       39,
+       1,
+       0.9899,
+       13,
+       37,
+       1,
+       "1000"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s2-3",
+     "session": 2,
+     "keyShare": [
+      0.218,
+      0.743,
+      0.853,
+      0.604
+     ],
+     "teacher": [
+      55,
+      13,
+      "1100"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9694,
+       0,
+       8,
+       1,
+       0.9694,
+       0,
+       8,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9705,
+       13,
+       55,
+       1,
+       0.9741,
+       13,
+       55,
+       1,
+       "1100"
+      ],
+      "label": [
+       0.9779,
+       13,
+       57,
+       1,
+       0.9779,
+       13,
+       57,
+       1,
+       "1100"
+      ],
+      "label-mirror": [
+       0.9412,
+       13,
+       60,
+       1,
+       0.9412,
+       13,
+       60,
+       1,
+       "1000"
+      ],
+      "label-trim30": [
+       0.9784,
+       13,
+       50,
+       1,
+       0.9784,
+       13,
+       50,
+       1,
+       "1100"
+      ],
+      "swap-trim0": [
+       0.9094,
+       13,
+       39,
+       2,
+       0.933,
+       13,
+       41,
+       1,
+       "1100"
+      ],
+      "swap-trim30": [
+       0.9503,
+       13,
+       39,
+       1,
+       0.9503,
+       13,
+       39,
+       1,
+       "1100"
+      ],
+      "swap-trim60": [
+       0.9313,
+       13,
+       39,
+       1,
+       0.9313,
+       13,
+       39,
+       1,
+       "1100"
+      ],
+      "late-trim0": [
+       0.9483,
+       13,
+       60,
+       1,
+       0.9483,
+       13,
+       60,
+       1,
+       "1100"
+      ],
+      "late-trim30": [
+       0.9262,
+       13,
+       38,
+       1,
+       0.9256,
+       13,
+       54,
+       1,
+       "1100"
+      ],
+      "late-trim60": [
+       0.9429,
+       13,
+       55,
+       1,
+       0.9433,
+       13,
+       49,
+       1,
+       "1100"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s2-5",
+     "session": 2,
+     "keyShare": [
+      0.779,
+      1,
+      0.848,
+      0.73
+     ],
+     "teacher": [
+      36,
+      12,
+      "0111"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9926,
+       0,
+       10,
+       1,
+       0.9926,
+       0,
+       10,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9919,
+       13,
+       39,
+       1,
+       0.9919,
+       13,
+       39,
+       1,
+       "0111"
+      ],
+      "label": [
+       0.9903,
+       13,
+       39,
+       1,
+       0.9891,
+       13,
+       39,
+       1,
+       "0111"
+      ],
+      "label-mirror": [
+       0.9872,
+       13,
+       41,
+       1,
+       0.9843,
+       13,
+       39,
+       1,
+       "0111"
+      ],
+      "label-trim30": [
+       0.9269,
+       13,
+       41,
+       1,
+       0.9281,
+       13,
+       39,
+       1,
+       "0111"
+      ],
+      "swap-trim0": [
+       0.949,
+       13,
+       28,
+       1,
+       0.962,
+       13,
+       28,
+       1,
+       "0111"
+      ],
+      "swap-trim30": [
+       0.7588,
+       13,
+       31,
+       1,
+       0.9198,
+       13,
+       29,
+       1,
+       "0111"
+      ],
+      "swap-trim60": [
+       0.9167,
+       13,
+       33,
+       1,
+       0.7612,
+       13,
+       29,
+       1,
+       "0111"
+      ],
+      "late-trim0": [
+       0.9653,
+       13,
+       36,
+       1,
+       0.9653,
+       13,
+       36,
+       1,
+       "0111"
+      ],
+      "late-trim30": [
+       0.953,
+       13,
+       41,
+       1,
+       0.953,
+       13,
+       41,
+       1,
+       "0111"
+      ],
+      "late-trim60": [
+       0.9459,
+       13,
+       39,
+       4,
+       0.9376,
+       13,
+       39,
+       1,
+       "0111"
+      ]
+     }
+    },
+    {
+     "seed": "h2-s2-6",
+     "session": 2,
+     "keyShare": [
+      0.434,
+      0.472,
+      1,
+      0.104
+     ],
+     "teacher": [
+      49,
+      13,
+      "1110"
+     ],
+     "arms": {
+      "rest-keep": [
+       0.9679,
+       0,
+       8,
+       1,
+       0.9679,
+       0,
+       8,
+       1,
+       "0000"
+      ],
+      "rest-drop": [
+       0.9788,
+       13,
+       48,
+       1,
+       0.9788,
+       13,
+       48,
+       1,
+       "1110"
+      ],
+      "label": [
+       0.9833,
+       13,
+       50,
+       1,
+       0.9833,
+       13,
+       50,
+       1,
+       "1110"
+      ],
+      "label-mirror": [
+       0.9069,
+       13,
+       64,
+       1,
+       0.9069,
+       13,
+       64,
+       1,
+       "1110"
+      ],
+      "label-trim30": [
+       0.98,
+       13,
+       49,
+       1,
+       0.98,
+       13,
+       49,
+       1,
+       "1110"
+      ],
+      "swap-trim0": [
+       0.8212,
+       13,
+       39,
+       1,
+       0.8212,
+       13,
+       39,
+       1,
+       "1110"
+      ],
+      "swap-trim30": [
+       0.8199,
+       13,
+       38,
+       1,
+       0.8199,
+       13,
+       38,
+       1,
+       "1110"
+      ],
+      "swap-trim60": [
+       0.8136,
+       13,
+       39,
+       2,
+       0.8355,
+       13,
+       39,
+       1,
+       "1110"
+      ],
+      "late-trim0": [
+       0.9209,
+       13,
+       43,
+       1,
+       0.9017,
+       13,
+       40,
+       1,
+       "1110"
+      ],
+      "late-trim30": [
+       0.9233,
+       13,
+       42,
+       1,
+       0.922,
+       13,
+       41,
+       1,
+       "1110"
+      ],
+      "late-trim60": [
+       0.9252,
+       13,
+       42,
+       1,
+       0.9292,
+       13,
+       48,
+       1,
+       "1110"
+      ]
+     }
+    }
+   ]
+  }
+ }
+}

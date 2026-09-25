@@ -12,6 +12,7 @@ import {trainClone,trainCloneInWorker,prepareDataset,splitBlocks,pairRows,predic
   from '../AI-Car-Racer/learning/clone.js';
 import {seededRandom} from '../AI-Car-Racer/graphics/state.js';
 import {lagPairs,keyBits,KEY_ORDER} from '../AI-Car-Racer/learning/demonstration.js';
+import {demonstrationDataset} from '../AI-Car-Racer/learning/dataset.js';
 
 const ROUND=30; // seconds of closed-loop driving, like one training round
 // Teachers come from short genetic runs with a fixed seed, so every run is the
@@ -281,13 +282,12 @@ test("H1's stored demonstrations convert to the trainer's dataset as the plan sa
   const sampleSteps=Uint32Array.from([...Array(300).keys()].map(i=>i+1).concat([...Array(200).keys()].map(i=>i+400),[...Array(250).keys()].map(i=>i+700)));
   const n=sampleSteps.length,random=seededRandom('h1-store');
   const demo={sampleSteps,inputs:Float32Array.from({length:n*10},()=>random()),keys:Uint8Array.from({length:n},()=>Math.floor(random()*16))};
-  // The conversion in the plan's H3 note (H2's job).
-  const episode=new Uint32Array(n),keys=new Uint8Array(n*4);
-  for(let i=0;i<n;i++){
-    episode[i]=i&&sampleSteps[i]!==sampleSteps[i-1]+1?episode[i-1]+1:i?episode[i-1]:0;
-    for(let o=0;o<4;o++)keys[i*4+o]=demo.keys[i]>>o&1;
-  }
-  const data=prepareDataset({inputs:demo.inputs,keys,episode});
+  // The conversion in the plan's H3 note, done by H2's learning/dataset.js
+  // (tests/dataset.test.mjs checks it on recorder output).
+  const {inputs,keys,episode}=demonstrationDataset(demo);
+  assert.deepEqual(inputs,demo.inputs);assert.deepEqual(Array.from(new Set(episode)),[0,1,2]);
+  for(let i=0;i<n;i++)for(let o=0;o<4;o++)assert.equal(keys[i*4+o],demo.keys[i]>>o&1);
+  const data=prepareDataset({inputs,keys,episode});
   assert.equal(data.run[n-1],2,'three runs');
   for(const k of [1,2,9,16])assert.deepEqual(pairRows(data,{held:new Uint8Array(n)},k).train,lagPairs(demo,k),`lag ${k}`);
   // Bit o of H1's key mask is key o of the trainer.

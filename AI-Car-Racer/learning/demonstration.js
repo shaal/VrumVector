@@ -3,9 +3,12 @@
 // the 10 inputs the car's network saw at the end of the step (Car.lastInputs)
 // and the four keys that moved the car in that step. The log stays unpaired:
 // a trainer pairs the inputs of step t with the keys of step t + k, and uses
-// `lagPairs` so that no pair spans a gap. Pure logic (no DOM), so the Node
-// simulator can drive it; the IndexedDB store is at the end of this file.
-export const DEMO_VERSION=1;
+// `lagPairs` so that no pair spans a gap. It also keeps the last 0.5 s of the
+// car at rest before it first moves (H2), so a trainer can learn to pull away.
+// Pure logic (no DOM), so the Node simulator can drive it; the IndexedDB store
+// is at the end of this file.
+// Version 2 adds `rest` and `restSamples` (the steps at rest before a start).
+export const DEMO_VERSION=2;
 export const INPUT_COUNT=10;
 export const STEP_HZ=60;
 export const MAX_DEMONSTRATIONS=10;
@@ -13,6 +16,8 @@ export const MAX_SECONDS=300;
 export const MAX_SAMPLES=MAX_SECONDS*STEP_HZ;
 // Less than a second of driving is not worth a slot of the ten.
 export const MIN_SAMPLES=STEP_HZ;
+// Steps kept of a car parked at its start pose, before it first moves (0.5 s).
+export const REST_STEPS=STEP_HZ/2;
 // A gap of more than 250 ms between two steps is a freeze: the screen stood
 // still, but keys could change. (main.js also drops the time beyond 0.25 s
 // per frame.) Shorter freezes are replayed as a burst of steps and kept.
@@ -47,6 +52,9 @@ export class DemonstrationRecorder {
     if(this.blocked())return false;
     const n=this.maxSamples;
     this.run={inputs:new Float32Array(n*INPUT_COUNT),keys:new Uint8Array(n),sampleSteps:new Uint32Array(n),crashSteps:[],
+      rest:new Uint8Array(n),restSamples:0,
+      // The newest REST_STEPS steps at rest, in a ring. restLive: the last step was one of them.
+      restInputs:new Float32Array(REST_STEPS*INPUT_COUNT),restKeys:new Uint8Array(REST_STEPS),restCount:0,restFirst:0,restLive:false,
       samples:0,step:0,laps:0,checkpoints:0,crashes:0,reason:'idle',startedAt:Date.now(),
       car:null,x:0,y:0,moved:false,wasDamaged:false,lastLaps:0,lastCount:0,context:null,track:null,signature:null};
     this.last=null;
@@ -64,7 +72,7 @@ export class DemonstrationRecorder {
     const now=this.environment.now?.();
     if(Number.isFinite(now)){if(Number.isFinite(run.wall)&&now-run.wall>MAX_FRAME_GAP_MS)run.interrupted=true;run.wall=now;}
     if(run.interrupted){run.interrupted=false;run.step++;}
-    const at=run.step++,state=this.environment.state();
+    const at=run.step++,state=this.environment.state(),restLive=run.restLive;run.restLive=false;
     if(state.multiplayer){this.stop('multiplayer');return;}
     if(state.adaptive){this.stop('adaptive');return;}
     if(state.hidden){this.stop('away');return;}
@@ -73,7 +81,8 @@ export class DemonstrationRecorder {
       const snapshot=this.environment.snapshot(car);
       // A change before the first sample loses nothing: adopt the new track.
       if(run.samples&&!sameConditions(snapshot.context,run.context)){this.stop('context');return;}
-      if(!run.samples||!run.context){run.context=snapshot.context;run.track=snapshot.track;}
+      // Rest steps kept so far were sensed in the old context.
+      if(!run.samples||!run.context){if(!sameConditions(snapshot.context,run.context))run.restCount=0;run.context=snapshot.context;run.track=snapshot.track;}
       run.signature=signature;
     }
     // No step moves a car further than its top speed. A longer jump (a crash
@@ -83,7 +92,7 @@ export class DemonstrationRecorder {
       // The first step of a new car is never recorded, so a lag pair can
       // never join the last state of one car to the keys of the next.
       run.car=car;run.moved=false;run.wasDamaged=!!car.damaged;run.lastLaps=car.laps;run.lastCount=car.checkPointsCount;
-      this.pause('idle');return;
+      run.restCount=0;this.pause('idle');return;
     }
     // Without focus the page gets no key events and releases every key, so
     // the car coasts without a choice by the person.
@@ -107,16 +116,44 @@ export class DemonstrationRecorder {
       if(lapDelta>0){run.laps+=lapDelta;run.checkpoints+=lapDelta;}
       else if(countDelta>0&&!leaving)run.checkpoints+=countDelta;
     }
+    // The car parked at its start pose, waiting for the person: kept for now,
+    // and stored only if the next step is the one that moves it.
+    if(reason==='idle'&&home&&car.lastInputs?.length===INPUT_COUNT)this.holdRest(car,restLive);
     if(reason){this.pause(reason);return;}
+    if(run.restCount){if(restLive)this.storeRest(at);run.restCount=0;}
     const i=run.samples++;
     run.inputs.set(car.lastInputs,i*INPUT_COUNT);run.keys[i]=keyBits(car.controls);run.sampleSteps[i]=at;
     if(run.reason){run.reason='';this.changed();}
     if(run.samples>=this.maxSamples)this.stop('full');
   }
   pause(reason){if(this.run.reason!==reason){this.run.reason=reason;this.changed();}}
+  // Keeps the newest REST_STEPS steps at rest. A step that is not at rest
+  // (AI driving, another speed, invincibility, no focus) starts the wait
+  // again. A pause or a freeze does not: the parked car senses the same on
+  // every step (its rays see only walls), whenever the person presses a key.
+  holdRest(car,live){
+    const run=this.run;
+    if(!live){run.restCount=0;run.restFirst=0;}
+    let slot;
+    if(run.restCount<REST_STEPS){slot=(run.restFirst+run.restCount)%REST_STEPS;run.restCount++;}
+    else{slot=run.restFirst;run.restFirst=(run.restFirst+1)%REST_STEPS;}
+    run.restInputs.set(car.lastInputs,slot*INPUT_COUNT);run.restKeys[slot]=keyBits(car.controls);run.restLive=true;
+  }
+  // The car moved at step `at`, right after the kept rest steps: store them,
+  // oldest first, with the keys actually held (usually none), numbered as
+  // the steps just before `at`. One row stays free for the moving step.
+  storeRest(at){
+    const run=this.run,count=run.restCount,keep=Math.min(count,this.maxSamples-run.samples-1);
+    for(let r=count-keep;r<count;r++){
+      const slot=(run.restFirst+r)%REST_STEPS,i=run.samples++;
+      run.inputs.set(run.restInputs.subarray(slot*INPUT_COUNT,(slot+1)*INPUT_COUNT),i*INPUT_COUNT);
+      run.keys[i]=run.restKeys[slot];run.sampleSteps[i]=at-count+r;run.rest[i]=1;run.restSamples++;
+    }
+  }
   // The simulation stopped stepping (Pause, a hidden tab), but the person
   // could still change keys. Skipping one step number keeps every lag pair
-  // from spanning the wait.
+  // from spanning the wait. Rest steps are the exception: they are numbered
+  // to join the move (see holdRest).
   interrupt(){if(this.run)this.run.interrupted=true;}
   // For the panel while no physics steps run (for example, training paused).
   poll(){
@@ -125,20 +162,23 @@ export class DemonstrationRecorder {
   }
   progress(){
     const r=this.run;if(!r)return null;
-    return {samples:r.samples,seconds:r.samples/STEP_HZ,laps:r.laps,checkpoints:r.checkpoints,crashes:r.crashes,reason:r.reason,steps:r.step};
+    // `seconds` is driving time: rest steps are samples, but not driving.
+    return {samples:r.samples,seconds:(r.samples-r.restSamples)/STEP_HZ,laps:r.laps,checkpoints:r.checkpoints,crashes:r.crashes,reason:r.reason,steps:r.step};
   }
   // Ends the recording. Returns the demonstration, or null when it is too
   // short to keep. The store write finishes later; `last.saved` reports it.
   stop(reason='user',{closing=false}={}){
     const run=this.run;if(!run)return null;
     this.run=null;this.onStop?.();
-    const n=run.samples,keep=n>=this.minSamples&&!!run.context;
+    // Steps at rest are not driving, so they do not count toward the minimum.
+    const n=run.samples,keep=n-run.restSamples>=this.minSamples&&!!run.context;
     const demonstration=keep?{version:DEMO_VERSION,car:'WASD',createdAt:run.startedAt,endedAt:Date.now(),stopReason:reason,
-      samples:n,seconds:n/STEP_HZ,elapsedSteps:run.step,laps:run.laps,checkpoints:run.checkpoints,crashes:run.crashes,
+      samples:n,seconds:(n-run.restSamples)/STEP_HZ,elapsedSteps:run.step,laps:run.laps,checkpoints:run.checkpoints,crashes:run.crashes,
       crashSteps:Uint32Array.from(run.crashSteps),context:run.context,track:run.track,
       inputOrder:'7 rays (1 - offset), speed / maxSpeed, next checkpoint forward, next checkpoint right',keyOrder:KEY_ORDER,
-      inputs:run.inputs.slice(0,n*INPUT_COUNT),keys:run.keys.slice(0,n),sampleSteps:run.sampleSteps.slice(0,n)}:null;
-    const last=this.last={reason,samples:n,seconds:n/STEP_HZ,laps:run.laps,checkpoints:run.checkpoints,crashes:run.crashes,
+      inputs:run.inputs.slice(0,n*INPUT_COUNT),keys:run.keys.slice(0,n),sampleSteps:run.sampleSteps.slice(0,n),
+      rest:run.rest.slice(0,n),restSamples:run.restSamples}:null;
+    const last=this.last={reason,samples:n,seconds:(n-run.restSamples)/STEP_HZ,laps:run.laps,checkpoints:run.checkpoints,crashes:run.crashes,
       saved:keep?(this.store?'saving':false):false,tooShort:!keep,dropped:0};
     if(demonstration&&this.store){
       last.done=this.store.save(demonstration,{closing})
@@ -154,6 +194,8 @@ export class DemonstrationRecorder {
 
 // Indices i where (inputs of sample i, keys of sample i + k) are one step pair
 // k physics steps apart, with no pause, crash, or car change between them.
+// Rest samples (rest[i] = 1) hold the keys actually held, usually none;
+// learning/dataset.js gives them the keys that moved the car.
 export function lagPairs(demonstration,k=1){
   const steps=demonstration.sampleSteps,out=[];
   for(let i=0;i+k<steps.length;i++)if(steps[i+k]-steps[i]===k)out.push(i);

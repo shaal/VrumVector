@@ -128,7 +128,8 @@ export function splitBlocks(data,{blockSteps=CLONE_DEFAULTS.blockSteps,heldOutFr
     blocks+=count;t=end;
   }
   const drawn=[];for(let b=0;b<blocks;b++)if(free[b])drawn.push(b);
-  if(drawn.length<2)throw new CloneError('not-enough-data',`Need at least two blocks of ${blockSteps} steps; got ${n} steps.`);
+  // Linked rows (mirrored copies) are not counted: they follow their originals.
+  if(drawn.length<2)throw new CloneError('not-enough-data',`Need at least two blocks of ${blockSteps} steps; got ${free.reduce((sum,v)=>sum+v,0)} steps.`);
   const random=seededRandom(seed+':split');
   for(let i=drawn.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[drawn[i],drawn[j]]=[drawn[j],drawn[i]];}
   const total=free.reduce((sum,v)=>sum+v,0),heldBlock=new Uint8Array(blocks);
