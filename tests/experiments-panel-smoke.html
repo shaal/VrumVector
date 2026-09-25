@@ -82,11 +82,11 @@
         open: details ? details.open : null,
       });
 
-      // C2 — opening reveals 6 rows (5 + 1 disabled)
+      // C2 — opening reveals 8 rows (7 + 1 disabled)
       details.open = true;
       await new Promise(r => setTimeout(r, 50));
       const rows = details.querySelectorAll('.rv-experiments-row');
-      record('2. 6 rows visible after expand (incl. disabled quantization)', rows.length === 6, {
+      record('2. 8 rows visible after expand (incl. disabled quantization)', rows.length === 8, {
         rowCount: rows.length,
         ids: Array.from(rows).map(r => r.getAttribute('data-rv')),
       });

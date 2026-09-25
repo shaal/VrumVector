@@ -1669,6 +1669,15 @@
       '    <button type="button" class="controlButton rv-experiments-reset-gates" data-rv="exp-adapt-gates-reset" title="Restore gate layout from when adaptive mode was first enabled">Reset gates</button>',
       '    <div class="rv-experiments-status" data-rv="exp-adapt-gates-status">off</div>',
       '  </div>',
+      '  <div class="rv-experiments-row" data-rv="exp-collide-row">',
+      '    <label class="rv-experiments-toggle">',
+      '      <input type="checkbox" data-rv="exp-collide" />',
+      '      <span class="rv-experiments-emoji">💥</span>',
+      '      <span class="rv-experiments-label">Solid cars</span>',
+      '    </label>',
+      '    <span class="rv-experiments-hint-inline">AI cars in groups of 8 cannot pass through each other. A car that drives into another crashes.</span>',
+      '    <div class="rv-experiments-status" data-rv="exp-collide-status" role="status">off</div>',
+      '  </div>',
       '  <div class="rv-experiments-row rv-experiments-row-disabled" data-rv="exp-quantization-row" title="Library-only — not wired into archiveBrain yet. See the chapter for details.">',
       '    <label class="rv-experiments-toggle rv-experiments-toggle-disabled">',
       '      <input type="checkbox" disabled />',
@@ -1814,6 +1823,30 @@
     }
     // Poll status so bottleneck text updates after each gen without a full panel rebuild.
     setInterval(refreshAdaptStatus, 1500);
+
+    // Solid cars (docs/plan/car-collisions.md). main.js owns the mode and
+    // reads ?collide=1 at load; the checkbox mirrors it. Changing it starts a
+    // new generation in the new mode. Not saved: a reload starts it off.
+    const expCollideCb = details.querySelector('[data-rv="exp-collide"]');
+    const expCollideStatus = details.querySelector('[data-rv="exp-collide-status"]');
+    function refreshCollideStatus() {
+      const on = typeof window.carCollisionsEnabled === 'function' && window.carCollisionsEnabled();
+      if (expCollideCb) expCollideCb.checked = on;
+      const k = (window.carCollisions && window.carCollisions.heatSize) || 8;
+      if (expCollideStatus) expCollideStatus.textContent = on ? 'on · groups of ' + k : 'off';
+    }
+    if (expCollideCb) {
+      expCollideCb.addEventListener('change', function () {
+        try {
+          if (typeof window.setCarCollisions === 'function') window.setCarCollisions(expCollideCb.checked);
+        } catch (e) { console.warn('[rv-experiments] setCarCollisions failed', e); }
+        refreshCollideStatus();
+      });
+      refreshCollideStatus();
+      // main.js calls this when the mode changes some other way (the console).
+      window.__onCarCollisionsChange = refreshCollideStatus;
+      if (expCollideCb.checked) details.open = true;
+    }
 
     // Default-collapsed: leave details closed unless any feature is
     // pre-toggled by a URL flag, in which case open it so the user can

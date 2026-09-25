@@ -22,7 +22,7 @@
 // starts a new test and keeps the earlier verdict until the new test decides.
 import {PairedSequentialTest} from './sequential.js';
 import {compareOutcomes} from './trial.js';
-import {contextKey} from './policy.js';
+import {contextKey,cleanContext,collisionSettings} from './policy.js';
 import {hashBrain} from '../archive/hash.js';
 
 const STORE='vv.transferGuard',MAX_ENTRIES=40;
@@ -73,6 +73,11 @@ export function applyTransferGuard(context,seeds){
 export async function runTransferCheck({context,track,profile,maxSpeed,traction,seconds,exploration=1,seeds,
   onProgress=()=>{},signal,spawn=()=>new Worker(new URL('./trial-worker.js',import.meta.url)),...options}){
   if(!context)throw new Error('A learning context is required');
+  // Trials run in the context's collision mode, so the verdict stored under
+  // this context's key is about the same mode. A mode this build cannot run
+  // is refused rather than tested as normal driving.
+  const mode=cleanContext(context).collisions,collisions=collisionSettings(mode);
+  if(mode!=='off'&&!collisions)throw new Error(`This build cannot run transfer trials in collision mode ${mode}`);
   const {trialsPerRun,...trialOptions}={...CHECK_DEFAULTS,mutation:.22,conservative:.65,...options};
   const key=contextKey(context),identity=testIdentity(seeds,{...trialOptions,seconds});
   if(!seeds?.length)return {state:'no-memories',trials:0};
@@ -103,7 +108,7 @@ export async function runTransferCheck({context,track,profile,maxSpeed,traction,
       data.type==='result'?resolve(data):reject(new Error(data.message||'trial failed'));};
     worker.onerror=event=>{signal?.removeEventListener('abort',abort);reject(new Error(event?.message||'trial worker failed'));};
     worker.postMessage({type:'trial',id:trial,key:`transfer-check-v3:${key}:${identity}:${trial}`,arm,track,context,profile,
-      maxSpeed,traction,seconds,exploration,seeds:armSeeds,options:trialOptions});
+      maxSpeed,traction,seconds,exploration,seeds:armSeeds,options:trialOptions,...(collisions?{collisions}:{})});
   });
   try{
     for(let done=0;done<trialsPerRun;done++){

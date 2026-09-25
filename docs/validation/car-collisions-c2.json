@@ -1,0 +1,1174 @@
+{
+  "note": "C2 measurements. nodeBenchmark: npm run benchmark:collisions with the C2 core. c1RuleSameTraffic: the same traffic with the C1 core (--core, from git 79e59c9). browserStepCost: two sessions of MEASURE=1 npm run test:collisions:browser (the real sim-worker.js in headless Chromium). seeds3to6: a second session, --seeds 3,4,5,6, with the C2 core (c2) and the C1 core (c1); who-crashed counts only. The browser step cost was measured before the last change to the too-deep guard (which now makes ghosts where it used to crash a car); the guard acts 0 to 2 times per 15 s run.",
+  "nodeBenchmark": {
+    "node": "v22.22.3",
+    "date": "2026-09-25",
+    "core": "AI-Car-Racer/collisions.js",
+    "runs": [
+      {
+        "track": "Rectangle",
+        "seed": "collisions-bench-1",
+        "N": 500,
+        "K": 8,
+        "heats": 63,
+        "steps": 900,
+        "rowFitted": 8,
+        "contactMsPerStep": {
+          "mean": 0.06,
+          "p95": 0.104,
+          "max": 2.091
+        },
+        "firstSecondContactMsPerStep": 0.374,
+        "carsMsPerStep": 4.395,
+        "pairTestsPerStep": 156.766,
+        "narrowTestsPerStep": 28.363,
+        "contacts": 154,
+        "sweptContacts": 1,
+        "deepContacts": 0,
+        "contactCrashes": 192,
+        "whoCrashed": {
+          "single": 114,
+          "both": 40,
+          "straightCrashedByTurner": 1,
+          "turnerAhead": 1,
+          "alongCrashedByAcross": 1,
+          "cutInShare": 0.009,
+          "turnerAheadShare": 0.009,
+          "acrossShare": 0.009
+        },
+        "aliveEverySecond": [
+          294,
+          235,
+          207,
+          202,
+          199,
+          199,
+          199,
+          198,
+          195,
+          195,
+          195,
+          195,
+          195,
+          195,
+          195
+        ]
+      },
+      {
+        "track": "Triangle",
+        "seed": "collisions-bench-1",
+        "N": 500,
+        "K": 8,
+        "heats": 63,
+        "steps": 900,
+        "rowFitted": 8,
+        "contactMsPerStep": {
+          "mean": 0.076,
+          "p95": 0.195,
+          "max": 1.584
+        },
+        "firstSecondContactMsPerStep": 0.401,
+        "carsMsPerStep": 4.598,
+        "pairTestsPerStep": 156.042,
+        "narrowTestsPerStep": 27.347,
+        "contacts": 165,
+        "sweptContacts": 1,
+        "deepContacts": 1,
+        "contactCrashes": 182,
+        "whoCrashed": {
+          "single": 107,
+          "both": 52,
+          "straightCrashedByTurner": 11,
+          "turnerAhead": 11,
+          "alongCrashedByAcross": 0,
+          "cutInShare": 0.103,
+          "turnerAheadShare": 0.103,
+          "acrossShare": 0
+        },
+        "aliveEverySecond": [
+          324,
+          253,
+          207,
+          188,
+          172,
+          167,
+          167,
+          167,
+          167,
+          167,
+          167,
+          167,
+          167,
+          167,
+          167
+        ]
+      },
+      {
+        "track": "Rectangle",
+        "seed": "collisions-bench-2",
+        "N": 500,
+        "K": 8,
+        "heats": 63,
+        "steps": 900,
+        "rowFitted": 8,
+        "contactMsPerStep": {
+          "mean": 0.074,
+          "p95": 0.168,
+          "max": 1.249
+        },
+        "firstSecondContactMsPerStep": 0.328,
+        "carsMsPerStep": 4.541,
+        "pairTestsPerStep": 160.269,
+        "narrowTestsPerStep": 32.316,
+        "contacts": 143,
+        "sweptContacts": 2,
+        "deepContacts": 0,
+        "contactCrashes": 169,
+        "whoCrashed": {
+          "single": 116,
+          "both": 27,
+          "straightCrashedByTurner": 3,
+          "turnerAhead": 3,
+          "alongCrashedByAcross": 0,
+          "cutInShare": 0.026,
+          "turnerAheadShare": 0.026,
+          "acrossShare": 0
+        },
+        "aliveEverySecond": [
+          305,
+          246,
+          220,
+          202,
+          202,
+          201,
+          200,
+          198,
+          196,
+          196,
+          196,
+          196,
+          196,
+          196,
+          196
+        ]
+      },
+      {
+        "track": "Triangle",
+        "seed": "collisions-bench-2",
+        "N": 500,
+        "K": 8,
+        "heats": 63,
+        "steps": 900,
+        "rowFitted": 8,
+        "contactMsPerStep": {
+          "mean": 0.071,
+          "p95": 0.172,
+          "max": 1.163
+        },
+        "firstSecondContactMsPerStep": 0.298,
+        "carsMsPerStep": 4.761,
+        "pairTestsPerStep": 156.299,
+        "narrowTestsPerStep": 29.162,
+        "contacts": 163,
+        "sweptContacts": 2,
+        "deepContacts": 0,
+        "contactCrashes": 178,
+        "whoCrashed": {
+          "single": 124,
+          "both": 39,
+          "straightCrashedByTurner": 12,
+          "turnerAhead": 12,
+          "alongCrashedByAcross": 0,
+          "cutInShare": 0.097,
+          "turnerAheadShare": 0.097,
+          "acrossShare": 0
+        },
+        "aliveEverySecond": [
+          322,
+          240,
+          213,
+          198,
+          186,
+          180,
+          178,
+          177,
+          176,
+          175,
+          175,
+          175,
+          175,
+          175,
+          175
+        ]
+      }
+    ],
+    "worstCasePile": {
+      "N": 500,
+      "K": 8,
+      "walls": 40,
+      "pairsPerStep": 1736,
+      "msPerStep": 1.302
+    },
+    "trianglesOverlap": {
+      "nsPerCall": 137.674,
+      "hits": 11000000
+    }
+  },
+  "c1RuleSameTraffic": {
+    "core": "git show 79e59c9:AI-Car-Racer/collisions.js",
+    "runs": [
+      {
+        "track": "Rectangle",
+        "seed": "collisions-bench-1",
+        "contacts": 162,
+        "contactCrashes": 172,
+        "whoCrashed": {
+          "single": 151,
+          "both": 11,
+          "straightCrashedByTurner": 28,
+          "turnerAhead": 28,
+          "alongCrashedByAcross": 33,
+          "cutInShare": 0.185,
+          "turnerAheadShare": 0.185,
+          "acrossShare": 0.219
+        },
+        "contactMsPerStep": {
+          "mean": 0.051,
+          "p95": 0.09,
+          "max": 2.035
+        }
+      },
+      {
+        "track": "Triangle",
+        "seed": "collisions-bench-1",
+        "contacts": 169,
+        "contactCrashes": 173,
+        "whoCrashed": {
+          "single": 118,
+          "both": 42,
+          "straightCrashedByTurner": 11,
+          "turnerAhead": 11,
+          "alongCrashedByAcross": 1,
+          "cutInShare": 0.093,
+          "turnerAheadShare": 0.093,
+          "acrossShare": 0.008
+        },
+        "contactMsPerStep": {
+          "mean": 0.063,
+          "p95": 0.15,
+          "max": 1.043
+        }
+      },
+      {
+        "track": "Rectangle",
+        "seed": "collisions-bench-2",
+        "contacts": 147,
+        "contactCrashes": 159,
+        "whoCrashed": {
+          "single": 135,
+          "both": 12,
+          "straightCrashedByTurner": 16,
+          "turnerAhead": 16,
+          "alongCrashedByAcross": 17,
+          "cutInShare": 0.119,
+          "turnerAheadShare": 0.119,
+          "acrossShare": 0.126
+        },
+        "contactMsPerStep": {
+          "mean": 0.066,
+          "p95": 0.133,
+          "max": 2.713
+        }
+      },
+      {
+        "track": "Triangle",
+        "seed": "collisions-bench-2",
+        "contacts": 161,
+        "contactCrashes": 173,
+        "whoCrashed": {
+          "single": 127,
+          "both": 34,
+          "straightCrashedByTurner": 16,
+          "turnerAhead": 16,
+          "alongCrashedByAcross": 8,
+          "cutInShare": 0.126,
+          "turnerAheadShare": 0.126,
+          "acrossShare": 0.063
+        },
+        "contactMsPerStep": {
+          "mean": 0.067,
+          "p95": 0.157,
+          "max": 1.386
+        }
+      }
+    ],
+    "worstCasePile": {
+      "N": 500,
+      "K": 8,
+      "walls": 40,
+      "pairsPerStep": 1736,
+      "msPerStep": 1.161
+    }
+  },
+  "browserStepCost": [
+    {
+      "date": "2026-09-25T05:37:59.423Z",
+      "machine": "Apple M3 Max (16 threads)",
+      "browser": "147.0.7727.15",
+      "runs": [
+        {
+          "track": "Rectangle",
+          "simSpeed": 2,
+          "collisions": "off",
+          "msPerStep": 1.083,
+          "stepsTimed": 1800,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            340,
+            352
+          ],
+          "fitness": [
+            7,
+            7
+          ]
+        },
+        {
+          "track": "Rectangle",
+          "simSpeed": 2,
+          "collisions": "heats of 8",
+          "msPerStep": 0.686,
+          "stepsTimed": 1800,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            190,
+            195
+          ],
+          "stillAlive": [
+            213,
+            204
+          ],
+          "fitness": [
+            6,
+            7
+          ]
+        },
+        {
+          "track": "Rectangle",
+          "simSpeed": 2,
+          "collisions": "heats of 1",
+          "msPerStep": 1.036,
+          "stepsTimed": 1800,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            353,
+            349
+          ],
+          "fitness": [
+            7,
+            7
+          ]
+        },
+        {
+          "track": "Rectangle",
+          "simSpeed": 100,
+          "collisions": "off",
+          "msPerStep": 0.254,
+          "stepsTimed": 1796,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            221,
+            226
+          ],
+          "fitness": [
+            7,
+            7
+          ]
+        },
+        {
+          "track": "Rectangle",
+          "simSpeed": 100,
+          "collisions": "heats of 8",
+          "msPerStep": 0.27,
+          "stepsTimed": 1797,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            185,
+            176
+          ],
+          "stillAlive": [
+            211,
+            218
+          ],
+          "fitness": [
+            7,
+            7
+          ]
+        },
+        {
+          "track": "Rectangle",
+          "simSpeed": 100,
+          "collisions": "heats of 1",
+          "msPerStep": 0.374,
+          "stepsTimed": 1795,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            358,
+            353
+          ],
+          "fitness": [
+            7,
+            7
+          ]
+        },
+        {
+          "track": "Triangle",
+          "simSpeed": 2,
+          "collisions": "off",
+          "msPerStep": 0.958,
+          "stepsTimed": 1800,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            288,
+            246
+          ],
+          "fitness": [
+            5,
+            6
+          ]
+        },
+        {
+          "track": "Triangle",
+          "simSpeed": 2,
+          "collisions": "heats of 8",
+          "msPerStep": 0.829,
+          "stepsTimed": 1800,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            78,
+            72
+          ],
+          "stillAlive": [
+            263,
+            248
+          ],
+          "fitness": [
+            3,
+            3
+          ]
+        },
+        {
+          "track": "Triangle",
+          "simSpeed": 2,
+          "collisions": "heats of 1",
+          "msPerStep": 0.914,
+          "stepsTimed": 1800,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            299,
+            291
+          ],
+          "fitness": [
+            4,
+            4
+          ]
+        },
+        {
+          "track": "Triangle",
+          "simSpeed": 100,
+          "collisions": "off",
+          "msPerStep": 0.249,
+          "stepsTimed": 1796,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            205,
+            198
+          ],
+          "fitness": [
+            6,
+            6
+          ]
+        },
+        {
+          "track": "Triangle",
+          "simSpeed": 100,
+          "collisions": "heats of 8",
+          "msPerStep": 0.382,
+          "stepsTimed": 1792,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            60,
+            63
+          ],
+          "stillAlive": [
+            280,
+            282
+          ],
+          "fitness": [
+            5,
+            5
+          ]
+        },
+        {
+          "track": "Triangle",
+          "simSpeed": 100,
+          "collisions": "heats of 1",
+          "msPerStep": 0.335,
+          "stepsTimed": 1795,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            285,
+            300
+          ],
+          "fitness": [
+            4,
+            4
+          ]
+        }
+      ]
+    },
+    {
+      "date": "2026-09-25T05:47:26.790Z",
+      "machine": "Apple M3 Max (16 threads)",
+      "browser": "147.0.7727.15",
+      "runs": [
+        {
+          "track": "Rectangle",
+          "simSpeed": 2,
+          "collisions": "off",
+          "msPerStep": 1.049,
+          "stepsTimed": 1800,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            422,
+            179
+          ],
+          "fitness": [
+            4,
+            6
+          ]
+        },
+        {
+          "track": "Rectangle",
+          "simSpeed": 2,
+          "collisions": "heats of 8",
+          "msPerStep": 0.706,
+          "stepsTimed": 1800,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            144,
+            127
+          ],
+          "stillAlive": [
+            193,
+            213
+          ],
+          "fitness": [
+            7,
+            7
+          ]
+        },
+        {
+          "track": "Rectangle",
+          "simSpeed": 2,
+          "collisions": "heats of 1",
+          "msPerStep": 0.963,
+          "stepsTimed": 1800,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            321,
+            307
+          ],
+          "fitness": [
+            7,
+            7
+          ]
+        },
+        {
+          "track": "Rectangle",
+          "simSpeed": 100,
+          "collisions": "off",
+          "msPerStep": 0.195,
+          "stepsTimed": 1792,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            131,
+            125
+          ],
+          "fitness": [
+            6,
+            6
+          ]
+        },
+        {
+          "track": "Rectangle",
+          "simSpeed": 100,
+          "collisions": "heats of 8",
+          "msPerStep": 0.269,
+          "stepsTimed": 1796,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            124,
+            122
+          ],
+          "stillAlive": [
+            202,
+            201
+          ],
+          "fitness": [
+            7,
+            7
+          ]
+        },
+        {
+          "track": "Rectangle",
+          "simSpeed": 100,
+          "collisions": "heats of 1",
+          "msPerStep": 0.363,
+          "stepsTimed": 1793,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            306,
+            284
+          ],
+          "fitness": [
+            7,
+            7
+          ]
+        },
+        {
+          "track": "Triangle",
+          "simSpeed": 2,
+          "collisions": "off",
+          "msPerStep": 0.855,
+          "stepsTimed": 1800,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            206,
+            207
+          ],
+          "fitness": [
+            4,
+            4
+          ]
+        },
+        {
+          "track": "Triangle",
+          "simSpeed": 2,
+          "collisions": "heats of 8",
+          "msPerStep": 0.713,
+          "stepsTimed": 1800,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            94,
+            94
+          ],
+          "stillAlive": [
+            172,
+            175
+          ],
+          "fitness": [
+            4,
+            6
+          ]
+        },
+        {
+          "track": "Triangle",
+          "simSpeed": 2,
+          "collisions": "heats of 1",
+          "msPerStep": 0.882,
+          "stepsTimed": 1800,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            257,
+            257
+          ],
+          "fitness": [
+            6,
+            6
+          ]
+        },
+        {
+          "track": "Triangle",
+          "simSpeed": 100,
+          "collisions": "off",
+          "msPerStep": 0.221,
+          "stepsTimed": 1792,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            140,
+            156
+          ],
+          "fitness": [
+            4,
+            4
+          ]
+        },
+        {
+          "track": "Triangle",
+          "simSpeed": 100,
+          "collisions": "heats of 8",
+          "msPerStep": 0.27,
+          "stepsTimed": 1794,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            103,
+            104
+          ],
+          "stillAlive": [
+            205,
+            180
+          ],
+          "fitness": [
+            4,
+            6
+          ]
+        },
+        {
+          "track": "Triangle",
+          "simSpeed": 100,
+          "collisions": "heats of 1",
+          "msPerStep": 0.312,
+          "stepsTimed": 1795,
+          "steps": 1800,
+          "contactDeathsPerGeneration": [
+            0,
+            0
+          ],
+          "stillAlive": [
+            238,
+            239
+          ],
+          "fitness": [
+            6,
+            6
+          ]
+        }
+      ]
+    }
+  ],
+  "seeds3to6": {
+    "c2": [
+      {
+        "track": "Rectangle",
+        "seed": "collisions-bench-3",
+        "contacts": 154,
+        "deepContacts": 1,
+        "contactCrashes": 184,
+        "contactMsPerStep": {
+          "mean": 0.063,
+          "p95": 0.132,
+          "max": 1.957
+        },
+        "firstSecondContactMsPerStep": 0.373,
+        "whoCrashed": {
+          "single": 113,
+          "both": 37,
+          "straightCrashedByTurner": 2,
+          "turnerAhead": 2,
+          "alongCrashedByAcross": 0,
+          "cutInShare": 0.018,
+          "turnerAheadShare": 0.018,
+          "acrossShare": 0
+        }
+      },
+      {
+        "track": "Triangle",
+        "seed": "collisions-bench-3",
+        "contacts": 159,
+        "deepContacts": 0,
+        "contactCrashes": 166,
+        "contactMsPerStep": {
+          "mean": 0.079,
+          "p95": 0.213,
+          "max": 1.402
+        },
+        "firstSecondContactMsPerStep": 0.388,
+        "whoCrashed": {
+          "single": 103,
+          "both": 49,
+          "straightCrashedByTurner": 8,
+          "turnerAhead": 8,
+          "alongCrashedByAcross": 0,
+          "cutInShare": 0.078,
+          "turnerAheadShare": 0.078,
+          "acrossShare": 0
+        }
+      },
+      {
+        "track": "Rectangle",
+        "seed": "collisions-bench-4",
+        "contacts": 151,
+        "deepContacts": 0,
+        "contactCrashes": 177,
+        "contactMsPerStep": {
+          "mean": 0.079,
+          "p95": 0.187,
+          "max": 3.857
+        },
+        "firstSecondContactMsPerStep": 0.368,
+        "whoCrashed": {
+          "single": 116,
+          "both": 32,
+          "straightCrashedByTurner": 0,
+          "turnerAhead": 0,
+          "alongCrashedByAcross": 0,
+          "cutInShare": 0,
+          "turnerAheadShare": 0,
+          "acrossShare": 0
+        }
+      },
+      {
+        "track": "Triangle",
+        "seed": "collisions-bench-4",
+        "contacts": 182,
+        "deepContacts": 0,
+        "contactCrashes": 173,
+        "contactMsPerStep": {
+          "mean": 0.068,
+          "p95": 0.184,
+          "max": 1.019
+        },
+        "firstSecondContactMsPerStep": 0.349,
+        "whoCrashed": {
+          "single": 119,
+          "both": 37,
+          "straightCrashedByTurner": 17,
+          "turnerAhead": 17,
+          "alongCrashedByAcross": 0,
+          "cutInShare": 0.143,
+          "turnerAheadShare": 0.143,
+          "acrossShare": 0
+        }
+      },
+      {
+        "track": "Rectangle",
+        "seed": "collisions-bench-5",
+        "contacts": 155,
+        "deepContacts": 1,
+        "contactCrashes": 193,
+        "contactMsPerStep": {
+          "mean": 0.066,
+          "p95": 0.143,
+          "max": 1.087
+        },
+        "firstSecondContactMsPerStep": 0.296,
+        "whoCrashed": {
+          "single": 112,
+          "both": 42,
+          "straightCrashedByTurner": 3,
+          "turnerAhead": 3,
+          "alongCrashedByAcross": 0,
+          "cutInShare": 0.027,
+          "turnerAheadShare": 0.027,
+          "acrossShare": 0
+        }
+      },
+      {
+        "track": "Triangle",
+        "seed": "collisions-bench-5",
+        "contacts": 167,
+        "deepContacts": 0,
+        "contactCrashes": 170,
+        "contactMsPerStep": {
+          "mean": 0.068,
+          "p95": 0.143,
+          "max": 2.127
+        },
+        "firstSecondContactMsPerStep": 0.319,
+        "whoCrashed": {
+          "single": 113,
+          "both": 42,
+          "straightCrashedByTurner": 12,
+          "turnerAhead": 12,
+          "alongCrashedByAcross": 0,
+          "cutInShare": 0.106,
+          "turnerAheadShare": 0.106,
+          "acrossShare": 0
+        }
+      },
+      {
+        "track": "Rectangle",
+        "seed": "collisions-bench-6",
+        "contacts": 145,
+        "deepContacts": 2,
+        "contactCrashes": 171,
+        "contactMsPerStep": {
+          "mean": 0.068,
+          "p95": 0.157,
+          "max": 2.034
+        },
+        "firstSecondContactMsPerStep": 0.262,
+        "whoCrashed": {
+          "single": 106,
+          "both": 34,
+          "straightCrashedByTurner": 1,
+          "turnerAhead": 1,
+          "alongCrashedByAcross": 0,
+          "cutInShare": 0.009,
+          "turnerAheadShare": 0.009,
+          "acrossShare": 0
+        }
+      },
+      {
+        "track": "Triangle",
+        "seed": "collisions-bench-6",
+        "contacts": 152,
+        "deepContacts": 1,
+        "contactCrashes": 162,
+        "contactMsPerStep": {
+          "mean": 0.064,
+          "p95": 0.17,
+          "max": 0.945
+        },
+        "firstSecondContactMsPerStep": 0.222,
+        "whoCrashed": {
+          "single": 112,
+          "both": 38,
+          "straightCrashedByTurner": 15,
+          "turnerAhead": 15,
+          "alongCrashedByAcross": 0,
+          "cutInShare": 0.134,
+          "turnerAheadShare": 0.134,
+          "acrossShare": 0
+        }
+      }
+    ],
+    "c1": [
+      {
+        "track": "Rectangle",
+        "seed": "collisions-bench-3",
+        "contacts": 157,
+        "contactCrashes": 169,
+        "whoCrashed": {
+          "single": 137,
+          "both": 17,
+          "straightCrashedByTurner": 16,
+          "turnerAhead": 16,
+          "alongCrashedByAcross": 22,
+          "cutInShare": 0.117,
+          "turnerAheadShare": 0.117,
+          "acrossShare": 0.161
+        },
+        "contactMsPerStep": {
+          "mean": 0.08,
+          "p95": 0.192,
+          "max": 2.363
+        }
+      },
+      {
+        "track": "Triangle",
+        "seed": "collisions-bench-3",
+        "contacts": 153,
+        "contactCrashes": 166,
+        "whoCrashed": {
+          "single": 105,
+          "both": 48,
+          "straightCrashedByTurner": 8,
+          "turnerAhead": 8,
+          "alongCrashedByAcross": 3,
+          "cutInShare": 0.076,
+          "turnerAheadShare": 0.076,
+          "acrossShare": 0.029
+        },
+        "contactMsPerStep": {
+          "mean": 0.098,
+          "p95": 0.275,
+          "max": 1.816
+        }
+      },
+      {
+        "track": "Rectangle",
+        "seed": "collisions-bench-4",
+        "contacts": 157,
+        "contactCrashes": 167,
+        "whoCrashed": {
+          "single": 145,
+          "both": 12,
+          "straightCrashedByTurner": 17,
+          "turnerAhead": 17,
+          "alongCrashedByAcross": 17,
+          "cutInShare": 0.117,
+          "turnerAheadShare": 0.117,
+          "acrossShare": 0.117
+        },
+        "contactMsPerStep": {
+          "mean": 0.085,
+          "p95": 0.207,
+          "max": 1.675
+        }
+      },
+      {
+        "track": "Triangle",
+        "seed": "collisions-bench-4",
+        "contacts": 177,
+        "contactCrashes": 168,
+        "whoCrashed": {
+          "single": 125,
+          "both": 32,
+          "straightCrashedByTurner": 20,
+          "turnerAhead": 20,
+          "alongCrashedByAcross": 7,
+          "cutInShare": 0.16,
+          "turnerAheadShare": 0.16,
+          "acrossShare": 0.056
+        },
+        "contactMsPerStep": {
+          "mean": 0.095,
+          "p95": 0.208,
+          "max": 1.25
+        }
+      },
+      {
+        "track": "Rectangle",
+        "seed": "collisions-bench-5",
+        "contacts": 161,
+        "contactCrashes": 171,
+        "whoCrashed": {
+          "single": 149,
+          "both": 12,
+          "straightCrashedByTurner": 21,
+          "turnerAhead": 21,
+          "alongCrashedByAcross": 26,
+          "cutInShare": 0.141,
+          "turnerAheadShare": 0.141,
+          "acrossShare": 0.174
+        },
+        "contactMsPerStep": {
+          "mean": 0.094,
+          "p95": 0.229,
+          "max": 2.018
+        }
+      },
+      {
+        "track": "Triangle",
+        "seed": "collisions-bench-5",
+        "contacts": 155,
+        "contactCrashes": 166,
+        "whoCrashed": {
+          "single": 117,
+          "both": 38,
+          "straightCrashedByTurner": 16,
+          "turnerAhead": 16,
+          "alongCrashedByAcross": 6,
+          "cutInShare": 0.137,
+          "turnerAheadShare": 0.137,
+          "acrossShare": 0.051
+        },
+        "contactMsPerStep": {
+          "mean": 0.089,
+          "p95": 0.189,
+          "max": 4.331
+        }
+      },
+      {
+        "track": "Rectangle",
+        "seed": "collisions-bench-6",
+        "contacts": 156,
+        "contactCrashes": 162,
+        "whoCrashed": {
+          "single": 146,
+          "both": 9,
+          "straightCrashedByTurner": 17,
+          "turnerAhead": 17,
+          "alongCrashedByAcross": 23,
+          "cutInShare": 0.116,
+          "turnerAheadShare": 0.116,
+          "acrossShare": 0.158
+        },
+        "contactMsPerStep": {
+          "mean": 0.083,
+          "p95": 0.202,
+          "max": 1.17
+        }
+      },
+      {
+        "track": "Triangle",
+        "seed": "collisions-bench-6",
+        "contacts": 148,
+        "contactCrashes": 156,
+        "whoCrashed": {
+          "single": 114,
+          "both": 34,
+          "straightCrashedByTurner": 18,
+          "turnerAhead": 18,
+          "alongCrashedByAcross": 5,
+          "cutInShare": 0.158,
+          "turnerAheadShare": 0.158,
+          "acrossShare": 0.044
+        },
+        "contactMsPerStep": {
+          "mean": 0.084,
+          "p95": 0.196,
+          "max": 1.109
+        }
+      }
+    ],
+    "c2WorstCasePile": {
+      "N": 500,
+      "K": 8,
+      "walls": 40,
+      "pairsPerStep": 1736,
+      "msPerStep": 1.232
+    }
+  }
+}

@@ -72,8 +72,11 @@
     return out;
   }
 
+  // Death causes from sim-worker.js endGen: 0 head-on, 1 side-scrape,
+  // 2 slide-out, 3 stalled, 4 alive, 5 car contact (collision mode). A code
+  // this build does not know counts as "other", never as alive.
   function causeHistogram(popDeathCauses, N) {
-    const h = { headOn: 0, side: 0, slide: 0, stalled: 0, alive: 0 };
+    const h = { headOn: 0, side: 0, slide: 0, stalled: 0, alive: 0, contact: 0, other: 0 };
     if (!popDeathCauses || !N) return h;
     for (let i = 0; i < N; i++) {
       const c = popDeathCauses[i] | 0;
@@ -81,7 +84,9 @@
       else if (c === 1) h.side++;
       else if (c === 2) h.slide++;
       else if (c === 3) h.stalled++;
-      else h.alive++;
+      else if (c === 4) h.alive++;
+      else if (c === 5) h.contact++;
+      else h.other++;
     }
     return h;
   }

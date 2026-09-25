@@ -31,3 +31,14 @@ say why. Keep the copy's old combined `update()`; the test checks that it has
 no `updatePhysics()`. The copy predates `Car.lastInputs` (human
 demonstrations, H1), which records the network's inputs and changes no
 driving.
+
+## sim-worker-before-c2.js and trial-worker-before-c2.js
+
+Byte-exact copies of `AI-Car-Racer/sim-worker.js` and
+`AI-Car-Racer/learning/trial-worker.js` from before car collisions were wired
+into them (task C2). `tests/collision-simulators.test.mjs` runs each copy and
+the current worker side by side with collisions off and requires identical
+messages (genEnd, the last snapshot, trial results). Do not edit them. If a
+change to a worker is meant to change what it simulates or posts with
+collisions off, that test fails by design: make the same change to the copy
+by hand, in the same commit, and say why.

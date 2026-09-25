@@ -4,13 +4,46 @@ export const FLAT_LENGTH=244;
 export const clamp=(n,lo,hi)=>Math.max(lo,Math.min(hi,Number(n)||0));
 export const validBrain=vector=>vector?.length===FLAT_LENGTH&&Array.from(vector).every(Number.isFinite);
 export const qualityFromFitness=fitness=>Number.isFinite(fitness)?Math.max(0,Math.tanh(fitness/20)):0;
+// Car collisions (docs/plan/car-collisions.md) as a context label: 'off', or
+// 'solid/k<K>' for solid cars in heats of K ('solid/kall': one heat). A
+// settings object ({heatSize}, as the workers get it) or true gives its label.
+// A label from elsewhere (an archive, another tab) is kept when it looks like
+// one, so modes never merge; anything else that is not off is 'unknown'.
+export function collisionsLabel(value){
+  if(value==null||value===false||value===''||value==='off')return 'off';
+  if(value===true)value={};
+  if(typeof value==='object'){
+    if(value.enabled===false)return 'off';
+    const k=Number(value.heatSize??8);
+    return 'solid/k'+(k===Infinity?'all':k>=1?Math.min(65536,Math.floor(k)):8);
+  }
+  // One spelling per mode: 'solid/k008' is 'solid/k8'.
+  const text=String(value).toLowerCase().replace(/^solid\/k(\d+)/,(_,k)=>'solid/k'+Math.min(65536,Number(k)));
+  return text.length<=40&&/^[a-z0-9]+(\/[a-z0-9]+){0,4}$/.test(text)?text:'unknown';
+}
+// The worker settings ({heatSize}) for a context label, or null (off, or a
+// mode this build cannot run).
+export function collisionSettings(label){
+  const m=/^solid\/k(all|\d{1,5})$/.exec(collisionsLabel(label));
+  if(!m)return null;
+  const k=m[1]==='all'?Infinity:Math.min(65536,Number(m[1]));
+  return k>=1?{heatSize:k}:null;
+}
 export function cleanContext(value={}) {
   const allowed=['balanced','calm','careful','wild','reckless'];
   return {version:1,profile:allowed.includes(value.profile)?value.profile:'balanced',
     track:String(value.track||'').slice(0,180),maxSpeed:clamp(value.maxSpeed||15,1,100),
-    traction:clamp(value.traction??.5,0,1),seconds:clamp(value.seconds||20,1,600)};
+    traction:clamp(value.traction??.5,0,1),seconds:clamp(value.seconds||20,1,600),
+    collisions:collisionsLabel(value.collisions)};
 }
-export function contextKey(value) {const c=cleanContext(value);return JSON.stringify([c.version,c.profile,c.track,c.maxSpeed,c.traction,c.seconds]);}
+// The collision mode joins the key only when it is not off, so every key
+// written before collisions existed (champions, feedback, transfer guards)
+// stays valid.
+export function contextKey(value) {
+  const c=cleanContext(value),key=[c.version,c.profile,c.track,c.maxSpeed,c.traction,c.seconds];
+  if(c.collisions!=='off')key.push(c.collisions);
+  return JSON.stringify(key);
+}
 export function mergeEvaluations(previous,current,limit=20){
   const rows=Array.isArray(previous?.evaluations)?previous.evaluations.filter(row=>row&&Number.isFinite(row.fitness)).slice(0,limit):[];
   const add=value=>{
@@ -46,8 +79,11 @@ export function matchContext(meta,context) {
   const profile=m.profile===q.profile,track=!!q.track&&m.track===q.track;
   const physics=m.maxSpeed===q.maxSpeed&&m.traction===q.traction;
   const duration=m.seconds===q.seconds;
-  return {factor:(profile?1:.45)*(physics?1:.75)*(duration?1:.85),exact:profile&&track&&physics&&duration,
-    label:profile?(track&&physics&&duration?'Same style, track, and conditions':'Same style · transfer candidate'):`${m.profile} style · transfer candidate`};
+  // An exact match is the same context key, so another collision mode is
+  // never exact. How much a different mode counts (the factor) is task C4.
+  const mode=m.collisions===q.collisions,same=track&&physics&&duration&&mode;
+  return {factor:(profile?1:.45)*(physics?1:.75)*(duration?1:.85),exact:profile&&same,
+    label:profile?(same?'Same style, track, and conditions':'Same style · transfer candidate'):`${m.profile} style · transfer candidate`};
 }
 export function selectDiverse(candidates,k=10) {
   const selected=[],limit=Math.max(1,Math.min(50,k|0));

@@ -27,6 +27,8 @@ jobs:
         if: ${{ !cancelled() }}
       - run: npm run test:demonstration:browser
         if: ${{ !cancelled() }}
+      - run: npm run test:collisions:browser
+        if: ${{ !cancelled() }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -35,4 +37,5 @@ jobs:
             test-results/learning/
             test-results/auto-train/
             test-results/demonstration/
+            test-results/collisions/
           retention-days: 14
