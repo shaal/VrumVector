@@ -147,8 +147,11 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
   time-block splits. About 2 hours. (H1 already skips the idle start and the
   damaged steps, and stores `crashSteps`; H2 decides what else to drop around
   a crash.) Also record the start: keep the last 0.5 s (30 steps) of the car
-  at rest before it first moves, so a clone learns to pull away from a stop.
-  Every race starts from rest. (Decided 2026-09-24.)
+  at rest before it first moves, and **label those steps with the keys that
+  first moved the car** (usually W), so a clone learns to pull away from a
+  stop. Every race starts from rest. Unlabelled rest steps teach "press
+  nothing at rest": in H3's check such clones never left the start line.
+  (Decided 2026-09-24; the relabelling replaces the first version.)
   depends: H1
 - [x] **H3 — Behavioural-cloning trainer.** Sigmoid stand-in, BCE, rare-key
   weights, Adam, early stop, key lag `k` chosen on held-out blocks, in a
@@ -179,10 +182,19 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
   Caution for the 0.5 s at rest: in a one-off check, clones trained with
   those rest steps learned to press nothing at rest and never pulled away;
   give rest steps the keys that first moved the car (see the results).
+  The lag test uses teachers that evolved with their keys delayed, as a
+  person adapts to their own reaction time; this reading was accepted on
+  2026-09-24. The stricter case (the same driver, keys shifted late) stays
+  a known-open `todo` test.
   Results: `docs/validation/behavioural-cloning.md`.
 - [ ] **H4 — Seed from a demonstration.** "Use my driving" in the panel, the
   `demonstration` seed kind, the source count, and the per-context offer
-  rule. About 2 hours.
+  rule. Also add weight decay to the trainer so a clone's weights stay near
+  the size of evolved brains: H3's clones came out about 10× larger, so
+  normal mutation changed their keys on only 1–10% of steps (17–82% for an
+  evolved brain) and the genetic algorithm could barely explore around
+  them. Report the new weight size and mutation effect; H5's paired check
+  decides whether the seed helps. (Decided 2026-09-24.) About 2–3 hours.
   depends: H3
 - [ ] **H5 — "Check my driving" paired trials.** Extract `runPairedCheck`
   from `transferCheck.js` (the transfer-check tests must still pass
