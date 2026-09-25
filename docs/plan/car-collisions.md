@@ -186,9 +186,11 @@ hand-kept copy of the car polygon (`makeCarPolygon`); do not add a second.
   when it is not `'off'`, so every existing key (champions, feedback,
   transfer guards) stays valid. `matchContext` treats a different collision
   mode as a non-exact match. **Built in C2** (pulled forward from C4, so
-  collision-mode results never mix with normal-mode memories): the field
-  (`'off'` or `'solid/k8'`), the key, and "never an exact match". How
-  much a different mode counts in `matchContext` (its factor) stays in C4.
+  collision-mode results are kept under their own key and never count as
+  normal-mode results): the field (`'off'` or `'solid/k8'`), the key, and
+  "never an exact match". A collision-mode generation can still recall
+  normal-mode memories as transfer candidates, at full weight: how much a
+  different mode counts in `matchContext` (its factor) stays in C4.
 - **Separated automatically once the context has the field:** evaluation
   rows, reranker feedback, the coach and champion cache, transfer candidates,
   and late-result rejection.
