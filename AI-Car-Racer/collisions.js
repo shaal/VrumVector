@@ -18,14 +18,23 @@
 //   - Contact. Two car triangles touch or overlap at the end of the step, or
 //     touched during it (straight-line motion relative to each other), so
 //     fast cars cannot pass through each other between two steps.
-//   - Striker. A car's nose is the side of its outline that faces its own
-//     motion: the front edge when driving forward (the triangle's base; the
-//     tip is the rear, see Car.polygonAt), the long sides when reversing. A
-//     car crashes when its nose made the contact: noses are judged at the
-//     moment the cars first touched during the step (or over the whole step
-//     if they already touched at its start). If both noses did (a head-on
-//     hit), both crash. A car slower than stallSpeed has no nose. A contact
-//     that touches neither nose (a flank or tail glance) crashes nobody.
+//   - Who crashes (decision D2, 2026-09-24): the car that moved into the
+//     other. First the motion both cars share along the road is removed:
+//     the road runs along the wall nearest the pair, and the shared part is
+//     the smaller of the two cars' motions along it, when both move the same
+//     way. What is left of each car's own motion is then compared along the
+//     contact direction, at the moment the cars first touched during the step
+//     (or, for cars that already touched at its start, along the direction
+//     that would push them apart soonest). A car closing on the other at
+//     stallSpeed or more crashes. If both close (a head-on hit), both crash;
+//     if neither does (a glance), nobody does. So a car that cuts in front of
+//     another is the one that crashes, because the car behind only shares the
+//     road's flow. With no walls, nothing is removed. Cars that already
+//     touched and are pressed deeper, with neither closing that fast, crash
+//     the one closing faster. Solid cars more than maxOverlap px inside each
+//     other that the rule spares crash the one that pushed in (it turned, or
+//     its own motion closes); if neither did, both become ghosts until they
+//     are clear. A car slower than stallSpeed is never the one that crashes.
 //   - Not solid: wrecks, cars parked for stallFrames steps, and ghosts. A car
 //     that starts moving after being parked, that turns without moving, or
 //     that had no room in the start row, is a ghost until it overlaps no live
@@ -46,10 +55,13 @@
     laneGap: 3,       // px; extra sideways room between the lanes of two slots
     stallFrames: 120, // steps (2 s at 60 Hz) below stallSpeed before a car stops being solid
     stallSpeed: 0.1,  // px per step
+    maxOverlap: 2,    // px: solid cars this far inside each other are not left that way
     width: 30,        // car size used by every simulator
     height: 50,
   });
-  const STRIKE = Object.freeze({NONE: 0, A: 1, B: 2, BOTH: 3});
+  // Who crashes. GHOST (only from the too-deep guard): nobody crashes, and
+  // both cars stop being solid until they are clear of each other.
+  const STRIKE = Object.freeze({NONE: 0, A: 1, B: 2, BOTH: 3, GHOST: 4});
   // Per-car status: not in play (a wreck, or a non-finite pose), in play but
   // not solid (parked, or a ghost), or solid.
   const STATUS = Object.freeze({GONE: 0, GHOST: 1, SOLID: 2});
@@ -137,16 +149,23 @@
   // Scratch, reused so the contact pass allocates nothing: typed arrays and
   // the fields of plain objects hold numbers without boxing them.
   // span: [first touch, last touch, normal x, normal y, normal known,
-  //        second normal x, second normal y, second normal known]
-  // nose: [cut, slowest nose speed squared, normal known, normal x,
-  //        normal y, side (+1 for the first car, -1 for the second),
-  //        second normal known, second normal x, second normal y]
-  const span = new Float64Array(8);
-  const nose = new Float64Array(9);
+  //        second normal x, second normal y, second normal known,
+  //        start normal x, start normal y, number of start normals (0-2),
+  //        second start normal x, y, overlap now (depth * |depth|, px^2)]
+  // judgeScratch: [slowest closing speed squared, number of contact
+  //        normals (1 or 2), normal x, normal y, second normal x, second
+  //        normal y, a car's own motion x, y, the other car's own motion
+  //        x, y, first car's speed squared, second car's speed squared,
+  //        first car turned this step, second car turned, 1 = the last
+  //        judgement was a deep overlap]
+  // flow: the road's direction for a pair (any length; (0, 0) = none).
+  // point: where to look for the road (the middle of the pair).
+  const span = new Float64Array(14);
+  const judgeScratch = new Float64Array(15);
+  const DEEP2 = DEFAULTS.maxOverlap * DEFAULTS.maxOverlap;
+  const flow = new Float64Array(2), point = new Float64Array(2);
   const axisEnter = new Float64Array(6), axisNormal = new Float64Array(12);
   const motion = {x: 0, y: 0};
-  const band = [{x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}, {x: 0, y: 0}];
-  const EARLY = 1e-3;   // noses are checked up to this far (of a step) past first touch
   const AT_START = 1e-9;  // a first touch this close to the step start counts as "already touching"
   const TIE = 1e-9;       // axes that open this close together open at the same moment
 
@@ -160,15 +179,25 @@
   // moments of overlap form one interval; the normal that opens last is the
   // one they touch across. When two open at the same moment (a corner meets
   // a corner), both are contact normals: span[5..6] gets the second and
-  // span[7] is 1, so rounding cannot pick one. No helper calls: numbers passed
-  // to a call that is not inlined are boxed, which allocates.
+  // span[7] is 1, so rounding cannot pick one. span[8..9] gets the normal
+  // along which the two overlapped least at the start of the step, pointing
+  // from p into q: the direction that would push them apart soonest, used
+  // for cars that already touched then. span[10] counts such normals: a
+  // second one that ties (span[11..12]) is kept too, and so is the opposite
+  // way when the two are centred on each other, so the order of the two
+  // cars cannot pick one. span[13] is how deep they overlap now (the
+  // least overlap over the six normals, as depth * |depth| in px^2; negative
+  // when apart). No helper calls: numbers passed to a call that is not
+  // inlined are boxed, which allocates.
   function contactSpan(p, m, q) {
     const mx = m.x, my = m.y;
     if (!(isFinite(mx) && isFinite(my))) return false;
-    let tIn = 0, tOut = 1, axes = 0;
+    let tIn = 0, tOut = 1, axes = 0, least = INF, now = INF;
+    span[10] = 0;
     for (let k = 0; k < 6; k++) {
       const t = k < 3 ? p : q, i = k % 3, j = i === 2 ? 0 : i + 1;
       const nx = t[j].y - t[i].y, ny = t[i].x - t[j].x;
+      axisEnter[k] = -INF;
       if (nx === 0 && ny === 0) continue;
       let pLo = INF, pHi = -INF, qLo = INF, qHi = -INF;
       for (let v = 0; v < 3; v++) {
@@ -181,9 +210,23 @@
       }
       if (!(pLo <= pHi && qLo <= qHi)) return false;   // a non-finite vertex
       axes++;
-      axisEnter[k] = -INF;
+      const nn = nx * nx + ny * ny, e = pHi - qLo < qHi - pLo ? pHi - qLo : qHi - pLo, es = e * (e < 0 ? -e : e) / nn;
+      if (es < now) now = es;
       // At moment tau, p projects to [pLo, pHi] + (tau - 1) d.
       const d = mx * nx + my * ny;
+      // Overlap along this normal at the start of the step, in px (compared
+      // as depth * |depth| / |n|^2, which keeps the order without a root).
+      const sLo = pLo - d, sHi = pHi - d, sMid = sLo + sHi, qMid = qLo + qHi, below = sMid <= qMid;
+      // Centred on each other along this normal: either way is "into q".
+      const centred = (sMid < qMid ? qMid - sMid : sMid - qMid) <= TIE * ((sMid < 0 ? -sMid : sMid) + (qMid < 0 ? -qMid : qMid));
+      const depth = below ? sHi - qLo : qHi - sLo, score = depth * (depth < 0 ? -depth : depth) / nn;
+      const tol = TIE * (1 + (least < 0 ? -least : least));   // relative, and at least 1e-9 px^2
+      if (span[10] === 0 || score < least - tol) {
+        least = score; span[8] = below ? nx : -nx; span[9] = below ? ny : -ny; span[10] = 1;
+        if (centred) { span[11] = -span[8]; span[12] = -span[9]; span[10] = 2; }
+      } else if (span[10] === 1 && score <= least + tol) {
+        span[11] = below ? nx : -nx; span[12] = below ? ny : -ny; span[10] = 2;
+      }
       if (d === 0) {
         if (pHi < qLo || qHi < pLo) return false;
         continue;
@@ -199,7 +242,7 @@
     }
     if (axes === 0) return false;
     const fresh = tIn > AT_START;
-    span[0] = fresh ? tIn : 0; span[1] = tOut; span[4] = 0; span[7] = 0;
+    span[0] = fresh ? tIn : 0; span[1] = tOut; span[4] = 0; span[7] = 0; span[13] = now;
     if (fresh) {
       for (let k = 0; k < 6; k++) {
         if (!(axisEnter[k] >= tIn - TIE)) continue;
@@ -215,89 +258,152 @@
     return contactSpan(p, m, q);
   }
 
-  // Did car's nose enter the other car between the start of the step and the
-  // moment nose[0] (0 = start, 1 = now)?
-  //   - The nose is every side of car's outline whose outward normal faces
-  //     car's own motion, the displacement -velocity (Car#move does
-  //     x -= velocity.x). A car moving less than stallSpeed has none.
-  //   - Each nose side sweeps a band along car's straight-line motion
-  //     relative to the other car, and the band must touch the other car.
-  //   - When the moment of first touch is known (nose[2]), the car must also
-  //     be moving into the other car there: its own motion along the contact
-  //     normal (nose[3..4], or the second one nose[7..8] after a tie, times
-  //     the side nose[5]) is at least stallSpeed. A car reversing away from a
-  //     car that rams its front does not strike.
+  // The road's direction near point[0..1]: the direction of the nearest wall
+  // (either way along it; only the line matters). Writes flow[0..1], or
+  // (0, 0) when there is no wall.
+  function roadAxis(walls) {
+    flow[0] = 0; flow[1] = 0;
+    const px = point[0], py = point[1];
+    let best = INF;
+    for (let i = 0; i < walls.length; i++) {
+      const w = walls[i];
+      if (!w) continue;
+      const a = w[0], b = w[1];
+      if (!a || !b) continue;
+      const ex = b.x - a.x, ey = b.y - a.y, len2 = ex * ex + ey * ey;
+      if (!(len2 > 0)) continue;
+      let t = ((px - a.x) * ex + (py - a.y) * ey) / len2;
+      if (t < 0) t = 0; else if (t > 1) t = 1;
+      const dx = px - a.x - t * ex, dy = py - a.y - t * ey, d2 = dx * dx + dy * dy;
+      if (d2 < best) { best = d2; flow[0] = ex; flow[1] = ey; }
+    }
+  }
+  // Which cars close on the other along the contact normals in
+  // judgeScratch (J[1] of them, at J[2..5]), from their own motions (a's at
+  // J[6..7], b's at J[8..9]; a's normals point into b, so b closes along
+  // -n)? A car closes when its motion into the other is stallSpeed or more
+  // (J[0] is its square). If neither does and `pressed` is 1 (the cars
+  // already touched at the start of the step and the step presses them
+  // together), the car closing faster crashes, both when they close equally
+  // fast: two cars that each drift in slower than stallSpeed must not sink
+  // through each other. A car slower than stallSpeed (J[10..11] hold the
+  // speeds squared) is never the one that crashes.
+  function closers(pressed) {
+    const J = judgeScratch, slow2 = J[0];
+    let s = 0, pressA = 0, pressB = 0;
+    for (let t = 0; t < J[1]; t++) {
+      const nx = J[2 + 2 * t], ny = J[3 + 2 * t], nn = nx * nx + ny * ny;
+      const ia = J[6] * nx + J[7] * ny, ib = -(J[8] * nx + J[9] * ny);
+      if (ia > 0 && ia * ia >= slow2 * nn) s |= STRIKE.A;
+      if (ib > 0 && ib * ib >= slow2 * nn) s |= STRIKE.B;
+      const gap = ia - ib, scale = (ia < 0 ? -ia : ia) + (ib < 0 ? -ib : ib);
+      if ((gap < 0 ? -gap : gap) <= TIE * scale) { pressA = 1; pressB = 1; }
+      else if (gap > 0) pressA = 1;
+      else pressB = 1;
+    }
+    if (s !== 0 || pressed !== 1) return s;
+    if (pressA && J[10] >= slow2 && J[10] > 0) s |= STRIKE.A;
+    if (pressB && J[11] >= slow2 && J[11] > 0) s |= STRIKE.B;
+    return s;
+  }
+  // Who moved into whom, after contactSpan(a.polygon, motion, b.polygon)
+  // returned `touched` (`motion` is a's motion relative to b), with
+  // judgeScratch[0] = stallSpeed squared.
+  //   - The contact direction: the normal(s) of first touch. For cars that
+  //     already touched at the start of the step, the direction(s) that
+  //     would push them apart soonest; if the step does not press them
+  //     together along one, they are coming apart and nobody crashes.
+  //   - The motion both cars share along the road does not count: along the
+  //     road's line (the nearest of `walls`, or the state's fixed `flow` when
+  //     there are none), when both cars move the same way, the smaller of
+  //     their two motions is taken from both.
+  //   - A car crashes when what is left of its own motion (the displacement
+  //     -velocity; Car#move does x -= velocity.x) closes on the other car at
+  //     stallSpeed or more along a contact normal; both crash if both do.
+  //     If neither does, a first touch is a glance and nobody crashes; cars
+  //     that already touched and are pressed deeper crash the one closing
+  //     faster (closers). The rest of a car's motion is never more than all
+  //     of it, and a car slower than stallSpeed is never the one to crash.
   // Turning is not part of the motion: a front corner of a turning car moves
   // under 1 px per step because of it.
-  function noseTouches(car, other) {
-    const p = car.polygon, q = other.polygon, mx = -car.velocity.x, my = -car.velocity.y;
-    const m2 = mx * mx + my * my, slow2 = nose[1];
-    if (!(m2 > 0 && m2 >= slow2)) return false;
-    if (nose[2]) {
-      let nx = nose[5] * nose[3], ny = nose[5] * nose[4], into = mx * nx + my * ny;
-      let entering = into > 0 && into * into >= slow2 * (nx * nx + ny * ny);
-      if (!entering && nose[6]) {
-        nx = nose[5] * nose[7]; ny = nose[5] * nose[8]; into = mx * nx + my * ny;
-        entering = into > 0 && into * into >= slow2 * (nx * nx + ny * ny);
+  function judge(a, b, touched, walls, fixed) {
+    const J = judgeScratch;
+    J[14] = 0;
+    if (!touched) return STRIKE.NONE;
+    const vax = a.velocity.x, vay = a.velocity.y, vbx = b.velocity.x, vby = b.velocity.y;
+    J[10] = vax * vax + vay * vay; J[11] = vbx * vbx + vby * vby;
+    let pressed = 0;
+    if (span[4] === 1) {
+      J[1] = 1; J[2] = span[2]; J[3] = span[3];
+      if (span[7] === 1) { J[1] = 2; J[4] = span[5]; J[5] = span[6]; }
+    } else {
+      // Keep the start normals the step presses the cars together along.
+      J[1] = 0;
+      if (span[10] >= 1 && motion.x * span[8] + motion.y * span[9] > 0) { J[2] = span[8]; J[3] = span[9]; J[1] = 1; }
+      if (span[10] === 2 && motion.x * span[11] + motion.y * span[12] > 0) {
+        J[2 + 2 * J[1]] = span[11]; J[3 + 2 * J[1]] = span[12]; J[1]++;
       }
-      if (!entering) return false;
+      pressed = J[1] > 0 ? 1 : 2;   // 2: already touching, not pressed together
     }
-    const rx = mx + other.velocity.x, ry = my + other.velocity.y;   // motion relative to other
-    const back = 1 - nose[0];
-    // Twice the signed area: its sign turns an edge into an outward normal.
-    const turn = (p[1].x - p[0].x) * (p[2].y - p[0].y) - (p[1].y - p[0].y) * (p[2].x - p[0].x);
-    for (let i = 0; i < 3; i++) {
-      const a = p[i], b = p[i === 2 ? 0 : i + 1];
-      const ex = b.x - a.x, ey = b.y - a.y;
-      // Outward normal is (ey, -ex) when turn > 0 and (-ey, ex) otherwise.
-      if (turn * (ey * mx - ex * my) > 0) {
-        // The side at the start of the step, then at the cut.
-        band[0].x = a.x - rx; band[0].y = a.y - ry;
-        band[1].x = b.x - rx; band[1].y = b.y - ry;
-        band[2].x = b.x - back * rx; band[2].y = b.y - back * ry;
-        band[3].x = a.x - back * rx; band[3].y = a.y - back * ry;
-        if (convexTouch(band, 4, q, 3)) return true;
+    flow[0] = 0; flow[1] = 0;
+    if (walls) { point[0] = 0.5 * (a.x + b.x); point[1] = 0.5 * (a.y + b.y); roadAxis(walls); }
+    if (fixed && flow[0] === 0 && flow[1] === 0) { flow[0] = fixed[0]; flow[1] = fixed[1]; }
+    let ax = -vax, ay = -vay, bx = -vbx, by = -vby;
+    const ex = flow[0], ey = flow[1], ee = ex * ex + ey * ey;
+    if (ee > 0) {
+      const ua = ax * ex + ay * ey, ub = bx * ex + by * ey;
+      if ((ua > 0 && ub > 0) || (ua < 0 && ub < 0)) {
+        const s = (ua > 0 ? (ua < ub ? ua : ub) : (ua > ub ? ua : ub)) / ee;
+        ax -= s * ex; ay -= s * ey; bx -= s * ex; by -= s * ey;
       }
     }
-    return false;
+    J[6] = ax; J[7] = ay; J[8] = bx; J[9] = by;
+    if (pressed === 0) return closers(0);
+    const s = pressed === 1 ? closers(1) : STRIKE.NONE;
+    return s === 0 ? deepOverlap() : s;
   }
-  function outcome(a, b) {
-    nose[5] = 1;
-    const first = noseTouches(a, b);
-    nose[5] = -1;
-    return (first ? STRIKE.A : 0) | (noseTouches(b, a) ? STRIKE.B : 0);
-  }
-  // Set the nose check from the last contactSpan(a, motion of a relative to
-  // b, b). When the cars first touched during this step, noses are judged at
-  // that moment and against its contact normal: whoever's nose made the
-  // contact strikes, not a nose that reaches the other car later, through its
-  // body. If they already touched at the start of the step (or no touch was
-  // found), any moment of the step counts. With the entering check the cut
-  // is a second guard: a car that moves into the other across one of its
-  // sides has that side facing its motion, so its nose touches at first
-  // touch; the cut keeps rounding from letting a later nose count.
-  function judgeFrom(touched) {
-    const fresh = touched && span[4] === 1;
-    nose[0] = fresh ? (span[0] + EARLY < 1 ? span[0] + EARLY : 1) : 1;
-    nose[2] = fresh ? 1 : 0;
-    nose[3] = span[2]; nose[4] = span[3];
-    nose[6] = fresh && span[7] === 1 ? 1 : 0;
-    nose[7] = span[5]; nose[8] = span[6];
+  // The safety net for cars that already touched and that the rule spares:
+  // solid cars must not stay more than maxOverlap px inside each other.
+  // Turning is not part of the motion the rule sees, so a car that turns
+  // into a car it already touches could otherwise sink into it, and cars
+  // slower than stallSpeed are never the ones to crash. A car pushed in
+  // during this step if it moves at stallSpeed or more and it turned
+  // (J[12..13]; resolveContacts sets them), or what is left of its own
+  // motion (J[6..9]) closes on the other along a start direction. The one
+  // that pushed in crashes; if both did, the one that turned, else the one
+  // with more motion of its own, both when equal. If neither did (two slow
+  // cars, or cars pulling apart), nobody crashes: both become ghosts until
+  // they are clear, so they come apart without anyone being blamed.
+  function deepOverlap() {
+    const J = judgeScratch, slow2 = J[0];
+    if (!(span[13] > DEEP2)) return STRIKE.NONE;
+    J[14] = 1;
+    let ia = -INF, ib = -INF;
+    for (let t = 0; t < span[10]; t++) {
+      const nx = span[8 + 3 * t], ny = span[9 + 3 * t];
+      const ca = J[6] * nx + J[7] * ny, cb = -(J[8] * nx + J[9] * ny);
+      if (ca > ia) ia = ca;
+      if (cb > ib) ib = cb;
+    }
+    const pa = J[10] > 0 && J[10] >= slow2 && (J[12] === 1 || ia > 0);
+    const pb = J[11] > 0 && J[11] >= slow2 && (J[13] === 1 || ib > 0);
+    if (!pa && !pb) return STRIKE.GHOST;
+    if (pa !== pb) return pa ? STRIKE.A : STRIKE.B;
+    if (J[12] !== J[13]) return J[12] ? STRIKE.A : STRIKE.B;
+    const oa = J[6] * J[6] + J[7] * J[7], ob = J[8] * J[8] + J[9] * J[9], gap = oa - ob;
+    if ((gap < 0 ? -gap : gap) <= TIE * (oa + ob)) return STRIKE.BOTH;
+    return gap > 0 ? STRIKE.A : STRIKE.B;
   }
   // Who crashes when cars a and b touch: STRIKE.A, STRIKE.B, STRIKE.BOTH
   // (head-on), or STRIKE.NONE (a glance). Symmetric in a and b. `state`
-  // (optional) supplies stallSpeed, below which a car has no nose.
-  function strikeOutcome(a, b, state) {
+  // (optional) supplies stallSpeed and a fixed road direction (`flow`);
+  // `walls` (optional, road.borders) gives the road's direction from the
+  // nearest wall instead.
+  function strikeOutcome(a, b, state, walls) {
     const slow = state ? state.stallSpeed : DEFAULTS.stallSpeed;
-    nose[1] = slow * slow;
+    judgeScratch[0] = slow * slow; judgeScratch[12] = 0; judgeScratch[13] = 0;
     motion.x = b.velocity.x - a.velocity.x; motion.y = b.velocity.y - a.velocity.y;
-    judgeFrom(contactSpan(a.polygon, motion, b.polygon));
-    return outcome(a, b);
-  }
-  // Did car's nose touch the other car at any moment of this step?
-  function leadingSideTouches(car, other) {
-    nose[0] = 1; nose[1] = DEFAULTS.stallSpeed * DEFAULTS.stallSpeed; nose[2] = 0; nose[6] = 0;
-    return noseTouches(car, other);
+    return judge(a, b, contactSpan(a.polygon, motion, b.polygon), walls || null, state ? state.flow : null);
   }
 
   // --- start row ---------------------------------------------------------------
@@ -457,9 +563,12 @@
   // --- per-step contact pass ---------------------------------------------------
 
   // Per-generation state for N cars. options: {heatSize, stallFrames,
-  // stallSpeed}. `row` (a startRow result with at least rowSize(N, K) poses)
+  // stallSpeed, flow}. flow ({x, y}, optional) is a fixed road direction for
+  // contacts judged without walls (tests). `row` (a startRow result with at
+  // least rowSize(N, K) poses)
   // marks the cars that start as ghosts. After resolveContacts, status[i]
-  // (STATUS) and mark[i] (1 = crashed by a contact this step) describe car i
+  // (STATUS) and mark[i] (1 = crashed by a contact this step, 2 = made a
+  // ghost by the too-deep guard) describe car i
   // until the next physics pass.
   function createState(N, options = {}, row = null) {
     const n = Math.floor(N);
@@ -470,21 +579,24 @@
     stallFrames = stallFrames >= 1 ? Math.min(STALL_CAP, Math.floor(stallFrames)) : DEFAULTS.stallFrames;
     let stallSpeed = Number(options.stallSpeed ?? DEFAULTS.stallSpeed);
     if (!(stallSpeed >= 0 && stallSpeed < INF)) stallSpeed = DEFAULTS.stallSpeed;
+    const fx = Number(options.flow && options.flow.x), fy = Number(options.flow && options.flow.y);
+    const fixedFlow = isFinite(fx) && isFinite(fy) && (fx !== 0 || fy !== 0) ? Float64Array.of(fx, fy) : null;
     if (row && !(row.poses && row.poses.length >= rowSize(n, size))) {
       throw new RangeError('CarCollisions.createState: the start row needs rowSize(N, K) poses');
     }
     const state = {
-      N: n, heatSize: size, heats, stallFrames, stallSpeed,
+      N: n, heatSize: size, heats, stallFrames, stallSpeed, flow: fixedFlow,
       slot: new Int32Array(n),        // start slot per car (slotOf)
       stall: new Uint16Array(n),      // consecutive steps below stallSpeed
       ghost: new Uint8Array(n),       // 1 = not solid until clear of live heat-mates
       angle: new Float64Array(n).fill(NaN),  // heading at the last pass
       status: new Uint8Array(n),      // STATUS after the last contact pass
-      mark: new Uint8Array(n),        // 1 = crashed by a contact in the last pass
+      mark: new Uint8Array(n),        // 1 = crashed by a contact in the last pass, 2 = made a ghost
       live: new Uint8Array(n),        // scratch for step(): simulated this step
       blocked: new Uint8Array(n),     // scratch: ghost overlaps a live heat-mate
+      turned: new Uint8Array(n),      // scratch: the heading changed in this step
       reach2: new Float64Array(n),    // scratch: squared bounding radius per car
-      stats: {steps: 0, pairTests: 0, narrowTests: 0, contacts: 0, sweptContacts: 0, crashes: 0},
+      stats: {steps: 0, pairTests: 0, narrowTests: 0, contacts: 0, sweptContacts: 0, deepContacts: 0, crashes: 0},
     };
     for (let i = 0; i < n; i++) {
       state.slot[i] = slotOf(i, n, heats);
@@ -495,14 +607,16 @@
   }
 
   // Resolve this step's contacts. Call it after every car's physics and
-  // before any car's perception. A striker gets damaged = true and
+  // before any car's perception. `walls` (road.borders) gives the road's
+  // direction for the rule; without it, the state's fixed flow (or none) is
+  // used. A car that moved into another gets damaged = true and
   // contactCrash = true. Returns the number of cars it crashed. A car with a
   // non-finite pose or velocity is not in play.
-  function resolveContacts(cars, state) {
+  function resolveContacts(cars, state, walls) {
     const n = state.N;
     if (!cars || cars.length !== n) throw new RangeError('CarCollisions: cars.length does not match the state');
     const H = state.heats, stall = state.stall, ghost = state.ghost, angle = state.angle, status = state.status;
-    const mark = state.mark, blocked = state.blocked, reach2 = state.reach2;
+    const mark = state.mark, blocked = state.blocked, reach2 = state.reach2, turnedNow = state.turned;
     const limit = state.stallFrames, slow2 = state.stallSpeed * state.stallSpeed;
 
     // 1. Who is solid this step (from the state after every car moved).
@@ -514,11 +628,12 @@
           !(c.width > 0 && c.height > 0)) { status[i] = GONE; continue; }
       const v2 = vx * vx + vy * vy;
       const last = angle[i], turned = last === last && c.angle !== last;
+      turnedNow[i] = turned ? 1 : 0;
       angle[i] = c.angle;
       if (v2 === 0 || v2 < slow2) {
         if (stall[i] < STALL_CAP) stall[i]++;
         // Turning in place sweeps the body around without any motion the
-        // striker rule can see, so such a car is a ghost.
+        // contact rule can see, so such a car is a ghost.
         if (turned) ghost[i] = 1;
       } else {
         if (stall[i] >= limit) ghost[i] = 1;   // leaving a stall: ghost until clear
@@ -529,8 +644,9 @@
     }
 
     // 2. Mark: every pair inside a heat, tested against the same state.
-    nose[1] = slow2;                    // slower than stallSpeed: no nose
-    let pairTests = 0, narrowTests = 0, contacts = 0, sweptContacts = 0;
+    judgeScratch[0] = slow2;            // closing slower than stallSpeed does not count
+    const road = walls || null, fixed = state.flow;
+    let pairTests = 0, narrowTests = 0, contacts = 0, sweptContacts = 0, deepContacts = 0;
     for (let h = 0; h < H; h++) {
       for (let a = h; a < n; a += H) {
         const sa = status[a];
@@ -564,24 +680,30 @@
             sweptContacts++;
           }
           contacts++;
-          judgeFrom(touched);
-          const s = outcome(ca, cb);
+          judgeScratch[12] = turnedNow[a]; judgeScratch[13] = turnedNow[b];
+          const s = judge(ca, cb, touched, road, fixed);
+          if (judgeScratch[14] === 1) deepContacts++;
           if (s & STRIKE.A) mark[a] = 1;
           if (s & STRIKE.B) mark[b] = 1;
+          if (s & STRIKE.GHOST) { if (!mark[a]) mark[a] = 2; if (!mark[b]) mark[b] = 2; }
         }
       }
     }
 
-    // 3. Apply: crash the strikers, release ghosts that are clear, and leave
-    // status describing the state after the pass.
+    // 3. Apply: crash the cars that moved into another, turn the pairs the
+    // too-deep guard spared into ghosts, release ghosts that are clear, and
+    // leave status describing the state after the pass.
     let crashes = 0;
     for (let i = 0; i < n; i++) {
-      if (mark[i]) {
+      if (mark[i] === 1) {
         const c = cars[i];
         c.damaged = true;
         c.contactCrash = true;
         status[i] = GONE;
         crashes++;
+      } else if (mark[i] === 2) {
+        ghost[i] = 1;
+        status[i] = GHOST;
       } else if (ghost[i] && status[i] !== GONE && !blocked[i]) {
         ghost[i] = 0;
         status[i] = stall[i] >= limit ? GHOST : SOLID;
@@ -589,7 +711,7 @@
     }
     const stats = state.stats;
     stats.steps++; stats.pairTests += pairTests; stats.narrowTests += narrowTests;
-    stats.contacts += contacts; stats.sweptContacts += sweptContacts; stats.crashes += crashes;
+    stats.contacts += contacts; stats.sweptContacts += sweptContacts; stats.deepContacts += deepContacts; stats.crashes += crashes;
     return crashes;
   }
 
@@ -607,16 +729,54 @@
     const n = state.N, live = state.live;
     if (!cars || cars.length !== n) throw new RangeError('CarCollisions: cars.length does not match the state');
     for (let i = 0; i < n; i++) live[i] = cars[i].updatePhysics(borders, checkPointList) ? 1 : 0;
-    const crashes = resolveContacts(cars, state);
+    const crashes = resolveContacts(cars, state, borders);
     for (let i = 0; i < n; i++) if (live[i]) cars[i].updatePerception(borders, checkPointList);
     return crashes;
+  }
+
+  // --- simulators ----------------------------------------------------------------
+
+  // Collision mode from a begin or trial message: null when off, or a frozen
+  // {heatSize}. true, or an object without enabled: false, turns it on; a
+  // missing or odd heat size is the default K.
+  function config(value) {
+    if (value === true) value = {};
+    if (!value || typeof value !== 'object' || value.enabled === false) return null;
+    let k = Number(value.heatSize ?? DEFAULTS.heatSize);
+    k = k === INF ? INF : k >= 1 ? Math.min(65536, Math.floor(k)) : DEFAULTS.heatSize;
+    return Object.freeze({heatSize: k});
+  }
+  // One generation of N cars in collision mode `cfg` (from config()): the
+  // start row across gate 0 of road.checkPointList, and the state. start:
+  // {x, y, heading}, the normal start pose; road: {borders, borderGrid,
+  // checkPointList}. Car i then spawns at spawnPose(row, i, state).
+  function generation(N, cfg, start, road) {
+    const gates = road && road.checkPointList, K = cfg.heatSize;
+    const row = startRow({x: start.x, y: start.y, heading: start.heading || 0,
+      gate: gates && gates.length ? gates[0] : null, count: rowSize(N, K), road});
+    return {row, state: createState(N, {heatSize: K}, row)};
+  }
+  // In collision mode the sensor stride is at most this (the stride the
+  // workers use at 20x): at 100x a car would otherwise travel about 240 px
+  // between looks.
+  const STRIDE_CAP = 4;
+  // Per-car flags for snapshots, written into `out` (Uint8Array(N)): 1 =
+  // solid, 2 = in play but not solid (a ghost or a parked car), 4 = crashed
+  // by a contact. The heat of car i is i mod state.heats.
+  function flags(cars, state, out) {
+    const status = state.status;
+    for (let i = 0; i < state.N; i++) {
+      out[i] = (status[i] === SOLID ? 1 : status[i] === GHOST ? 2 : 0) | (cars[i].contactCrash ? 4 : 0);
+    }
+    return out;
   }
 
   root.CarCollisions = Object.freeze({
     DEFAULTS, STRIKE, STATUS,
     heatSize, heatCount, heatOf, slotOf, rowSize,
-    trianglesOverlap, sweptTouch, leadingSideTouches, strikeOutcome,
+    trianglesOverlap, sweptTouch, strikeOutcome,
     poseClear, startClear, startRow, spawnPose,
     createState, resolveContacts, isSolid, step,
+    config, generation, flags, STRIDE_CAP,
   });
 })(globalThis);

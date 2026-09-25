@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
-import {LearningCoach,buildPopulation,cleanContext,contextKey,matchContext,selectDiverse,offspringFeedback,qualityFromFitness,mergeEvaluations,evaluationFor} from '../AI-Car-Racer/learning/policy.js';
+import {LearningCoach,buildPopulation,cleanContext,contextKey,matchContext,selectDiverse,offspringFeedback,qualityFromFitness,mergeEvaluations,evaluationFor,collisionsLabel,collisionSettings} from '../AI-Car-Racer/learning/policy.js';
 import {seededRandom} from '../AI-Car-Racer/graphics/state.js';
 import {Simulation} from './helpers/simulation.mjs';
 import {CircuitJournal} from '../AI-Car-Racer/sona/journal.js';
@@ -81,6 +81,36 @@ test('context changes reset the champion and history; retrieval favors matching 
   assert.equal(exact.exact,true);assert.equal(exact.factor,1);
   assert.ok(matchContext({learningContext:{...context,profile:'reckless'}},context).factor<1);
   assert.match(matchContext({},context).label,/unverified/);
+});
+test('collision mode joins the learning context; keys without it stay exactly as before',()=>{
+  // The key written before collisions existed: six fields, in this order.
+  const old=c=>JSON.stringify([1,c.profile,c.track,c.maxSpeed,c.traction,c.seconds]);
+  assert.equal(context.collisions,'off');
+  assert.equal(contextKey(context),old(context));
+  for(const off of [undefined,null,false,'','off',{enabled:false,heatSize:8}])assert.equal(contextKey({...context,collisions:off}),old(context),String(off));
+  const on=cleanContext({...context,collisions:{heatSize:8}});
+  assert.equal(on.collisions,'solid/k8');
+  assert.equal(contextKey(on),JSON.stringify([1,'careful','rectangle',15,.5,20,'solid/k8']));
+  assert.notEqual(contextKey(on),contextKey(context));
+  assert.equal(contextKey(on),contextKey({...context,collisions:'solid/k8'}),'a stored label keys like the settings it came from');
+  // Labels: the same heat size the workers use (CarCollisions.config).
+  for(const [value,label] of [[true,'solid/k8'],[{},'solid/k8'],[{heatSize:12.7},'solid/k12'],[{heatSize:0},'solid/k8'],[{heatSize:NaN},'solid/k8'],
+    [{heatSize:Infinity},'solid/kall'],[{heatSize:1e9},'solid/k65536'],['solid/k8/rays','solid/k8/rays'],['SOLID/K8','solid/k8'],['solid/k008','solid/k8'],['solid/k0','solid/k0'],['solid/k99999','solid/k65536'],
+    ['<script>','unknown'],['x'.repeat(41),'unknown'],[42,'42']])assert.equal(collisionsLabel(value),label,JSON.stringify(value));
+  for(const [label,settings] of [['solid/k8',{heatSize:8}],['solid/kall',{heatSize:Infinity}],['off',null],['unknown',null],['solid/k0',null],['solid/k8/rays',null]])
+    assert.deepEqual(collisionSettings(label),settings,label);
+  assert.equal(collisionsLabel(collisionSettings('solid/k12')),'solid/k12');
+  // Late results, champions, and feedback follow the key; another collision
+  // mode is never an exact match (how much it counts is task C4).
+  const coach=new LearningCoach();coach.setContext(context);coach.record({fitness:9,popN:1,popStillAlive:1},brain(.4));
+  coach.setContext(on);assert.equal(coach.incumbent,null,'collision mode starts its own champion');
+  const across=matchContext({learningContext:context},on),same=matchContext({learningContext:on},on);
+  assert.equal(across.exact,false);assert.equal(across.factor,1,'the factor is unchanged until C4');
+  assert.match(across.label,/transfer candidate/);
+  assert.equal(same.exact,true);assert.equal(matchContext({learningContext:{...context,collisions:undefined}},context).exact,true,'legacy memories are normal mode');
+  const meta=mergeEvaluations({fitness:4,learningContext:context},{fitness:7,learningContext:on});
+  assert.equal(meta.evaluations.length,2,'separate evaluation rows');
+  assert.equal(evaluationFor(meta,context).fitness,4);assert.equal(evaluationFor(meta,on).fitness,7);
 });
 test('deduplicated brains keep separate bounded evaluations for each profile and track',()=>{
   const careful={fitness:4,learningContext:context},wild={fitness:8,learningContext:{...context,profile:'wild'}};

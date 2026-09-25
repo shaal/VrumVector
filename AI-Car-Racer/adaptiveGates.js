@@ -312,16 +312,21 @@
    * Mean death position for cars that died after clearing `afterCp` gates
    * but not more (failed trying for the next gate). Falls back to global
    * death mean. Coordinates come from the worker (same events Heat paints).
+   * Car-contact deaths (cause 5, collision mode) are left out: they show
+   * where cars met, not where the road is hard, and gates would chase
+   * pile-ups.
    */
   function crashCentroid(genData, afterCp) {
     const N = genData.popN | 0;
     const xy = genData.popDeathXY;
     const counts = genData.popCheckpoints;
+    const causes = genData.popDeathCauses;
     if (!xy || !N) return null;
 
     let sx = 0, sy = 0, n = 0;
     let gsx = 0, gsy = 0, gn = 0;
     for (let i = 0; i < N; i++) {
+      if (causes && causes[i] === 5) continue;
       const x = xy[i * 2], y = xy[i * 2 + 1];
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       gsx += x; gsy += y; gn++;
@@ -822,6 +827,7 @@
     getStatus: getStatus,
     geometrySignature: geometrySignature,
     _state: state,
+    _crashCentroid: crashCentroid,   // for tests
   };
 
   if (state.enabled) {

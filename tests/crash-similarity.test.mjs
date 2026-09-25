@@ -78,3 +78,25 @@ test('the bridge builds crash recalls with the tested mapping on a cosine index'
   assert.ok(constructions?.length>=2,'Expected the crash store to be constructed in ready() and rebuildIndicesFromMirror()');
   for(const line of constructions)assert.match(line,/new VectorDB\(/,'Crash maps must not follow the hyperbolic index kind');
 });
+
+test('death causes: car contact (5) has its own bucket, and an unknown code is never counted as alive',()=>{
+  const causes=Int8Array.from([0,1,2,3,4,5,5,9,-1]);
+  assert.deepEqual({...scope.CrashMapCodec.causeHistogram(causes,causes.length)},{headOn:1,side:1,slide:1,stalled:1,alive:1,contact:2,other:2});
+  assert.deepEqual({...scope.CrashMapCodec.causeHistogram(null,3)},{headOn:0,side:0,slide:0,stalled:0,alive:0,contact:0,other:0});
+});
+
+test('car-contact deaths stay out of the adaptive-gates crash centroid',async()=>{
+  const gatesScope=vm.createContext({window:{},location:{search:''},URLSearchParams,console});
+  vm.runInContext(gates,gatesScope);
+  const centroid=gatesScope.window.AdaptiveGates._crashCentroid;
+  // Four wall deaths near (100, 100) after gate 2 and three contact deaths far away.
+  const xy=Float32Array.from([100,100, 110,100, 100,110, 110,110, 2000,900, 2010,900, 2000,910, NaN,NaN]);
+  const popCheckpoints=Int16Array.from([2,2,2,2,2,2,2,3]),popDeathCauses=Int8Array.from([0,1,0,2,5,5,5,4]);
+  const c=centroid({popN:8,popDeathXY:xy,popCheckpoints,popDeathCauses},2);
+  assert.deepEqual({x:c.x,y:c.y,n:c.n,scoped:c.scoped},{x:105,y:105,n:4,scoped:true});
+  // Without causes (an older worker), every death counts, as before.
+  assert.equal(centroid({popN:8,popDeathXY:xy,popCheckpoints},2).n,7);
+  // Contact deaths do not count toward the global fallback either.
+  const onlyContact=centroid({popN:8,popDeathXY:xy,popCheckpoints,popDeathCauses:Int8Array.from([5,5,5,5,5,5,5,4])},2);
+  assert.equal(onlyContact,null);
+});

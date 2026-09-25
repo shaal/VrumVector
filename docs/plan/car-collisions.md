@@ -1,9 +1,11 @@
 # Car collisions: cars that cannot drive through each other (plan)
 
-**Status:** C1 is built: the shared core `AI-Car-Racer/collisions.js` and the
-`Car.update()` split. No simulator uses the core yet, so nothing changes for
-users until C2. Decisions D1–D4 were taken on 2026-09-24 (the recommended
-options, below). Results: [validation](../validation/car-collisions.md).
+**Status:** C1 and C2 are built. C1: the shared core
+`AI-Car-Racer/collisions.js` and the `Car.update()` split. C2: all four
+simulators use the core, behind an experiment that is off by default
+(🧪 Experiments → "Solid cars", or `?collide=1`). Decisions D1–D4 were
+taken on 2026-09-24; D2 was changed the same day, during C2 (below).
+Results: [validation](../validation/car-collisions.md).
 
 **Goal:** an opt-in mode in which cars are solid. Cars can hit each other, a
 hit has a cost, the cars' sensors can see other cars, and the population
@@ -81,10 +83,33 @@ So making the whole population solid does not work:
 
 ### What a hit does
 
-- **Recommended: the striker crashes.** The car whose nose enters the other
-  car crashes, as if it hit a wall; a head-on hit crashes both. The other car
-  keeps going. This is the clearest "do not drive into things" signal, and it
-  reuses the existing crash path (`damaged`, `deathFrame`, death causes).
+- **Decided (D2, 2026-09-24): the car that moved into the other crashes.**
+  First, the motion both cars share along the road is taken away: along the
+  line of the wall nearest the pair, when both cars move the same way, the
+  smaller of their two motions. Then each car's remaining motion is compared
+  along the contact direction at the moment of first touch. The car closing
+  on the other crashes, as if it hit a wall; if both close (head-on), both
+  crash; if neither closes (a glance), nobody does. So a car that cuts in
+  front of another is the one that crashes; the car behind crashes too only
+  if it was catching up along the road. It reuses the existing crash path
+  (`damaged`, `deathFrame`, death causes). Two guards keep solid cars from
+  sinking into each other: cars that already touch and are pressed deeper
+  crash the one closing faster, and cars more than 2 px inside each other
+  crash the one that pushed in (by turning, or by its own motion); if
+  neither did, both become ghosts until they are clear. Built in C2;
+  details and the measured split:
+  [validation](../validation/car-collisions.md#c2-the-four-simulators).
+- **Why the road.** Taken literally ("each car's motion toward the other"),
+  the rule gives C1's result in a cut-in: at the moment of touch, the front
+  of the car behind runs into the cutter's side, and the cutter moves along
+  its own side. A cut-in and a car driving into another's side at a small
+  angle are the same motion; only the road tells them apart. Two other
+  options were offered: the literal rule (no change from C1 in practice),
+  and the road rule plus "a car closing at least twice as fast as the other
+  crashes alone". The user chose the road rule.
+- **Replaced: C1's striker rule.** The car whose nose enters the other car
+  crashed. It crashed the car behind in a cut-in (12 to 23% of single-car
+  crashes in a C1 review).
 - Alternatives:
   - **Both crash:** simplest, but rear-ended cars die for nothing, which adds
     fitness noise.
@@ -93,17 +118,16 @@ So making the whole population solid does not work:
     and does not fit the "dead cars skip everything" fast path.
 - **Crashed cars become non-solid** (no pile-ups in Triangle's 193 px apex).
   Cars stalled for a while likely should too.
-- **Built in C1:** the car's triangle tip is its rear, because a car moves
-  away from the tip (`x -= velocity.x`). So "nose" means the side of the
-  outline that faces the car's motion: the base when driving forward, the
-  long sides when reversing. "Enters" is read at the moment the cars first
-  touch during the step (swept along the motion, so fast cars cannot pass
-  through each other): a car strikes when its nose touches the other car
-  and its own motion carries it into the other car. A car rammed while it
-  reverses away does not strike, a car slower than 0.1 px per step never
-  strikes, and a tail or flank glance crashes nobody. Known outcome: a
-  cut-in crashes the car behind. Details:
-  [validation](../validation/car-collisions.md#c1-the-shared-core).
+- **Built in C2 (replacing C1's nose test):** the contact is found at the
+  moment the cars first touch during the step (swept along the motion, so
+  fast cars cannot pass through each other). A car crashes when its own
+  motion, less the shared road motion, closes on the other car at 0.1 px per
+  step or more along the contact direction. A car rammed while it reverses
+  away does not crash, a car slower than 0.1 px per step is never the one
+  that crashes, and cars that overlap (under 2 px) without moving into each
+  other crash nobody. The car's triangle tip is its rear (a car moves away from it,
+  `x -= velocity.x`). Details:
+  [validation](../validation/car-collisions.md#c2-the-four-simulators).
 
 ### Seeing other cars
 
@@ -158,10 +182,13 @@ hand-kept copy of the car polygon (`makeCarPolygon`); do not add a second.
 ### Learning context and ruvector
 
 - **Context.** Add a `collisions` field to `cleanContext` (`learning/policy.js`),
-  for example `'off'` or `'striker/k8/rays'`. Append it to `contextKey` only
+  for example `'off'` or `'solid/k8/rays'`. Append it to `contextKey` only
   when it is not `'off'`, so every existing key (champions, feedback,
   transfer guards) stays valid. `matchContext` treats a different collision
-  mode as a non-exact match.
+  mode as a non-exact match. **Built in C2** (pulled forward from C4, so
+  collision-mode results never mix with normal-mode memories): the field
+  (`'off'` or `'solid/k8'`), the key, and "never an exact match". How
+  much a different mode counts in `matchContext` (its factor) stays in C4.
 - **Separated automatically once the context has the field:** evaluation
   rows, reranker feedback, the coach and champion cache, transfer candidates,
   and late-result rejection.
@@ -206,8 +233,11 @@ Paired by track and seed, with shared random streams:
 - **D1 — Who collides.** **Taken:** heats of 8 inside the AI population.
   Alternatives: the whole population (small N only), a few rival cars driven
   by archived champions (learners ghost each other), or only your own car.
-- **D2 — What a hit does.** **Taken:** the striker crashes; head-on crashes
-  both. Alternatives: both crash, or a bump that slows the car.
+- **D2 — What a hit does.** **Taken, then changed (2026-09-24, during C2):**
+  the car that moved into the other crashes, with the motion both cars share
+  along the road taken away first; head-on crashes both, a glance nobody.
+  First taken as "the striker (whose nose enters) crashes", built in C1.
+  Alternatives: both crash, or a bump that slows the car.
 - **D3 — How cars see cars.** **Taken:** the existing rays also hit cars
   (no retraining, no migration). Alternative: separate car inputs (bigger
   network, padding migration).
@@ -217,6 +247,9 @@ Paired by track and seed, with shared random streams:
   at 1× later.
 
 Smaller defaults (change them at C1 review if needed):
+
+- **Pose jitter in collision mode** (decided in C2): ignored. The start row
+  places every car, and car 0 (the elite) keeps the normal start pose.
 
 - Wrecks and cars stalled for 2 s are not solid. Built in C1: "stalled" means
   under 0.1 px per step for 120 steps. A stalled car that drives off again,
@@ -233,31 +266,35 @@ Smaller defaults (change them at C1 review if needed):
   allocation-free triangle contact test, the striker rule, non-solid wrecks;
   `Car.update()` split into physics and perception. Node tests, including
   "collisions off is bit-identical". About 4–6 hours.
-- [ ] **C2 — Wire into the four simulators.** Three-pass step, config in the
+- [x] **C2 — Wire into the four simulators.** Three-pass step, config in the
   `begin` and trial messages, death cause 5 counted correctly, heat and
   contact flags in snapshots, a toggle, and a stride cap. About 4 hours.
   depends: C1
-  - Add `collisions.js` after `car.js` to both workers' `importScripts`.
+  - [x] Add `collisions.js` after `car.js` to both workers' `importScripts`.
     In collision mode, replace the per-car `update()` loop with
     `CarCollisions.step(cars, state, borders, checkPoints)`: every car's
     `updatePhysics()`, then `resolveContacts()`, then `updatePerception()`
     for the cars whose `updatePhysics()` returned true. With collisions off,
     keep calling `update()`.
-  - Per generation: `row = startRow({..., count: rowSize(N, K), road})`,
-    `state = createState(N, {heatSize: K}, row)`, and car `i` spawns at
-    `spawnPose(row, i, state)`. Decide whether pose jitter stays off in
+  - [x] Per generation: `CarCollisions.generation(N, config, start, road)`
+    builds the start row (`rowSize(N, K)` slots) and the state; car `i`
+    spawns at `spawnPose(row, i, state)`. Pose jitter is ignored in
     collision mode.
-  - The core sets `damaged` and `contactCrash`, and `state.mark[i]` for the
-    step. The simulators record `prevDamaged` and `prevSlide` before
-    `step()` and set `deathFrame`, `slideAtDeath`, `deathX`, `deathY`, and
-    cause 5 after it.
-  - Snapshots and C3's rays read `isSolid(state, i)` (fresh after each
-    pass).
-  - `sim-worker.js` `poseInCorridor` must then call `CarCollisions.poseClear`,
-    so the wall check has one copy. Its polygon copy is already gone: it
-    uses `Car.polygonAt`.
-  - If `main.js` moves onto the split too, the H1 demonstration recorder
-    must run after `updatePerception()`, where `car.lastInputs` is set.
+  - [x] The core sets `damaged` and `contactCrash`, and `state.mark[i]` for
+    the step. The live and A/B workers record `prevDamaged` and `prevSlide`
+    before `step()` and set `deathFrame`, `slideAtDeath`, `deathX`,
+    `deathY` after it; `endGen` gives a contact death cause 5.
+  - [x] Snapshots carry `carFlags` from `CarCollisions.flags` (solid, ghost
+    or parked, crashed by a contact) and the heat count; C3's rays read
+    `isSolid(state, i)`.
+  - [x] `sim-worker.js` `poseInCorridor` calls `CarCollisions.poseClear`.
+  - [x] `main.js` stays on `update()` (only your own cars step there), so
+    the H1 demonstration recorder is unchanged.
+  - [x] The new blame rule (D2, changed during C2), cause 5 in
+    `metricsComputeRow` and `causeHistogram` (an unknown code is "other",
+    not "alive"), contact deaths out of the Adaptive-gates crash centroid,
+    the sensor stride capped at 4, the Experiments toggle and `?collide=1`,
+    and C4's `collisions` context field and key.
 - [ ] **C3 — Rays see cars.** Rays hit solid heat-mates; readings carry a
   `kind`; contact and near-car statistics in `DriverProfiles.summarize`.
   About 3 hours.
@@ -266,6 +303,16 @@ Smaller defaults (change them at C1 review if needed):
   `collisions` field, the `matchContext` factor, `meta.driving` fields,
   crash-map filtering, SONA guard. About 3 hours.
   depends: C2
+  - [x] Pulled forward into C2: the `collisions` field in `cleanContext`,
+    appended to `contextKey` only when it is not `'off'`, and "a different
+    mode is never an exact match". Contact deaths are already left out of
+    the Adaptive-gates crash centroid.
+  - [ ] Still to do: the `matchContext` factor for a different mode,
+    `carContact` and `nearCarRate` in `meta.driving`, contact deaths in the
+    crash-map archive (a separate heat map, or filtered out), crash maps
+    tagged with the mode (so Adaptive gates never recall a normal-mode layout
+    in collision mode, and reach rates leave contact deaths out), and the
+    SONA guard.
 - [ ] **C5 — Display.** Focus the leader's heat, draw contacts, and show the
   mode in the panel. About 3 hours.
   depends: C2

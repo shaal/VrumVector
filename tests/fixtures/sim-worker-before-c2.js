@@ -9,8 +9,7 @@
 //   main → worker
 //     { type: 'init',   canvasW, canvasH, borders, checkPointList }
 //     { type: 'begin',  N, seconds, maxSpeed, traction, startInfo,
-//                        brains: Float32Array(N*FLAT_LENGTH),
-//                        collisions?: null | {heatSize} }   — see collisions.js
+//                        brains: Float32Array(N*FLAT_LENGTH) }
 //     { type: 'setSimSpeed', v }
 //     { type: 'setPause', pause }
 //     { type: 'setTraction', v }
@@ -19,22 +18,14 @@
 //   worker → main
 //     { type: 'ready' }
 //     { type: 'snapshot', ...see postSnapshot }   — throttled to ~60Hz
-//     { type: 'genEnd', bestBrain, fitness, laps, lapTimes, checkPointsCount, frameCount,
-//                        collisions?: {heatSize, heats, rowFitted, contacts, contactDeaths, ...} }
-//
-// Collision mode (docs/plan/car-collisions.md): when 'begin' carries
-// collisions, cars in the same heat are solid. Each heat starts in a row
-// across gate 0 (pose jitter is ignored), every step runs
-// CarCollisions.step() (every car moves, contacts resolve, every car senses),
-// the sensor stride is capped at CarCollisions.STRIDE_CAP, snapshots carry
-// per-car flags, and a car crashed by a contact has death cause 5.
+//     { type: 'genEnd', bestBrain, fitness, laps, lapTimes, checkPointsCount, frameCount }
 //
 // The worker keeps an identity-stable bestEpoch counter that increments each
 // time it promotes a new `bestCar`. Main uses that to refresh the dynamics-
 // embedder identity guard; without it, recording would reset on every
 // snapshot.
 
-importScripts('utils.js', 'spatialGrid.js', 'network.js', 'controls.js', 'sensor.js', 'driver/profiles.js', 'car.js', 'collisions.js', 'graphics/recorder.js');
+importScripts('utils.js', 'spatialGrid.js', 'network.js', 'controls.js', 'sensor.js', 'driver/profiles.js', 'car.js', 'graphics/recorder.js');
 
 // Worker-scope globals that sensor.js / car.js read directly by name.
 self.frameCount = 0;
@@ -58,9 +49,6 @@ const MAX_STEPS = 60; // legacy name; runtime uses maxAccumForSpeed / maxStepsPe
 let bestEpoch = 0;
 let presentationRecorder = null;
 let runSerial=0, learningContext=null, seedParents=[], seedKinds=[];
-// Collision mode for this generation: null when off, else {row, state}
-// (CarCollisions.generation) plus per-car scratch for death records.
-let collision = null;
 
 // Per-tick wall-time budget base. Scaled up with simSpeed so 100× can burn
 // real CPU instead of yielding every 20ms after only a handful of steps.
@@ -169,10 +157,25 @@ function handleInit(m) {
 }
 
 // Check a spawn pose without allocating a Car (avoids instantiating Sensor +
-// NeuralNetwork just to validate a spawn). CarCollisions.poseClear is the one
-// copy of this wall check, and Car.polygonAt the one copy of the car's shape.
+// NeuralNetwork just to validate a spawn). Car.polygonAt is the one copy of
+// the car's shape.
 function poseInCorridor(x, y, angle, width, height){
-    return CarCollisions.poseClear(self.road, x, y, angle, width, height);
+    const poly = Car.polygonAt(x, y, angle, width, height);
+    const borders = self.road && self.road.borders;
+    if (!borders) return true;
+    const grid = self.road.borderGrid;
+    if (grid){
+        const ids = grid.queryPolygon(poly);
+        for (let k = 0; k < ids.length; k++){
+            const b = borders[ids[k]];
+            if (b && polysIntersect(poly, b)) return false;
+        }
+        return true;
+    }
+    for (let i = 0; i < borders.length; i++){
+        if (polysIntersect(poly, borders[i])) return false;
+    }
+    return true;
 }
 
 function handleBegin(m) {
@@ -203,21 +206,10 @@ function handleBegin(m) {
 
     const N = m.N;
     const flat = m.brains;
-    // Collision mode: each heat starts in a row across gate 0, so pose
-    // jitter does not apply (car 0, the elite, keeps the normal start pose).
-    const collide = CarCollisions.config(m.collisions);
-    collision = null;
-    if (collide) {
-        const gen = CarCollisions.generation(N, collide, startInfo, self.road);
-        collision = {row: gen.row, state: gen.state, prevDamaged: new Uint8Array(N), prevSlide: new Uint8Array(N)};
-    }
     cars = new Array(N);
     for (let i = 0; i < N; i++) {
         let x = startInfo.x, y = startInfo.y, angle = canonicalAngle;
-        if (collision) {
-            const p = CarCollisions.spawnPose(collision.row, i, collision.state);
-            x = p.x; y = p.y; angle = p.angle;
-        } else if (i >= 1 && jitterR > 0){
+        if (i >= 1 && jitterR > 0){
             let accepted = false;
             for (let att = 0; att < jitterMax; att++){
                 const r = Math.sqrt(Math.random()) * jitterR;    // uniform-in-disk
@@ -237,7 +229,7 @@ function handleBegin(m) {
         assignBrainFromFlat(c.brain, flat, i * FLAT_LENGTH);
         cars[i] = c;
     }
-    if (jitterR > 0 && !collision){
+    if (jitterR > 0){
         self.postMessage({ type: 'debug', event: 'poseJitter', rejected: jitterRejected, fallback: jitterFallback, jittered: N - 1 });
     }
     self.bestCar = cars.length ? cars[0] : null;
@@ -357,7 +349,7 @@ function stepOnce() {
 
     const budgetMs = tickBudgetForSpeed(simSpeed);
     const stepCap = maxStepsPerTick(simSpeed);
-    self.SENSOR_STRIDE = collision ? Math.min(CarCollisions.STRIDE_CAP, computeStride(simSpeed)) : computeStride(simSpeed);
+    self.SENSOR_STRIDE = computeStride(simSpeed);
 
     // Drain until empty, step cap, or wall budget — leftover stays in _accum
     // for the next tick (no pre-debit of the whole queue).
@@ -375,22 +367,7 @@ function stepOnce() {
         }
         self.frameCount++;
         _accum -= 1;
-        if (collision) {
-            // Every car moves, contacts resolve, then every car senses. The
-            // core sets damaged and contactCrash; the death record is ours.
-            const pd = collision.prevDamaged, ps = collision.prevSlide;
-            for (let i = 0; i < cars.length; i++) { pd[i] = cars[i].damaged ? 1 : 0; ps[i] = cars[i].slide ? 1 : 0; }
-            CarCollisions.step(cars, collision.state, self.road.borders, self.road.checkPointList);
-            for (let i = 0; i < cars.length; i++) {
-                const cc = cars[i];
-                if (!pd[i] && cc.damaged) {
-                    cc.deathFrame = self.frameCount;
-                    cc.slideAtDeath = !!ps[i];
-                    cc.deathX = cc.x;
-                    cc.deathY = cc.y;
-                }
-            }
-        } else for (let i = 0; i < cars.length; i++) {
+        for (let i = 0; i < cars.length; i++) {
             const cc = cars[i];
             const prevDamaged = cc.damaged;
             // Snapshot prior-frame slide flag so endGen can classify slide-out
@@ -568,17 +545,7 @@ function postSnapshot(simMs, steps) {
         } catch (_) { /* bail quietly — viz is non-critical */ }
     }
 
-    // Collision mode: per-car flags (CarCollisions.flags: 1 solid, 2 ghost or
-    // parked, 4 crashed by a contact) and the heat count (car i is in heat
-    // i mod heats), for the display (task C5).
-    let carFlags = null, collisions = null;
-    if (collision) {
-        carFlags = CarCollisions.flags(cars, collision.state, new Uint8Array(N));
-        collisions = {heatSize: collision.state.heatSize, heats: collision.state.heats};
-    }
-
     const transfer = [positions.buffer];
-    if (carFlags)     transfer.push(carFlags.buffer);
     if (bestRays)     transfer.push(bestRays.buffer);
     if (bestReadings) transfer.push(bestReadings.buffer);
     if (bestInputs)              transfer.push(bestInputs.buffer);
@@ -594,8 +561,7 @@ function postSnapshot(simMs, steps) {
         bestSpeed, bestMaxSpeed, bestDamaged,
         bestCheckpoints, bestLaps, bestLapTimes,
         bestInputs, bestOutputActivations,
-        simMs, steps,
-        ...(collision ? {collisions, carFlags} : {})
+        simMs, steps
     }, transfer);
 }
 
@@ -633,9 +599,8 @@ function endGen() {
     const popCheckpoints = new Int16Array(N);
     const popDeathFrames = new Int32Array(N);   // -1 sentinel = survived to timeout
     // popDeathCauses encodes per-car terminal state: 0=head-on, 1=side-scrape,
-    // 2=slide-out, 3=stalled, 4=alive, 5=car contact (collision mode).
-    // Mutually exclusive — sum across buckets equals N. Classification is
-    // O(N) at endGen (no per-frame cost).
+    // 2=slide-out, 3=stalled, 4=alive. Mutually exclusive — sum across buckets
+    // equals N. Classification is O(N) at endGen (no per-frame cost).
     const popDeathCauses = new Int8Array(N);
     // Crash positions (x,y per car). Alive / never-damaged → NaN so consumers
     // can skip. Used by AdaptiveGates crash-heat curriculum on main.
@@ -645,7 +610,7 @@ function endGen() {
         const c = cars[i];
         popCheckpoints[i] = c.checkPointsCount | 0;
         if (c.damaged) {
-            if (!c.contactCrash) wallBumps++;   // contact deaths are cause 5, not wall bumps
+            wallBumps++;
             popDeathFrames[i] = (c.deathFrame != null ? c.deathFrame : self.frameCount) | 0;
             popDeathXY[i * 2]     = (c.deathX != null ? c.deathX : c.x);
             popDeathXY[i * 2 + 1] = (c.deathY != null ? c.deathY : c.y);
@@ -654,13 +619,10 @@ function endGen() {
             // hard into the wall rather than scraping it laterally.
             const maxSpd = c.maxSpeed || 1;
             const fwdMag = Math.abs(c.speed || 0);
-            // Priority: car contact > slide-out > head-on > side-scrape.
-            // A contact crash is never a wall crash. Slide-out is a
+            // Priority: slide-out > head-on > side-scrape. Slide-out is a
             // distinctive traction-loss failure even at high forward speed,
             // so we tag it first when c.slideAtDeath was latched at impact.
-            if (c.contactCrash) {
-                popDeathCauses[i] = 5; // car contact: it moved into a heat-mate
-            } else if (c.slideAtDeath) {
+            if (c.slideAtDeath) {
                 popDeathCauses[i] = 2; // slide-out
             } else if (fwdMag > 0.7 * maxSpd) {
                 popDeathCauses[i] = 0; // head-on
@@ -712,21 +674,10 @@ function endGen() {
         popStillAlive: stillAlive,
         popCheckpoints, popDeathFrames, popDeathCauses, popDeathXY,
         bestHiddenActivations,
-        genSeconds: seconds,
-        ...(collision ? {collisions: collisionSummary()} : {})
+        genSeconds: seconds
     }, transfer);
     // Wait for main's next `begin` — stepping is paused until then.
     pause = true;
-}
-
-// What collision mode did this generation (genEnd.collisions).
-function collisionSummary() {
-    const st = collision.state, stats = st.stats;
-    let contactDeaths = 0;
-    for (let i = 0; i < cars.length; i++) if (cars[i].contactCrash) contactDeaths++;
-    return {heatSize: st.heatSize, heats: st.heats, rowFitted: collision.row.fitted, rowPitch: collision.row.pitch,
-        steps: stats.steps, pairTests: stats.pairTests, contacts: stats.contacts, sweptContacts: stats.sweptContacts,
-        deepContacts: stats.deepContacts, contactDeaths};
 }
 
 // Ready signal so main can sync init before posting begin().

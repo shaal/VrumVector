@@ -3,14 +3,9 @@
 //
 //   main -> worker { type:'trial', id, key, arm, track:{canvasW, canvasH, borders,
 //                    checkPointList, startInfo}, context, profile, maxSpeed,
-//                    traction, seconds, exploration, seeds:[Float32Array], options,
-//                    collisions?: {heatSize} }
+//                    traction, seconds, exploration, seeds:[Float32Array], options }
 //   worker -> main { type:'result', id, arm, best, area, lastMean, history } | { type:'error', id, arm, message }
-//
-// With collisions, the cars of a heat are solid, as in sim-worker.js: each
-// heat starts in a row across gate 0, and every step runs
-// CarCollisions.step(). The stride stays 1, under the collision-mode cap.
-importScripts('../utils.js','../spatialGrid.js','../network.js','../controls.js','../sensor.js','../driver/profiles.js','../car.js','../collisions.js');
+importScripts('../utils.js','../spatialGrid.js','../network.js','../controls.js','../sensor.js','../driver/profiles.js','../car.js');
 
 self.frameCount=0;self.bestCar=null;self.road=null;self.traction=.5;self.invincible=false;self.SENSOR_STRIDE=1;
 const FLAT_LENGTH=244;
@@ -22,13 +17,12 @@ function buildRoad({canvasW,canvasH,borders,checkPointList}){
   road.borderGrid.addSegments(borders);road.cpGrid.addSegments(checkPointList);
   return road;
 }
-function simulator({startInfo,maxSpeed,seconds,profile,collisions}){
-  const gates=self.road.checkPointList.length,collide=CarCollisions.config(collisions);
+function simulator({startInfo,maxSpeed,seconds,profile}){
+  const gates=self.road.checkPointList.length;
   return flat=>{
-    const cars=[],n=flat.length/FLAT_LENGTH,gen=collide?CarCollisions.generation(n,collide,startInfo,self.road):null;
-    for(let i=0;i<n;i++){
-      const p=gen?CarCollisions.spawnPose(gen.row,i,gen.state):{x:startInfo.x,y:startInfo.y,angle:startInfo.heading||0};
-      const car=new Car(p.x,p.y,30,50,'AI',maxSpeed,p.angle);car.driverProfile=profile;
+    const cars=[];
+    for(let i=0;i<flat.length/FLAT_LENGTH;i++){
+      const car=new Car(startInfo.x,startInfo.y,30,50,'AI',maxSpeed,startInfo.heading||0);car.driverProfile=profile;
       let at=i*FLAT_LENGTH;
       for(const level of car.brain.levels){
         for(let j=0;j<level.biases.length;j++)level.biases[j]=flat[at++];
@@ -38,8 +32,7 @@ function simulator({startInfo,maxSpeed,seconds,profile,collisions}){
     }
     for(let frame=1;frame<=seconds*60;frame++){
       self.frameCount=frame;
-      if(gen)CarCollisions.step(cars,gen.state,self.road.borders,self.road.checkPointList);
-      else for(const car of cars)car.update(self.road.borders,self.road.checkPointList);
+      for(const car of cars)car.update(self.road.borders,self.road.checkPointList);
     }
     let elite=cars[0],score=-Infinity;
     for(const car of cars){const rank=DriverProfiles.rank(car,gates);if(rank>score){elite=car;score=rank;}}
@@ -47,8 +40,7 @@ function simulator({startInfo,maxSpeed,seconds,profile,collisions}){
     for(const level of elite.brain.levels){for(const v of level.biases)vector[at++]=v;for(const v of level.weights)vector[at++]=v;}
     const meanProgress=cars.reduce((sum,car)=>sum+car.checkPointsCount+car.laps*gates,0)/cars.length;
     return {vector,fitness:elite.checkPointsCount+elite.laps*gates,meanProgress,styleScore:DriverProfiles.styleScore(elite),
-      popN:cars.length,popStillAlive:cars.filter(c=>!c.damaged).length,driving:DriverProfiles.summarize(elite),
-      ...(gen?{contactDeaths:cars.filter(c=>c.contactCrash).length}:{})};
+      popN:cars.length,popStillAlive:cars.filter(c=>!c.damaged).length,driving:DriverProfiles.summarize(elite)};
   };
 }
 
@@ -61,7 +53,7 @@ self.onmessage=async({data:m})=>{
     // physics streams, so the only systematic difference is the seed pool.
     Math.random=seededRandom(m.key+':physics');
     const seeds=(m.seeds||[]).map((vector,i)=>({vector:new Float32Array(vector),id:'seed-'+i}));
-    const result=runTrialArm({simulate:simulator({startInfo:m.track.startInfo,maxSpeed:m.maxSpeed,seconds:m.seconds,profile:m.profile,collisions:m.collisions}),
+    const result=runTrialArm({simulate:simulator({startInfo:m.track.startInfo,maxSpeed:m.maxSpeed,seconds:m.seconds,profile:m.profile}),
       context:m.context,seeds,random:seededRandom(m.key+':population'),exploration:m.exploration,...(m.options||{})});
     self.postMessage({type:'result',id:m.id,arm:m.arm,...result});
   }catch(error){self.postMessage({type:'error',id:m.id,arm:m.arm,message:String(error?.message||error)});}

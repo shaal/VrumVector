@@ -68,6 +68,35 @@ computeStartInfoInPlace(currentCheckpointList());
 // Applied to AI cars only (not elite at i=0, not player cars).
 window.__poseJitter = window.__poseJitter || { radiusPx: 0, angleDeg: 0, maxAttempts: 8 };
 
+// Car collisions (docs/plan/car-collisions.md) — an experiment, OFF by
+// default: 🧪 Experiments → "Solid cars", or `?collide=1`. It is not a saved
+// physics setting, so a reload without the flag starts with it off. When on,
+// AI cars in the same heat of heatSize are solid; both workers get the mode in
+// 'begin', and the learning context records it, so collision-mode results
+// never mix with normal-mode memories.
+var carCollisions = { enabled: false, heatSize: 8 };
+// The mode of the primary's current generation: the A/B baseline copies it,
+// so both sides of a generation always run, and are labelled, the same way.
+var activeCollisions = null;
+try { if (new URLSearchParams(location.search).get('collide') === '1') carCollisions.enabled = true; } catch (_) {}
+function collisionConfig(){
+    return carCollisions.enabled ? { heatSize: carCollisions.heatSize } : null;
+}
+window.carCollisionsEnabled = function(){ return carCollisions.enabled; };
+// Turning the mode on or off starts a new generation in the new mode (like a
+// style change), so no generation mixes the two.
+window.setCarCollisions = function(on){
+    on = !!on;
+    if (on === carCollisions.enabled) return false;
+    carCollisions.enabled = on;
+    try {
+        if (typeof restartDriverLearning === 'function') restartDriverLearning();
+    } finally {
+        try { if (typeof window.__onCarCollisionsChange === 'function') window.__onCarCollisionsChange(on); } catch (_) {}
+    }
+    return true;
+};
+
 // Default training knobs — tuned for visible ruvector warm-start + higher
 // early survival (not micro-bench cold starts). Presets (Fresh/Grind/Polish)
 // still override these when clicked.
@@ -685,9 +714,10 @@ function metricsComputeRow(m){
         return alive / N;
     };
     // Death-cause breakdown (0=head-on, 1=side-scrape, 2=slide-out, 3=stalled,
-    // 4=alive). Buckets are mutually exclusive; sum must equal N. Fallback to
-    // zeros if an older worker build didn't send popDeathCauses.
-    let dcHead = 0, dcSide = 0, dcSlide = 0, dcStalled = 0, dcAlive = 0;
+    // 4=alive, 5=car contact). Buckets are mutually exclusive; sum must equal
+    // N. A code this build does not know counts as "other", never as alive.
+    // Fallback to zeros if an older worker build didn't send popDeathCauses.
+    let dcHead = 0, dcSide = 0, dcSlide = 0, dcStalled = 0, dcAlive = 0, dcContact = 0, dcOther = 0;
     const dc = m.popDeathCauses;
     if (dc){
         for (let i = 0; i < N; i++){
@@ -696,7 +726,9 @@ function metricsComputeRow(m){
             else if (b === 1) dcSide++;
             else if (b === 2) dcSlide++;
             else if (b === 3) dcStalled++;
-            else dcAlive++;
+            else if (b === 4) dcAlive++;
+            else if (b === 5) dcContact++;
+            else dcOther++;
         }
     }
     return {
@@ -712,6 +744,11 @@ function metricsComputeRow(m){
         dcSlide: dcSlide,
         dcStalled: dcStalled,
         dcAlive: dcAlive,
+        dcContact: dcContact,
+        dcOther: dcOther,
+        // The mode this generation ran in (genEnd.collisions is there only
+        // in collision mode), labelled like the learning context.
+        collisions: m.collisions ? ((m.learningContext && m.learningContext.collisions) || 'on') : 'off',
         survival5s:  +survivedAt(5  * FPS).toFixed(4),
         survival10s: +survivedAt(10 * FPS).toFixed(4),
         survivalEnd: +(m.popStillAlive / N).toFixed(4),
@@ -735,6 +772,8 @@ function metricsRender(){
         body += '<div>med cp  <b>' + last.medCheckpoints + '</b> · p90 <b>' + last.p90Checkpoints + '</b> · max <b>' + last.maxCheckpoints + '</b></div>';
         body += '<div>head-on <b>' + last.dcHeadOn + '</b> · side <b>' + last.dcSide +
                 '</b> · slide <b>' + last.dcSlide + '</b> · stalled <b>' + last.dcStalled +
+                ((last.dcContact || last.collisions !== 'off') ? '</b> · contact <b>' + last.dcContact : '') +
+                (last.dcOther ? '</b> · other <b>' + last.dcOther : '') +
                 '</b> · alive <b>' + last.dcAlive + '</b></div>';
         body += '<div>surv 5s <b>' + pct(last.survival5s) + '</b> · 10s <b>' + pct(last.survival10s) + '</b> · end <b>' + pct(last.survivalEnd) + '</b></div>';
     } else {
@@ -1343,7 +1382,9 @@ function performBegin(N){
         });
         workerInited = true;
     }
-    window.DriverLearning?.prepare({road,maxSpeed,traction,seconds});
+    const collisions = collisionConfig();
+    activeCollisions = collisions;
+    window.DriverLearning?.prepare({road,maxSpeed,traction,seconds,collisions});
     const brains = buildBrainsBuffer(N);
     // Keep worker speed aligned with main defaults. setSimSpeed() only posts
     // when the user moves the dropdown — without this, a default simSpeed≠1
@@ -1360,6 +1401,7 @@ function performBegin(N){
         recordPresentation: !!(window.CircuitStudio?.ready && window.CircuitStudio?.enabled),
         startInfo: { x: startInfo.x, y: startInfo.y, heading: startInfo.heading || 0 },
         poseJitter: Object.assign({ radiusPx: 0, angleDeg: 0, maxAttempts: 8 }, window.__poseJitter || {}),
+        collisions,
         brains
     }, [brains.buffer]);
     // Worker handleBegin always sets pause=false and starts the step loop.
@@ -2096,6 +2138,7 @@ window.__downloadCSV = function(label, rows){
             traction: traction,
             startInfo: { x: startInfo.x, y: startInfo.y, heading: startInfo.heading || 0 },
             poseJitter: Object.assign({ radiusPx: 0, angleDeg: 0, maxAttempts: 8 }, window.__poseJitter || {}),
+            collisions: activeCollisions,
             brains: brains
         }, [brains.buffer]);
     }

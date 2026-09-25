@@ -54,8 +54,8 @@ class DriverLearning {
     this.batch=null;this.seeds=[];this.lastPlan=null;
     window.PlayerAssist?.release();window.restartDriverLearning?.();this.render();
   }
-  prepare({road,maxSpeed,traction,seconds}){
-    const context=cleanContext({profile:this.profile,track:geometryKey(road),maxSpeed,traction,seconds});
+  prepare({road,maxSpeed,traction,seconds,collisions=null}){
+    const context=cleanContext({profile:this.profile,track:geometryKey(road),maxSpeed,traction,seconds,collisions});
     if(this.context&&contextKey(context)!==contextKey(this.context))this.consolidate();
     const changed=this.coach.key!==contextKey(context);
     if(changed){this.transferStatus=null;this.transferHeld=0;this.health.reset();this.healthState=null;}
@@ -103,6 +103,9 @@ class DriverLearning {
     this.transferProgress=null;this.transferStatus=null;
     // Trials use the live mutation and initialization settings, but a small
     // population so that a check takes minutes, not hours.
+    // Trials run in the context's collision mode (runTransferCheck reads it
+    // from the context), so a check in collision mode measures transfer into
+    // collision mode.
     const promise=runTransferCheck({context,track,profile:context.profile,maxSpeed:context.maxSpeed,traction:context.traction,
       seconds:context.seconds,exploration:DriverProfiles.get(context.profile).exploration,seeds,signal:controller.signal,
       mutation:liveNumber(typeof mutateValue==='undefined'?null:mutateValue,.22),
