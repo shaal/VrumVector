@@ -3,8 +3,9 @@
 `AI-Car-Racer/learning/clone.js` trains a copy (a "clone") of the
 `[10, 16, 4]` driving network from recorded driving. It is task H3 of the
 [human demonstration plan](../plan/human-demonstration.md). Nothing in the game
-calls it yet: H2 builds the dataset from recordings, and H4 adds "Use my
-driving".
+calls it yet: H2 builds the dataset from recordings (`learning/dataset.js`,
+results in [human-demonstration.md](human-demonstration.md#h2--dataset)), and
+H4 adds "Use my driving".
 
 ## How it works
 
@@ -52,7 +53,8 @@ driving".
 
 ## Test: copy a known network from its own driving
 
-`npm run test:cloning` (`tests/cloning.test.mjs`, 1–2 minutes). A short
+`npm run test:cloning` (`tests/cloning.test.mjs`, 1–2 minutes; the same
+command also runs H2's `tests/dataset.test.mjs`). A short
 genetic run (24 generations of 24 cars, 15 seconds each) makes a teacher
 network on each track. The teacher then drives one car in the real simulator
 from up to 40 starts near the spawn (up to 12 px and 0.12 rad off), 15 seconds
@@ -182,6 +184,10 @@ With the rest steps kept, the clone never pulls away (the 1 checkpoint is
 the gate the car starts on). Without them, it presses forward at rest, but
 only because its training on moving states happens to extend to rest. If H2
 keeps rest steps, it should give them the keys that first moved the car.
+H2 does this. Over 12 teachers per track, clones with labelled rest steps
+left 310 of 312 starts, and clones trained on the keys actually held left
+3. See
+[human-demonstration.md](human-demonstration.md#h2--dataset).
 
 ## Other tests
 
@@ -199,8 +205,9 @@ keeps rest steps, it should give them the keys that first moved the car.
   0 or 1, one block only, runs too short for any lag, too few held-out pairs,
   bad options, and bad `sameSplitAs` links (including a run only partly
   linked). Options left `undefined` take their defaults.
-- A dataset in H1's stored format (key bitmask, `sampleSteps`) converts as
-  the plan's H3 note says, and gives the same pairs as H1's `lagPairs`.
+- A dataset in H1's stored format (key bitmask, `sampleSteps`) converts with
+  H2's `demonstrationDataset` as the plan's H3 note says, and gives the same
+  pairs as H1's `lagPairs`.
 - A small dataset (480 steps, four blocks) still trains; asking for more
   scored pairs drops the longest lags.
 - A key that is never pressed gets F1 "not defined" and is never pressed by

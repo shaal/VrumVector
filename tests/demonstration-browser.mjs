@@ -21,6 +21,8 @@ const state=()=>page.evaluate(()=>{
 });
 const samples=async()=>(await state()).progress?.samples??-1;
 const waitSamples=n=>page.waitForFunction(n=>window.DemonstrationRecorder.progress()?.samples>=n,n);
+// Samples of driving (without rest steps): a recording needs 60 of them to be saved.
+const waitDriving=n=>page.waitForFunction(n=>{const r=window.DemonstrationRecorder;return r.progress()&&r.progress().samples-r.run.restSamples>=n;},n);
 // Physics runs this many more steps, but the recorder adds no samples. Wait
 // on steps, not time: a busy machine can go half a second without a frame.
 const steady=async(steps=30)=>{
@@ -32,6 +34,7 @@ const steady=async(steps=30)=>{
 const records=()=>page.evaluate(async()=>{
   const {DemonstrationStore}=await import('/AI-Car-Racer/learning/demonstration.js');
   return (await new DemonstrationStore().list()).map(d=>({...d,inputs:d.inputs.length,keys:Array.from(d.keys),sampleSteps:d.sampleSteps.length,
+    rest:d.rest&&Array.from(d.rest),restType:d.rest?.constructor.name,
     inputType:d.inputs.constructor.name,keyType:d.keys.constructor.name,stepType:d.sampleSteps.constructor.name,borders:d.track?.borders.length,gates:d.track?.checkPointList.length}));
 });
 try{
@@ -88,8 +91,14 @@ try{
   await page.keyboard.up('a');
   await page.keyboard.up('w');
   s=await state();assert.equal(s.status,'Recording your driving.');assert.match(s.live,/^\d+ samples · \d+\.\d s · 0 laps · \d+ checkpoints? · 0 crashes$/);
-  const keys=await page.evaluate(()=>{const r=window.DemonstrationRecorder.run;return Array.from(r.keys.slice(0,r.samples));});
-  assert.equal(keys[0]&1,1,'the first sample holds W');
+  const {keys,rest,restSpeed}=await page.evaluate(()=>{const r=window.DemonstrationRecorder.run;
+    return {keys:Array.from(r.keys.slice(0,r.samples)),rest:Array.from(r.rest.slice(0,r.samples)),restSpeed:r.restSamples?r.inputs[7]:null};});
+  // Up to 0.5 s of the parked car can come first (the page may start
+  // stepping only when W is pressed), with the keys held (none), then W.
+  const restRows=rest.indexOf(0);
+  assert.ok(restRows>=0&&restRows<=30,`rest rows ${restRows}`);assert.ok(rest.slice(restRows).every(v=>v===0),'rest rows only before the first move');
+  assert.ok(keys.slice(0,restRows).every(k=>k===0),'nothing held at rest');if(restRows)assert.equal(restSpeed,0,'at rest, speed is 0');
+  assert.equal(keys[restRows]&1,1,'the first moving sample holds W');
   assert.ok(keys.some(k=>k===3),'W and A together');assert.ok(keys.every(k=>(k&12)===0),'no D or S was pressed');
   await page.screenshot({path:`${out}/recording-desktop.png`});
 
@@ -135,7 +144,16 @@ try{
   await page.waitForFunction(()=>!playerCar2.damaged&&playerCar2.x===playerCar2.origin.x);
   assert.equal(await steady(20),hit.samples,'no samples while damaged or parked after the reset');
   assert.equal((await state()).progress.reason,'idle');
-  await page.keyboard.down('w');const reset=await samples();await waitSamples(reset+15);
+  // Read before W: the parked car adds no samples until it moves.
+  const reset=await samples(),restBefore=await page.evaluate(()=>window.DemonstrationRecorder.run.restSamples);
+  await page.keyboard.down('w');await waitSamples(reset+15);
+  // The 0.5 s parked after the reset is stored with the move: no keys, speed 0, then W.
+  const restart=await page.evaluate(([from,before])=>{const r=window.DemonstrationRecorder.run,n=r.restSamples-before;
+    return {n,rest:Array.from(r.rest.slice(from,from+n+1)),keys:Array.from(r.keys.slice(from,from+n+1)),speed:r.inputs[from*10+7],steps:Array.from(r.sampleSteps.slice(from,from+n+1))};},[reset,restBefore]);
+  assert.ok(restart.n>=20&&restart.n<=30,`rest rows after the reset: ${restart.n}`);
+  assert.deepEqual(restart.rest,[...Array(restart.n).fill(1),0]);assert.deepEqual(restart.keys.slice(0,-1),Array(restart.n).fill(0));
+  assert.equal(restart.keys.at(-1)&1,1);assert.equal(restart.speed,0);
+  assert.ok(restart.steps.every((v,i)=>!i||v===restart.steps[i-1]+1),'numbered as the steps right before the move');
 
   mark('the latest sample is what the network saw');
   const check=await page.evaluate(()=>{
@@ -174,10 +192,27 @@ try{
   assert.equal(demo.crashes,crashes+1);assert.equal(demo.crashSteps.length,crashes+1);assert.equal(demo.car,'WASD');assert.equal(demo.stopReason,'user');
   assert.ok(Number.isFinite(demo.createdAt)&&demo.endedAt>=demo.createdAt);
   assert.deepEqual(demo.keys,[...keys,...demo.keys.slice(keys.length)],'the stored keys start with the pressed keys');
+  assert.equal(demo.version,2);assert.deepEqual([demo.restType,demo.rest.length],['Uint8Array',demo.samples]);
+  assert.equal(demo.restSamples,demo.rest.filter(Boolean).length);assert.ok(demo.restSamples>=restRows,'the start and the restart after the crash');
+
+  mark('the stored recording converts to the cloning dataset');
+  // The record as IndexedDB returns it, converted in the page (H2).
+  const converted=await page.evaluate(async()=>{
+    const {DemonstrationStore}=await import('/AI-Car-Racer/learning/demonstration.js'),{demonstrationDataset}=await import('/AI-Car-Racer/learning/dataset.js');
+    const [stored]=await new DemonstrationStore().list(),ds=demonstrationDataset(stored),mirrored=demonstrationDataset(stored,{mirror:true});
+    const restForward=[];for(let i=0;i<stored.samples;i++)if(stored.rest[i])restForward.push(ds.keys[i*4]);
+    return {report:ds.report,types:[ds.inputs,ds.keys,ds.episode].map(a=>a.constructor.name),restForward,
+      mirrored:{rows:mirrored.report.rows,links:mirrored.sameSplitAs.filter(v=>v>=0).length}};
+  });
+  assert.deepEqual(converted.types,['Float32Array','Uint8Array','Uint32Array']);
+  assert.equal(converted.report.rows,demo.samples);assert.equal(converted.report.restRows,demo.restSamples);assert.equal(converted.report.crashes,demo.crashes);
+  assert.ok(converted.report.runs>=3,'breaks at the pauses and the crash');
+  assert.ok(converted.restForward.length&&converted.restForward.every(v=>v===1),'rest rows get W, the key that moved the car');
+  assert.deepEqual(converted.mirrored,{rows:2*demo.samples,links:demo.samples});
 
   mark('turning on multiplayer stops and saves a recording');
   await page.locator('[data-demo-record]').click();
-  await page.keyboard.down('w');await waitSamples(70);await page.keyboard.up('w');
+  await page.keyboard.down('w');await waitDriving(70);await page.keyboard.up('w');
   await page.evaluate(()=>window.LiveSession.setEnabled(true));
   await page.waitForFunction(()=>window.DemonstrationRecorder.last?.saved===true);
   assert.equal(await page.evaluate(()=>document.activeElement?.matches('[data-demo-record]')),true,'focus stays on the unavailable button');
@@ -199,7 +234,7 @@ try{
 
   mark('a physics change stops and saves a recording');
   await page.locator('[data-demo-record]').click();
-  await page.keyboard.down('w');await waitSamples(70);
+  await page.keyboard.down('w');await waitDriving(70);
   await page.evaluate(()=>setMaxSpeed(10)); // rebuilds the cars with the new top speed
   await page.waitForFunction(()=>window.DemonstrationRecorder.last?.reason==='context'&&window.DemonstrationRecorder.last.saved===true);
   await page.keyboard.up('w');
@@ -210,7 +245,7 @@ try{
 
   mark('the A/B view hides the panel, so it stops and saves a recording');
   await page.evaluate(()=>setSimSpeed(5));await page.locator('[data-demo-record]').click();
-  await page.keyboard.down('w');await waitSamples(70);await page.keyboard.up('w');
+  await page.keyboard.down('w');await waitDriving(70);await page.keyboard.up('w');
   await page.evaluate(()=>window.__abSetEnabled(true));
   await page.waitForFunction(()=>window.DemonstrationRecorder.last?.reason==='away'&&window.DemonstrationRecorder.last.saved===true);
   assert.equal(await page.evaluate(()=>simSpeed),5,'the speed before recording is back');
@@ -237,7 +272,7 @@ try{
 
   mark('closing the page keeps what was recorded');
   await page.locator('[data-demo-record]').click();
-  await page.keyboard.down('w');await waitSamples(70);await page.keyboard.up('w');
+  await page.keyboard.down('w');await waitDriving(70);await page.keyboard.up('w');
   await page.reload();
   await page.waitForFunction(()=>window.DemonstrationRecorder&&window.DriverLearning);
   // The closing save skipped the cap (11 saved); loading the panel restores it.
@@ -265,7 +300,7 @@ try{
   await page.screenshot({path:`${out}/panel-mobile.png`});
 
   assert.deepEqual(errors,[]);
-  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,first:{...demo,keys:demo.keys.length}},null,2));
+  await writeFile(`${out}/result.json`,JSON.stringify({passed:true,first:{...demo,keys:demo.keys.length,rest:demo.rest?.length}},null,2));
   console.log('Demonstration browser checks passed');
 }catch(error){
   await writeFile(`${out}/failure.json`,JSON.stringify({stage,error:String(error.stack),errors},null,2));

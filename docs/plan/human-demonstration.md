@@ -142,7 +142,7 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
   panel with a live sample count and laps. Tests: node (scripted keys in the
   trial simulator give the expected pairs), browser (real WASD key presses
   record samples; AI driving or damage pauses recording). About 3–4 hours.
-- [ ] **H2 — Dataset: filter, mirror, split.** Idle-start and post-crash
+- [x] **H2 — Dataset: filter, mirror, split.** Idle-start and post-crash
   filtering, mirror augmentation with a symmetry test on a mirrored track, and
   time-block splits. About 2 hours. (H1 already skips the idle start and the
   damaged steps, and stores `crashSteps`; H2 decides what else to drop around
@@ -153,6 +153,19 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
   nothing at rest": in H3's check such clones never left the start line.
   (Decided 2026-09-24; the relabelling replaces the first version.)
   depends: H1
+  Done 2026-09-24. H1's recorder now keeps the rest steps (record version
+  2), and `learning/dataset.js` (`demonstrationDataset`) builds H3's dataset
+  from stored demonstrations. Measured over 12 teachers per track in two
+  sessions, the defaults are: rest steps labelled; mirroring off (it
+  lowered agreement on the recorded track for 23 of 24 teachers, and more
+  when it also misled the lag choice); nothing more dropped around a crash
+  (no reliable effect either way). H4 should call it
+  with these defaults. The sensors mirror exactly; the car physics does not
+  quite (the check that ends a slide). `mirrorBrain` makes the mirrored
+  clone that H5 may try, but it looks weak: on the recorded track it drives
+  as the clone drives the mirrored track, which scored about half as many
+  checkpoints on Rectangle. Results: `docs/validation/human-demonstration.md`
+  (H2).
 - [x] **H3 — Behavioural-cloning trainer.** Sigmoid stand-in, BCE, rare-key
   weights, Adam, early stop, key lag `k` chosen on held-out blocks, in a
   Worker. Tests: it recovers a known teacher network from that network's own

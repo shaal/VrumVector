@@ -18,7 +18,7 @@
     "benchmark:gnn": "node scripts/benchmark-gnn.mjs",
     "test:learning:wasm": "node tests/learning-wasm.mjs",
     "test:crash-maps": "node --test tests/crash-similarity.test.mjs",
-    "test:cloning": "node --test tests/cloning.test.mjs",
+    "test:cloning": "node --test tests/cloning.test.mjs tests/dataset.test.mjs",
     "test:cloning:browser": "node tests/cloning-browser.mjs",
     "test:learning:browser": "node tests/learning-browser.mjs",
     "benchmark:learning": "node scripts/benchmark-learning.mjs",
