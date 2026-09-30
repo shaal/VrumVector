@@ -12,14 +12,14 @@
 //   node tests/collisions-browser.mjs            (MEASURE=1 for the step cost, PORT=8897 for another port)
 import assert from 'node:assert/strict';
 import {mkdir, writeFile} from 'node:fs/promises';
-import {spawn} from 'node:child_process';
 import os from 'node:os';
 import {chromium} from 'playwright';
 import {waitForServer} from './helpers/server-ready.mjs';
+import {startStaticServer} from './helpers/static-server.mjs';
 
 const out = 'test-results/collisions'; await mkdir(out, {recursive: true});
 const PORT = Number(process.env.PORT) || 8895, origin = `http://127.0.0.1:${PORT}`;
-const server = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1'], {stdio: 'ignore'});
+const server = startStaticServer(String(PORT));
 let browser, page, stage = 'boot';
 const errors = [];
 const mark = value => { stage = value; console.log(stage); };
@@ -213,7 +213,10 @@ try {
   // and its drivers carry no contact statistics.
   await waitGenEnds(0, live.genEnds.length + 1);
   const sonaNormal = await sona();
-  assert.ok(sonaNormal.open && sonaNormal.steps > 0, 'SONA records normal driving: ' + JSON.stringify(sonaNormal));
+  // A step is pending, or the memory review (every 8th generation) has just
+  // learned the trajectory and opened an empty one.
+  assert.ok(sonaNormal.open && (sonaNormal.steps > 0 || sonaNormal.trajectories > sonaBefore.trajectories),
+    'SONA records normal driving: ' + JSON.stringify([sonaBefore, sonaNormal]));
   // A collision-mode brain (as from a peer tab) archived in this normal tab
   // adds no step and leaves this tab's trajectory alone.
   const peer = await page.evaluate(() => {
@@ -248,7 +251,8 @@ try {
   await waitGenEnds(0, live.genEnds.length + 1);
   const sonaBack = await sona();
   assert.deepEqual([sonaBack.open, sonaBack.steps], [false, 0], 'no trajectory stays open into collision mode: ' + JSON.stringify(sonaBack));
-  assert.ok(sonaBack.trajectories > sonaNormal.trajectories, 'normal driving was reviewed on the way in: ' + JSON.stringify([sonaNormal, sonaBack]));
+  // (With no step pending, as right after a review, there is nothing to learn.)
+  assert.ok(sonaBack.trajectories > sonaNormal.trajectories || sonaNormal.steps === 0, 'normal driving was reviewed on the way in: ' + JSON.stringify([sonaNormal, sonaBack]));
 
   mark('while paused, a change of mode starts the new generation paused; the console keeps the toggle in step');
   await page.evaluate(() => { if (!pause) pauseGame(); });

@@ -2,14 +2,14 @@
 // the same weights as training on the page, sends progress, can be cancelled,
 // reports bad data, and the page keeps running while it trains.
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {chromium} from 'playwright';
 import {waitForServer} from './helpers/server-ready.mjs';
+import {startStaticServer} from './helpers/static-server.mjs';
 
 const port=8890,origin=`http://127.0.0.1:${port}`,out='test-results/cloning';
 await mkdir(out,{recursive:true});
-const server=spawn('python3',['-m','http.server',String(port),'--bind','127.0.0.1'],{stdio:'ignore'});
+const server=startStaticServer(String(port));
 let browser;
 try{
   await waitForServer(origin,server);

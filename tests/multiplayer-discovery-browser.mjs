@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import vm from 'node:vm';
-import {spawn} from 'node:child_process';
 import {build} from 'esbuild';
 import {Miniflare} from 'miniflare';
 import {chromium} from 'playwright';
 import {waitForServer} from './helpers/server-ready.mjs';
+import {startStaticServer} from './helpers/static-server.mjs';
 
 const out='test-results/multiplayer';await mkdir(out,{recursive:true});
 const presets={window:{}};vm.runInNewContext(await readFile('AI-Car-Racer/trackPresets.js','utf8'),presets);
 const oval=presets.window.TRACK_PRESETS.find(p=>p.name==='Oval');
 const bundle=await build({entryPoints:['multiplayer/worker.js'],bundle:true,write:false,format:'esm',external:['cloudflare:workers']});
 const mf=new Miniflare({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-06-17',durableObjects:{ROOMS:{className:'LiveRoom',useSQLite:true}},bindings:{ALLOW_LOCAL:'true'},port:8878});
-const server=spawn('python3',['-m','http.server','8877','--bind','127.0.0.1'],{stdio:'ignore'}),origin='http://127.0.0.1:8877';
+const server=startStaticServer('8877'),origin='http://127.0.0.1:8877';
 const errors=[];let browser,stage='boot';
 try{
   await waitForServer(origin,server);await mf.ready;

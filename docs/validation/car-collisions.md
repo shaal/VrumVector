@@ -801,7 +801,8 @@ reload. The cause is the test server: `python3 -m http.server` keeps a
 listen queue of 5 connections, and a page load's burst of module requests
 overflows it (`ERR_CONNECTION_RESET` on module files). With the same
 server and a queue of 256 (a local copy of the tests only), every browser
-test passes in full on this code, `learning-browser` included.
+test passes in full on this code, `learning-browser` included. After C4,
+every browser test runs that server (`scripts/static-server.py`).
 
 ### Limits
 
