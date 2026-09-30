@@ -1,0 +1,7 @@
+# Rust Workers on wasm32-unknown-emscripten need a beta toolchain
+# (workers-rs v0.8.7, experimental preview). Dated so builds are
+# reproducible; see docs/validation/cloud-brain-spike.md.
+[toolchain]
+channel = "beta-2026-09-27"
+profile = "minimal"
+targets = ["wasm32-unknown-emscripten", "wasm32-unknown-unknown"]

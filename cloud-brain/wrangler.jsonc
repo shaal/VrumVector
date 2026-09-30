@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "vectorvroom-brain",
+  "main": "build/index.js",
+  "compatibility_date": "2026-09-02",
+  // new_module_registry gives the Emscripten glue `import.meta.url`.
+  "compatibility_flags": ["new_module_registry"],
+  "workers_dev": true,
+  // The build runs in wrangler's working folder: run wrangler from
+  // cloud-brain/, or with `--cwd cloud-brain` (build.cwd is not relative to
+  // this file).
+  "build": {"command": "bash build.sh"},
+  "durable_objects": {"bindings": [{"name": "BRAIN", "class_name": "SharedBrain"}]},
+  "migrations": [{"tag": "v1", "new_sqlite_classes": ["SharedBrain"]}]
+}

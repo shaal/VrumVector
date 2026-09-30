@@ -18,6 +18,10 @@ scripts
 tests
 node_modules
 
+# The cloud brain Worker (source, Rust build output, local Durable Object
+# state) deploys as its own Worker, never as Pages assets.
+cloud-brain
+
 # Editor/OS noise
 *.swp
 Thumbs.db
