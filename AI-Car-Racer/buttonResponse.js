@@ -375,7 +375,9 @@ function clearAllFastLaps(){
     try {
         for (var i = 0; i < localStorage.length; i++){
             var k = localStorage.key(i);
-            if (k && window.__vvFastLap && k.indexOf(window.__vvFastLap.prefix) === 0){
+            // Only this memory mode's records (CB3: shared mode's end in '.shared').
+            if (k && window.__vvFastLap && k.indexOf(window.__vvFastLap.prefix) === 0 &&
+                /\.shared$/.test(k) === (window.__vvBrainMode === 'shared')){
                 keys.push(k);
             }
         }

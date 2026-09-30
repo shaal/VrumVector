@@ -183,11 +183,16 @@ pub struct Feedback {
 }
 
 #[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PoolEntry {
     pub id: String,
     pub vector: String,
     pub fitness: f64,
     pub score: f64,
+    /// The cosine similarity of the query's track to the track the brain was
+    /// found on (0 when it came from the every-brain fallback): the browser
+    /// files a brain on its own track only when this is high (CB3).
+    pub track_sim: f64,
     pub meta: Meta,
     pub feedback: Feedback,
 }
@@ -735,7 +740,7 @@ impl Brain {
         }
         let query_key = context_hash(&r.context);
         let query = Match::of(&r.context);
-        let mut scored: Vec<(&str, f64)> = candidates
+        let mut scored: Vec<(&str, f64, f64)> = candidates
             .into_iter()
             .filter_map(|(id, track_sim)| Some((id, track_sim, self.brains.get(id)?)))
             .map(|(id, track_sim, b)| {
@@ -743,7 +748,7 @@ impl Brain {
                 let dynamics_term = if dynamics_active { 1.0 + DYNAMICS_TERM_WEIGHT * dynamics_sim.get(id).copied().unwrap_or(0.0) } else { 1.0 };
                 let weight = self.aggregate(id, &query_key).map_or(0.0, |a| a.weight);
                 let score = track_term * fit_term(b.fitness) * dynamics_term * factor(b.matching.as_ref(), &query) * (1.0 + FEEDBACK_TERM_WEIGHT * weight);
-                (id, score)
+                (id, score, track_sim)
             })
             .collect();
         scored.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(b.0)));
@@ -751,7 +756,7 @@ impl Brain {
         let ids: Vec<&str> = scored.iter().map(|s| s.0).collect();
         let rows = store.brain_rows(&ids)?;
         let mut pool = Vec::with_capacity(scored.len());
-        for ((id, score), row) in scored.into_iter().zip(rows) {
+        for ((id, score, track_sim), row) in scored.into_iter().zip(rows) {
             // A brain whose weights the store lost is left out, never sent bad.
             let Some((vector, meta)) = row.filter(|(v, _)| wire::brain_problem(Some(v)).is_none() && wire::brain_id(v) == id) else { continue };
             let Some(b) = self.brains.get(id) else { continue };
@@ -766,6 +771,7 @@ impl Brain {
                 vector: wire::encode_f32(&vector),
                 fitness: b.fitness,
                 score: plain(clamp(score, -wire::limits::FITNESS, wire::limits::FITNESS)),
+                track_sim: plain(clamp(track_sim, -1.0, 1.0)),
                 meta,
                 feedback,
             });

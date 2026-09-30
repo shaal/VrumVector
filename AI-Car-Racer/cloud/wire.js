@@ -430,6 +430,9 @@ export async function parseRecallResponse(text) {
       id, vector, meta: cleanBrainMeta(own(entry, 'meta')),
       fitness: bounded(own(entry, 'fitness'), -LIMITS.fitness, LIMITS.fitness),
       score: bounded(own(entry, 'score'), -LIMITS.fitness, LIMITS.fitness),
+      // How near the track the service found it on was (cosine similarity,
+      // CB3); null when the answer does not say.
+      trackSim: typeof own(entry, 'trackSim') === 'number' ? clamp(own(entry, 'trackSim'), -1, 1) : null,
       feedback: {weight: bounded(own(f, 'weight'), -1, 1), count: whole(own(f, 'count')), contributors: whole(own(f, 'contributors'))},
     });
   }

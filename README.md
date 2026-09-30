@@ -128,6 +128,15 @@ These are the friction points you may hit on a fresh clone:
 - **Optional `?rv=0` URL flag** disables the vector-memory bridge and forces
   stock random brain init. Useful for A/B comparisons or when debugging the
   base GA without ruvector in the loop.
+- **Shared brain (beta).** Where a cloud brain service is configured
+  (`AI-Car-Racer/cloud/config.json`), the Vector Memory panel's **Memory**
+  control switches between *This browser* and *Shared (cloud, beta)*; it says
+  what is sent before the first switch, and the page reloads. `?brain=shared`
+  and `?brain=local` do the same (a link to shared mode asks the same
+  question first). Shared mode learns into its own IndexedDB
+  (`rv_car_learning_shared`) and keeps its own training state, so your own
+  memory is untouched. See
+  [the plan](docs/plan/cloud-brain.md) and [results](docs/validation/cloud-brain.md).
 - **ELI15 teaching drawer.** Press `?` or click the floating 🎓 button (bottom-right)
   to open a drawer that explains what each piece of the app is doing, in
   plain language. Widgets with a small `?` badge open the matching chapter

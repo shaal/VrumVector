@@ -207,7 +207,8 @@ diversity, GNN) keeps working unchanged. `AI-Car-Racer/cloud/client.js`:
 
 - **Pull:** on ready, when the track vector changes, and every few generations,
   `recall` fetches the pool for this track; entries enter the replica through the
-  `_onRemoteBrain` path; server feedback weights replace local observation
+  bridge's `acceptCloudPool` (CB3; like `_onRemoteBrain`, without training
+  this tab's adapters on them); server feedback weights replace local observation
   weights for those IDs.
 - **Push:** in shared mode `archiveBrain` enqueues the same delta it would
   broadcast cross-tab; `observeOffspring` enqueues feedback; an outbox flushes at
@@ -297,7 +298,7 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   byte-identical to before.
 - **Sharing:** two browser profiles on the local service. A trains on Rectangle in
   shared mode; B (fresh) gets A's brains among its first-generation seeds
-  (`seedSources.archive > 0`), and B's offspring feedback changes A's pool
+  (`seedSources.archive_recall > 0`), and B's offspring feedback changes A's pool
   weights.
 - **Value:** fresh browser in shared mode vs fresh local, time to first full lap,
   on Rectangle and Triangle, n ≥ 6 per arm over at least 2 sessions (cross-track
@@ -458,10 +459,10 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
     patch is needed) and, with `--test`, checks the Worker on
     `wasm32-unknown-unknown`; no CI job runs it yet (CB5 adds it). The spike routes stay
     (feature-gated; the load script reads memory through them).
-- [ ] **CB3 — Browser client and the Shared brain switch.**
+- [x] **CB3 — Browser client and the Shared brain switch.**
   `AI-Car-Racer/cloud/client.js` and `cloud/config.json` (`endpoint: null` by
   default); bridge namespace switch (`rv_car_learning_shared`), push hook next to
-  the cross-tab broadcast, pulls through `_onRemoteBrain`, feedback merge;
+  the cross-tab broadcast, pulls through the bridge (`acceptCloudPool`), feedback merge;
   persisted outbox; backoff; panel control with disclosure and status; offline
   banner; `?brain=shared`. Tests: unit (fake fetch), Playwright against the
   fixture fake, isolation check on the local IndexedDB, one run against the real
@@ -479,6 +480,30 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   not resent; resending a contribution is safe
   (brains are idempotent), but resent feedback counts twice.
   depends: CB1 (fake); CB2 (integration run)
+  - [x] `cloud/scope.js`, `mode.js`, `client.js`, `session.js`, `ui.js`,
+    `config.json`: the Memory control (hidden without a service or a secure
+    context; what is sent is asked first; reloads), `?brain=shared|local`
+    (removed from the address once saved; a link asks before anything is
+    sent), a separate IndexedDB, cross-tab channel and `localStorage`
+    training state for shared mode, the outbox shared by tabs under a Web
+    Lock and split by counts and bytes (one row per brain and context a
+    request, none ahead of its brain), backoff 1 s to 60 s on a monotonic
+    clock (sending and reading apart), the offline banner, pulls on start
+    (the editor's track embedded early), on a new track and every 5
+    generations; pulled brains tagged `cloud`, filed on the current track
+    only when the service found them on a near one (`trackSim`, added to
+    the recall answer; re-filed when a later pull finds them there), capped
+    at 2 000 (4 000 for the current track), kept out of LoRA, SONA and the
+    cross-tab relay; a version the service refuses stops sending and asking
+    until reload.
+  - [x] `source: 'demonstration'` for an archived clone of your driving: a
+    per-car origin from `buildPopulation` through the sim worker (its
+    message unchanged unless the elite is a clone).
+  - [x] Tests: `test:cloud-brain` (19 client tests on a JS fake),
+    `test:cloud-brain:browser` (the control, shared mode on the fake, the
+    local IndexedDB byte-identical after a shared session, and two profiles
+    on the real local service: B's first generation (generation 0) 15 of 16 cars from A's
+    brains, B's feedback in A's pool), in Chromium and WebKit.
 - [ ] **CB4 — Abuse and trust.** Contributor token and hashed storage, rate
   limits and quotas, robust feedback aggregation with per-contributor caps and a
   2σ filter, quarantine until corroboration, forged-fitness and flood tests,
@@ -493,7 +518,8 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   depends: CB2
 - [ ] **CB5 — Deploy (needs your OK).** `deploy.yml` step like the multiplayer
   one (`vectorvroom-brain`, PR previews `vectorvroom-brain-pr-<n>`) with cached
-  toolchain; writes the endpoint into `AI-Car-Racer/cloud/config.json`;
+  toolchain; writes the endpoint into `AI-Car-Racer/cloud/config.json` (CB3
+  reads it; `{"endpoint": null}` hides the Shared option);
   `cloud-brain.yml` CI; `docs/operations/cloud-brain-operations.md` (usage,
   breaker, limits); first production health check. Needs a token with Workers
   Scripts: Edit and the D2 plan decision. About 4 hours plus the deploy.

@@ -56,6 +56,7 @@ async function run(fixture, body = fixture.body) {
     if ('first' in expect) out.first = numbers(r.pool[0]);
     if ('second' in expect) out.second = numbers(r.pool[1]);
     if ('firstMeta' in expect) out.firstMeta = r.pool[0].meta;
+    if ('trackSims' in expect) out.trackSims = r.pool.map(p => p.trackSim);
     return out;
   }
   if (route === 'contribute-response') return wire.parseContributeResponse(body);

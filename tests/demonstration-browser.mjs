@@ -238,6 +238,11 @@ try{
   u=await use();assert.deepEqual([u.label,u.seed,u.demo.seeding,u.demo.report.leavesStart],['Train again','Stop using my driving',true,true]);
   const bridge=await page.evaluate(()=>window.__rvBridge.info().seedSources);
   assert.ok(bridge.demonstration>0&&bridge.total===bridge.archive_recall+bridge.localStorage_prior+bridge.random_init+bridge.demonstration,JSON.stringify(bridge));
+  // Every car has an origin (CB3); only cars drawn from your driving can carry
+  // 'demonstration' (exact copies only: tests/cloud-brain-client.test.mjs).
+  const clone=await page.evaluate(()=>{const b=window.DriverLearning.batch;
+    return {cars:b.parents.length,origins:b.origins.length,tagged:b.origins.filter(o=>o==='demonstration').length,fromDemo:b.counts.demonstration};});
+  assert.ok(clone.origins===clone.cars&&clone.tagged<=clone.fromDemo,JSON.stringify(clone));
   // The offer rule in the page: another top speed is another context.
   await page.evaluate(()=>setMaxSpeed(10));
   await page.waitForFunction(()=>window.DriverLearning.context.maxSpeed===10&&window.DriverLearning.batch?.counts?.demonstration===0,{},{timeout:60000});

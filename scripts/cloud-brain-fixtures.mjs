@@ -508,6 +508,13 @@ export async function fixtures() {
     body: json({protocol: PROTOCOL, brainSchema: BRAIN_SCHEMA, pool: [await entry(evolved, 0, {fitness: '500', score: '0.5', feedback: {weight: '0.5', count: '4', contributors: true}})]}),
     expect: {ok: true, pool: [await id(evolved)], dropped: [], first: {fitness: 0, score: 0, feedback: {weight: 0, count: 0, contributors: 0}}},
   };
+  valid['recall-response-track-sim'] = {
+    description: 'trackSim (CB3): a number is clamped to ±1; absent or not a number is null.',
+    route: 'recall-response',
+    body: json({protocol: PROTOCOL, brainSchema: BRAIN_SCHEMA, pool: [await entry(brain(60), 0, {trackSim: 0.93}), await entry(brain(61), 1, {trackSim: 7}),
+      await entry(brain(62), 2, {trackSim: '0.5'}), await entry(brain(63), 3), await entry(brain(64), 4, {trackSim: -0})]}).replace('"trackSim":0}', '"trackSim":-0}'),
+    expect: {ok: true, pool: [await id(brain(60)), await id(brain(61)), await id(brain(62)), await id(brain(63)), await id(brain(64))], dropped: [], trackSims: [0.93, 1, null, null, 0]},
+  };
   valid['recall-response-no-pool'] = {description: 'No pool: an empty one.', route: 'recall-response',
     body: json({protocol: PROTOCOL, brainSchema: BRAIN_SCHEMA}), expect: {ok: true, pool: [], dropped: []}};
   valid['recall-response-negative-zero'] = {

@@ -32,8 +32,9 @@
     "benchmark:collisions": "node scripts/benchmark-collisions.mjs",
     "test:collisions:browser": "node tests/collisions-browser.mjs",
     "test:static-server": "node --test tests/static-server.test.mjs",
-    "test:cloud-brain": "node --test tests/cloud-brain-wire.test.mjs",
+    "test:cloud-brain": "node --test tests/cloud-brain-wire.test.mjs tests/cloud-brain-client.test.mjs",
     "test:cloud-brain:service": "node --test --test-concurrency=1 tests/cloud-brain.test.mjs",
+    "test:cloud-brain:browser": "node tests/cloud-brain-browser.mjs",
     "test:cloud-brain:spike": "node tests/cloud-brain-spike.mjs"
   },
   "devDependencies": {
