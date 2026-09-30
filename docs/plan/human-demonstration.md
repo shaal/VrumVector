@@ -200,7 +200,7 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
   2026-09-24. The stricter case (the same driver, keys shifted late) stays
   a known-open `todo` test.
   Results: `docs/validation/behavioural-cloning.md`.
-- [ ] **H4 — Seed from a demonstration.** "Use my driving" in the panel, the
+- [x] **H4 — Seed from a demonstration.** "Use my driving" in the panel, the
   `demonstration` seed kind, the source count, and the per-context offer
   rule. Also add weight decay to the trainer so a clone's weights stay near
   the size of evolved brains: H3's clones came out about 10× larger, so
@@ -209,6 +209,23 @@ in `docs/validation/human-demonstration.md`, not in this checklist.
   them. Report the new weight size and mutation effect; H5's paired check
   decides whether the seed helps. (Decided 2026-09-24.) About 2–3 hours.
   depends: H3
+  Done 2026-09-29. `learning/demonstrationSeed.js` holds the pure parts
+  (offer rule, dataset, start-line check, seed, pool order); the panel
+  (`learning/session.js`) trains the clone in the worker, checks that it
+  pulls away from the start line, and adds it only when the person clicks
+  "Add to next generation" ("Train again" keeps that choice unless the new
+  copy stays parked). The offer rule is the track key, top speed,
+  traction, driving style, and Solid cars mode (recordings now store it;
+  older ones count as off); the round length does not count. The clone lives
+  in page memory only: a reload drops it, and training on another context
+  replaces it. The source line counts cars ("17 from your driving"), as it
+  counts memory and fresh cars. Weight decay: `weightDecay` in the trainer
+  (0 by default, so H3's exact-copy tests stand); "Use my driving" uses
+  0.001. It shrinks the largest weight about 10× but mutation still changes the
+  keys far less than for an evolved brain, and on Rectangle the clone
+  drives about a quarter less far. So 0.001 is provisional: H5 should
+  include a no-decay arm or try 2–3 values. Results:
+  `docs/validation/human-demonstration.md` (H4).
 - [ ] **H5 — "Check my driving" paired trials.** Extract `runPairedCheck`
   from `transferCheck.js` (the transfer-check tests must still pass
   unchanged), add the demonstration arms, verdict storage, and panel text.

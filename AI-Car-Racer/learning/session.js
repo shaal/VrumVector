@@ -1,8 +1,10 @@
-import {LearningCoach,buildPopulation,cleanContext,contextKey,validBrain} from './policy.js';
+import {LearningCoach,buildPopulation,cleanContext,contextKey,validBrain,collisionsLabel} from './policy.js';
 import {trackKey} from '../graphics/state.js';
 import {applyTransferGuard,transferGuard,isTransferPaused,resumeTransfer,runTransferCheck,clearTransferGuards} from './transferCheck.js';
 import {TrainingHealth,loadHealth,HEALTH_WINDOW} from './health.js';
 import {DemonstrationRecorder,DemonstrationStore,MAX_DEMONSTRATIONS,MAX_SECONDS} from './demonstration.js';
+import {trainCloneInWorker} from './clone.js';
+import {offerKey,cloneDataset,leavesStart,demonstrationSeed,seedPool,SEED_KIND,USE_WEIGHT_DECAY} from './demonstrationSeed.js';
 
 // Sliders store strings; accept a finite number in [0, 1] or use the default.
 const liveNumber=(value,fallback)=>{const n=Number(value);return Number.isFinite(n)&&n>=0&&n<=1?n:fallback;};
@@ -74,11 +76,19 @@ class DriverLearning {
       const guarded=applyTransferGuard(this.context,seeds);this.transferHeld=guarded.held;seeds=guarded.seeds;
       if(!seeds?.length&&prior&&(!priorContext||contextKey(priorContext)!==contextKey(this.context))){prior=null;this.transferHeld++;}
     }
-    const pool=seeds?.length&&!this.forceSaved?seeds:validBrain(prior)?[{vector:prior,id:null}]:[];
+    // Your driving (H4), offered only on the context it was recorded on.
+    const pool=seedPool(seeds?.length&&!this.forceSaved?seeds:validBrain(prior)?[{vector:prior,id:null}]:[],
+      this.demonstrationSeedFor(this.context),{forceSaved:this.forceSaved});
     if(this.forceSaved){this.coach.incumbent=null;this.forceSaved=false;}
     this.batch=buildPopulation({N,seeds:pool,incumbent:this.coach.incumbent,plan:this.lastPlan,conservative});
     this.seeds=pool;this.render();return this.batch;
   }
+  // "Use my driving": the clone of one context's recordings. demo is
+  // {key (offerKey), seed, report, seeding}; seeding means it joins the pool.
+  setDemonstration(demo){this.demo=demo;this.render();}
+  setDemonstrationSeeding(on){if(this.demo){this.demo.seeding=!!on;this.render();}}
+  demonstrationFor(context){const key=offerKey(context);return key!==null&&this.demo?.key===key?this.demo:null;}
+  demonstrationSeedFor(context){const demo=this.demonstrationFor(context);return demo?.seeding?demo.seed:null;}
   record(result,vector,id){
     // A track/profile change must never accept a late result from the old run.
     if(result.learningContext&&contextKey(result.learningContext)!==this.coach.key)return;
@@ -170,13 +180,14 @@ class DriverLearning {
     this.root.querySelector('[data-learning-survival]').textContent=last?`${Math.round(last.survival*100)}%`:'—';
     this.root.querySelector('[data-learning-mutation]').textContent=plan?`${Math.round(plan.mutation*100)}%`:'—';
     const source=this.batch?.counts;
-    this.root.querySelector('[data-learning-sources]').textContent=source?`${source.archive_recall} from memory · ${source.localStorage_prior} from saved drivers · ${source.random_init} fresh`:'Memory selects useful starting points for this style and track.';
+    this.root.querySelector('[data-learning-sources]').textContent=source?(source.demonstration?`${source.demonstration} from your driving · `:'')+
+      `${source.archive_recall} from memory · ${source.localStorage_prior} from saved drivers · ${source.random_init} fresh`:'Memory selects useful starting points for this style and track.';
     const chart=this.root.querySelector('[data-learning-chart]');chart.replaceChildren();
     const history=this.coach.history.slice(-20),max=Math.max(1,...history.map(r=>r.fitness));
     for(const row of history){const bar=document.createElement('span');bar.style.height=`${Math.max(5,row.fitness/max*100)}%`;bar.title=`Generation ${row.generation}: ${row.fitness} gates · ${Math.round(row.survival*100)}% survived`;bar.classList.toggle('improved',row.improved);chart.append(bar);}
     chart.setAttribute('aria-label',history.length?`Checkpoint progress over ${history.length} generations. Latest ${last.fitness}, best ${this.coach.incumbent.fitness}.`:'No completed generations yet');
     const memories=this.root.querySelector('[data-learning-memories]');memories.replaceChildren();
-    for(const seed of (this.seeds||[]).slice(0,3)){const item=document.createElement('li');item.textContent=`${seed.matchLabel||'Saved driver'} · ${Number(seed.meta?.fitness||0).toFixed(0)} gates`;memories.append(item);}
+    for(const seed of (this.seeds||[]).slice(0,3)){const item=document.createElement('li');item.textContent=seed.kind===SEED_KIND?'Your driving · trained copy':`${seed.matchLabel||'Saved driver'} · ${Number(seed.meta?.fitness||0).toFixed(0)} gates`;memories.append(item);}
     const pill=this.root.querySelector('[data-learning-health]');
     if(pill){
       const h=this.healthState;pill.hidden=!h;this.root.querySelector('[data-learning-health-note]').hidden=!h;
@@ -215,6 +226,8 @@ learning.createCoach=()=>new LearningCoach();learning.buildPopulation=buildPopul
 const demoStore=new DemonstrationStore();
 let demoCount=null,demoStorage='unknown',demoNotice='';
 const point=p=>({x:p.x,y:p.y});
+// The Solid cars mode (main.js), as the learning context labels it.
+const collisionMode=()=>collisionsLabel(typeof collisionConfig==='function'?collisionConfig():null);
 export const demonstrations=window.DemonstrationRecorder=new DemonstrationRecorder({store:demoStore,
   environment:{
     // PlayerAssist hides this panel outside training and in the A/B view.
@@ -224,9 +237,10 @@ export const demonstrations=window.DemonstrationRecorder=new DemonstrationRecord
       hidden:!!window.PlayerAssist?.root?.hidden,
       focused:document.hasFocus()&&!document.activeElement?.closest?.('input,textarea,select,[contenteditable="true"]')}),
     now:()=>performance.now(),
-    signature:car=>[car,road.innerList,road.outerList,road.checkPointList,road.borders,car.maxSpeed,car.traction,learning.profile],
+    signature:car=>[car,road.innerList,road.outerList,road.checkPointList,road.borders,car.maxSpeed,car.traction,learning.profile,collisionMode()],
     snapshot:car=>({
-      context:cleanContext({profile:learning.profile,track:geometryKey(road),maxSpeed:car.maxSpeed,traction:car.traction,seconds:typeof seconds==='undefined'?20:seconds}),
+      context:cleanContext({profile:learning.profile,track:geometryKey(road),maxSpeed:car.maxSpeed,traction:car.traction,
+        seconds:typeof seconds==='undefined'?20:seconds,collisions:collisionMode()}),
       track:{canvasW:canvas.width,canvasH:canvas.height,borders:road.borders.map(s=>s.map(point)),checkPointList:road.checkPointList.map(s=>s.map(point)),
         startInfo:{x:car.origin.x,y:car.origin.y,heading:car.origin.angle}}}),
   },
@@ -258,7 +272,7 @@ const DEMO_PAUSES={idle:'Waiting for your car to move.',ai:'Paused while AI driv
   unfocused:'Paused: WASD keys are not reaching your car. Click the track to go on.'};
 const DEMO_BLOCKED={multiplayer:'Turn off Multiplayer to record your driving.',
   adaptive:'Turn off Adaptive green gates (Experiments) to record your driving. They can move the gates between generations.'};
-const DEMO_STOPS={full:`Stopped at the ${MAX_SECONDS/60}-minute limit.`,multiplayer:'Stopped: Multiplayer is on.',context:'Stopped: the track, physics, or driving style changed.',page:'Stopped when the page closed.',
+const DEMO_STOPS={full:`Stopped at the ${MAX_SECONDS/60}-minute limit.`,multiplayer:'Stopped: Multiplayer is on.',context:'Stopped: the track, physics, driving style, or Solid cars changed.',page:'Stopped when the page closed.',
   away:'Stopped: you left the training view.',error:'Stopped after an error.',adaptive:'Stopped: Adaptive green gates are on.'};
 const plural=(n,one,many=one+'s')=>`${n} ${n===1?one:many}`;
 const savedCount=()=>demoCount==null?'Recordings stay in this browser.':`${demoCount} of ${MAX_DEMONSTRATIONS} recordings saved in this browser.`+
@@ -294,6 +308,95 @@ function renderDemonstration(){
     blocked?(demonstrations.last?lastDemoText(demonstrations.last)+' ':'')+DEMO_BLOCKED[blocked]:
     demonstrations.last?lastDemoText(demonstrations.last):(demoNotice?demoNotice+' ':'')+savedCount();
   if(status.textContent!==text)status.textContent=text;
+  renderUseDriving();
+}
+
+// "Use my driving" (H4). Trains a clone of this context's recordings in a
+// worker, checks that it pulls away from the start line, and, when the
+// person adds it, puts it in the seed pool of the next generations here.
+// Everything stays in this browser.
+let useRun=null,useNotice=null;
+const USE_FAILED={'not-enough-data':'Not enough driving here to train a copy. Record a little more, then try again.',
+  AbortError:'Training stopped. Nothing changed.',moved:'Training finished after the track, physics, driving style, or Solid cars changed, so the copy was not kept. Try again here.'};
+const percent=v=>`${Math.round(100*v)}%`;
+// Every step senses, as in the trial worker: the page's sensor stride skips
+// perception for most AI cars at high speed.
+function startLineCheck(vector,context){
+  const stride=typeof SENSOR_STRIDE==='undefined'?1:SENSOR_STRIDE;window.SENSOR_STRIDE=1;
+  try{
+    return leavesStart({road,vector,makeCar:()=>{
+      const car=new Car(startInfo.x,startInfo.y,30,50,'AI',context.maxSpeed,startInfo.heading||0);car.driverProfile=context.profile;return car;}});
+  }finally{window.SENSOR_STRIDE=stride;}
+}
+async function useMyDriving(){
+  if(useRun){useRun.controller.abort();return;}
+  const context=learning.context,key=offerKey(context);
+  if(key===null||demonstrations.recording||demoStorage==='unavailable')return;
+  // The walls change (a preset) before the context follows at the next generation.
+  if(geometryKey(road)!==context.track){useNotice={key,text:'The track changed. Train a copy once a generation has started on it.'};renderDemonstration();return;}
+  const controller=new AbortController(),run=useRun={controller,key,passes:0};
+  useNotice=null;renderDemonstration();
+  try{
+    const records=await demoStore.list();
+    controller.signal.throwIfAborted();
+    const {dataset,used,skipped}=cloneDataset(records,context);
+    if(!dataset){
+      useNotice={key,text:skipped.length?`Your ${plural(skipped.length,'recording')} on this track could not be read. Record your driving here again.`:
+        records.length?`None of your ${plural(records.length,'recording')} is from this track with this top speed, traction, driving style, and Solid cars setting. Record your driving here first.`:
+        'No recordings yet. Record your driving on this track first.'};
+      return;
+    }
+    const {weights,report}=await trainCloneInWorker(dataset,{weightDecay:USE_WEIGHT_DECAY,signal:controller.signal,onProgress:()=>{run.passes++;renderUseLive();}});
+    // The start-line check drives on the live track, so it needs this
+    // context and these walls (loading a preset changes the walls before the
+    // context follows at the next generation).
+    if(offerKey(learning.context)!==key||geometryKey(road)!==context.track){useNotice={key:offerKey(learning.context),text:USE_FAILED.moved};return;}
+    const check=startLineCheck(weights,context);
+    const seconds=used.reduce((sum,d)=>sum+(Number(d.seconds)||0),0);
+    // Training again keeps your choice to seed with it, unless the new copy
+    // stays parked at the start line.
+    const seeding=!!learning.demonstrationFor(context)?.seeding&&check.leaves;
+    learning.setDemonstration({key,seeding,seed:demonstrationSeed(weights,{recordings:used.length,seconds}),
+      report:{agreement:report.heldOut.agreement,pairs:report.heldOut.pairs,lag:report.lag,recordings:used.length,skipped:skipped.length,seconds,
+        leavesStart:check.leaves,moved:check.moved,maxAbsWeight:report.maxAbsWeight,trainedAt:Date.now()}});
+    if(skipped.length)useNotice={key,text:`${plural(skipped.length,'recording')} could not be read and ${skipped.length===1?'was':'were'} skipped.`};
+  }catch(error){
+    const code=error?.name==='AbortError'?'AbortError':error?.code;
+    if(code!=='AbortError'&&code!=='not-enough-data')console.warn('[demonstration] training a copy failed',error);
+    useNotice={key:offerKey(learning.context),text:USE_FAILED[code]||'Could not train a copy of your driving. Nothing changed.'};
+  }finally{if(useRun===run)useRun=null;renderDemonstration();}
+}
+function cloneText(demo){
+  const r=demo.report,from=`${plural(r.recordings,'recording')} (${r.seconds.toFixed(0)} s of driving)`;
+  return `Your copy, from ${from}, matches your keys on ${percent(r.agreement)} of the steps it did not learn from. `+
+    (r.leavesStart?'It pulls away from the start line.':'It does not pull away from the start line, so it may stay parked.');
+}
+function renderUseLive(){
+  const live=learning.root?.querySelector('[data-demo-use-live]');if(!live)return;
+  const text=useRun?`${plural(useRun.passes,'training pass','training passes')}`:'';
+  live.hidden=!useRun;if(live.textContent!==text)live.textContent=text;
+}
+function renderUseDriving(){
+  const root=learning.root;if(!root)return;
+  const use=root.querySelector('[data-demo-use]'),seed=root.querySelector('[data-demo-seed]'),status=root.querySelector('[data-demo-use-status]');
+  const context=learning.context,key=offerKey(context),demo=learning.demonstrationFor(context);
+  const blocked=!useRun&&(key===null||demonstrations.recording||demoStorage==='unavailable');
+  const label=useRun?'Stop training':demo?'Train again':'Use my driving';
+  if(use.textContent!==label)use.textContent=label;
+  use.setAttribute('aria-disabled',String(blocked));
+  const seedLabel=demo?.seeding?'Stop using my driving':'Add to next generation';
+  seed.hidden=!demo;if(seed.textContent!==seedLabel)seed.textContent=seedLabel;
+  const notice=useNotice&&useNotice.key===key?useNotice.text+' ':'';
+  const pool=demo?.seeding?(learning.coach.incumbent?' It is in the seed pool: the champion keeps the first slot, and copies of yours join the next generations.':
+    ' It takes the first, protected slot of the next generation, and copies of it join the rest.'):'';
+  const text=useRun?'Training a copy of your driving in the background. You can keep driving.':
+    key===null?'Start training once, then train a copy of your driving for this track.':
+    demoStorage==='unavailable'?'Using your driving needs browser storage (IndexedDB), which is not available here.':
+    demo?notice+cloneText(demo)+pool:
+    notice+(demonstrations.recording?'Stop recording to train a copy of your driving.':'Train a copy of your driving from your recordings on this track. You then choose whether it seeds the next generation.');
+  status.setAttribute('aria-busy',useRun?'true':'false');
+  if(status.textContent!==text)status.textContent=text;
+  renderUseLive();
 }
 
 export function attachLearningControls(host){
@@ -315,7 +418,10 @@ export function attachLearningControls(host){
       <div class="learning-demo"><p><strong>Teach by driving</strong></p>
       <p class="learning-note">Save your WASD driving as examples for the AI. Recording runs at 1× and pauses while AI driving is on. Recordings stay in this browser and are never sent.</p>
       <button type="button" data-demo-record data-active="false" aria-disabled="false">Record my driving</button>
-      <p class="learning-demo-live" data-demo-live hidden></p><p class="learning-note" data-demo-status role="status" aria-live="polite"></p></div>
+      <p class="learning-demo-live" data-demo-live hidden></p><p class="learning-note" data-demo-status role="status" aria-live="polite"></p>
+      <div class="learning-use"><p class="learning-note" data-demo-use-status role="status" aria-live="polite"></p>
+      <p class="learning-demo-live" data-demo-use-live hidden></p>
+      <button type="button" data-demo-use aria-disabled="false">Use my driving</button> <button type="button" data-demo-seed hidden>Add to next generation</button></div></div>
     </section>`;
   host.append(root);learning.root=root;
   root.querySelector('select').onchange=event=>learning.setProfile(event.target.value);
@@ -330,6 +436,15 @@ export function attachLearningControls(host){
     if(event.detail>1||event.currentTarget.getAttribute('aria-disabled')==='true')return; // a double click must not start and stop at once
     if(demonstrations.recording)demonstrations.stop('user');else demonstrations.start();
     renderDemonstration();
+  };
+  root.querySelector('[data-demo-use]').onclick=event=>{
+    if(event.detail>1||event.currentTarget.getAttribute('aria-disabled')==='true')return;
+    useMyDriving();
+  };
+  root.querySelector('[data-demo-seed]').onclick=event=>{
+    if(event.detail>1)return;
+    const demo=learning.demonstrationFor(learning.context);if(!demo)return;
+    learning.setDemonstrationSeeding(!demo.seeding);
   };
   root.querySelector('[data-learning-review]').onclick=()=>{const done=learning.consolidate();if(!done)root.querySelector('[data-learning-consolidation]').textContent='Complete a generation with Vector Memory on to review new memories.';};
   root.addEventListener('toggle',()=>{

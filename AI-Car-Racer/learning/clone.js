@@ -42,6 +42,14 @@ export const CLONE_DEFAULTS=Object.freeze({
   screenEpochs:10,       // every lag trains this long; the best `finalists` train to the end
   finalists:2,
   rarePower:.5,rareCap:10, // a key's rarer value weighs max(1, min(cap, (common/rare)^power))
+  // L2 penalty (weightDecay/2)·sum(w²), in the training gradient only (the
+  // held-out loss that stops training and picks the lag leaves it out). A first-layer
+  // weight counts as the car runs it (after fold(): divided by its input's
+  // spread). It keeps a clone's weights near the size of evolved brains, so
+  // the genetic run's mutation still changes its keys (H4). 0 here: an exact
+  // copy is the trainer's test. "Use my driving" sets USE_WEIGHT_DECAY
+  // (demonstrationSeed.js).
+  weightDecay:0,
 });
 
 export class CloneError extends Error{
@@ -105,6 +113,7 @@ function checkOptions(o){
   if(!(Number.isFinite(o.rarePower)&&o.rarePower>=0))throw new CloneError('invalid-options','rarePower must be a non-negative number.');
   if(!(Number.isFinite(o.rareCap)&&o.rareCap>=1))throw new CloneError('invalid-options','rareCap must be a number of at least 1.');
   if(!(Number.isInteger(o.minScoredPairs)&&o.minScoredPairs>=1))throw new CloneError('invalid-options','minScoredPairs must be a positive integer.');
+  if(!(Number.isFinite(o.weightDecay)&&o.weightDecay>=0))throw new CloneError('invalid-options','weightDecay must be a non-negative number.');
 }
 
 // Time-block split. Each run is cut into blocks of `blockSteps` consecutive
@@ -261,6 +270,16 @@ class LagTrainer{
     this.p=Float64Array.from(init);this.m=new Float64Array(FLAT_LENGTH);this.v=new Float64Array(FLAT_LENGTH);
     this.grad=new Float64Array(FLAT_LENGTH);this.order=Uint32Array.from(rows.train);
     this.random=seededRandom(options.seed+':order');this.steps=0;
+    // Per-parameter decay: the deployed first-layer weight is p/spread, so its
+    // penalty gradient is weightDecay·p/spread². Biases decay as trained (the
+    // deployed hidden bias also takes the folded mean, which the smaller
+    // weights keep small).
+    this.decay=new Float64Array(FLAT_LENGTH);
+    if(options.weightDecay){
+      for(let j=0;j<INPUT_COUNT;j++)for(let i=0;i<HIDDEN_COUNT;i++)this.decay[W1+j*HIDDEN_COUNT+i]=options.weightDecay/scale.spread[j]**2;
+      for(let i=0;i<HIDDEN_COUNT;i++)this.decay[B1+i]=options.weightDecay;
+      for(let k=B2;k<FLAT_LENGTH;k++)this.decay[k]=options.weightDecay;
+    }
     this.hidden=new Float64Array(HIDDEN_COUNT);this.dHidden=new Float64Array(HIDDEN_COUNT);this.z=new Float64Array(KEY_COUNT);
     this.epochs=0;this.bestEpoch=0;this.bestLoss=this.loss(scored);this.best=Float64Array.from(this.p);
   }
@@ -309,11 +328,11 @@ class LagTrainer{
           for(let j=0;j<INPUT_COUNT;j++)grad[W1+j*HIDDEN_COUNT+i]+=x[base+j]*da;
         }
       }
-      // Adam on the batch mean gradient.
+      // Adam on the batch mean gradient plus the weight decay.
       const scale=1/(end-start),step=++this.steps;
-      const c1=1-.9**step,c2=1-.999**step;
+      const c1=1-.9**step,c2=1-.999**step,decay=this.decay;
       for(let k=0;k<FLAT_LENGTH;k++){
-        const g=grad[k]*scale;
+        const g=grad[k]*scale+decay[k]*p[k];
         m[k]=.9*m[k]+.1*g;v[k]=.999*v[k]+.001*g*g;
         p[k]-=learningRate*(m[k]/c1)/(Math.sqrt(v[k]/c2)+1e-8);
       }

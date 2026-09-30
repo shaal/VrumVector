@@ -19,12 +19,12 @@ function rig({track='Rectangle',maxSamples}={}){
   const sim=new Simulation({track});
   // WASD controls listen for keys; the simulator has no page.
   Object.assign(sim.scope,{document:new EventTarget(),window:new EventTarget(),AbortController});
-  const env={multiplayer:false,simSpeed:1,assist:false,profile:'balanced'},saved=[];
+  const env={multiplayer:false,simSpeed:1,assist:false,profile:'balanced',collisions:'off'},saved=[];
   const newCar=(maxSpeed=15)=>{const s=sim.spawn;return new sim.scope.CarClass(s.x,s.y,30,50,'WASD',maxSpeed,s.angle);};
   const recorder=new DemonstrationRecorder({maxSamples,
     environment:{state:()=>env,
-      signature:car=>[car,sim.road.borders,sim.road.checkPointList,car.maxSpeed,car.traction,env.profile],
-      snapshot:car=>({context:cleanContext({profile:env.profile,track:hash(sim.road.checkPointList),maxSpeed:car.maxSpeed,traction:car.traction}),
+      signature:car=>[car,sim.road.borders,sim.road.checkPointList,car.maxSpeed,car.traction,env.profile,env.collisions],
+      snapshot:car=>({context:cleanContext({profile:env.profile,track:hash(sim.road.checkPointList),maxSpeed:car.maxSpeed,traction:car.traction,collisions:env.collisions}),
         track:{checkPointList:sim.road.checkPointList}})},
     store:{save:async demonstration=>{saved.push(demonstration);return {id:saved.length,dropped:0,count:saved.length};}}});
   let frame=0;
@@ -184,6 +184,15 @@ test('a new car, a changed track or physics, multiplayer, and the size cap split
   r=rig();car=r.newCar();r.recorder.start();r.step(car,NO_KEYS);
   for(let i=0;i<80;i++)r.step(car,follow(car));
   r.step(r.newCar(10),NO_KEYS);assert.equal(r.recorder.last.reason,'context');assert.equal(r.recorder.last.samples,80);
+  // So does Solid cars (H4: a clone is offered only in the collision mode it
+  // was recorded in). A change before the first sample is adopted.
+  r=rig();car=r.newCar();r.recorder.start();r.step(car,NO_KEYS);
+  r.env.collisions='solid/k8';r.step(car,NO_KEYS);assert.equal(r.recorder.recording,true);
+  for(let i=0;i<80;i++)r.step(car,follow(car));
+  r.env.collisions='off';r.step(car,follow(car));
+  assert.equal(r.recorder.last.reason,'context');await r.recorder.last.done;assert.equal(r.saved[0].context.collisions,'solid/k8');
+  r=rig();car=r.newCar();r.recorder.start();r.step(car,NO_KEYS);for(let i=0;i<80;i++)r.step(car,follow(car));
+  r.recorder.stop();await r.recorder.last.done;assert.equal(r.saved[0].context.collisions,'off','recorded with Solid cars off');
 
   // Multiplayer: no recording starts, and turning it on ends one.
   r=rig();car=r.newCar();r.env.multiplayer=true;

@@ -210,6 +210,45 @@ try{
   assert.ok(converted.restForward.length&&converted.restForward.every(v=>v===1),'rest rows get W, the key that moved the car');
   assert.deepEqual(converted.mirrored,{rows:2*demo.samples,links:demo.samples});
 
+  mark('Use my driving trains a copy and seeds the next generation (H4)');
+  const use=()=>page.evaluate(()=>{const root=document.getElementById('driver-learning');
+    const b=root.querySelector('[data-demo-use]'),seed=root.querySelector('[data-demo-seed]');
+    return {label:b.textContent,disabled:b.getAttribute('aria-disabled'),seed:seed.hidden?null:seed.textContent,
+      status:root.querySelector('[data-demo-use-status]').textContent,sources:root.querySelector('[data-learning-sources]').textContent,
+      demo:window.DriverLearning.demonstrationFor(window.DriverLearning.context)};});
+  let u=await use();
+  assert.deepEqual([u.label,u.disabled,u.seed,u.demo],['Use my driving','false',null,null]);
+  assert.equal(u.status,'Train a copy of your driving from your recordings on this track. You then choose whether it seeds the next generation.');
+  await page.locator('[data-demo-use]').click();
+  await page.waitForFunction(()=>window.DriverLearning.demonstrationFor(window.DriverLearning.context),{},{timeout:120000});
+  u=await use();
+  assert.deepEqual([u.label,u.seed,u.demo.seeding,u.demo.seed.kind,u.demo.report.recordings],['Train again','Add to next generation',false,'demonstration',1]);
+  assert.match(u.status,/^Your copy, from 1 recording \(\d+ s of driving\), matches your keys on \d+% of the steps it did not learn from\. It pulls away from the start line\./);
+  assert.ok(u.demo.report.maxAbsWeight<20,`weight decay keeps the copy small: ${u.demo.report.maxAbsWeight}`);
+  assert.doesNotMatch(u.sources,/your driving/,'not seeded until you add it');
+  await page.locator('[data-demo-seed]').click();
+  u=await use();assert.equal(u.seed,'Stop using my driving');assert.match(u.status,/(protected slot|seed pool)/);
+  await page.waitForFunction(()=>window.DriverLearning.batch?.counts?.demonstration>0,{},{timeout:60000});
+  u=await use();assert.match(u.sources,/^\d+ from your driving · /);
+  // Training again replaces the copy and keeps it in the pool (it pulls away).
+  const trainedAt=u.demo.report.trainedAt;
+  await page.locator('[data-demo-use]').click();
+  u=await use();assert.deepEqual([u.label,u.seed],['Stop training','Stop using my driving'],'the pool toggle stays while training');
+  await page.waitForFunction(t=>window.DriverLearning.demonstrationFor(window.DriverLearning.context)?.report.trainedAt>t,trainedAt,{timeout:120000});
+  u=await use();assert.deepEqual([u.label,u.seed,u.demo.seeding,u.demo.report.leavesStart],['Train again','Stop using my driving',true,true]);
+  const bridge=await page.evaluate(()=>window.__rvBridge.info().seedSources);
+  assert.ok(bridge.demonstration>0&&bridge.total===bridge.archive_recall+bridge.localStorage_prior+bridge.random_init+bridge.demonstration,JSON.stringify(bridge));
+  // The offer rule in the page: another top speed is another context.
+  await page.evaluate(()=>setMaxSpeed(10));
+  await page.waitForFunction(()=>window.DriverLearning.context.maxSpeed===10&&window.DriverLearning.batch?.counts?.demonstration===0,{},{timeout:60000});
+  u=await use();assert.deepEqual([u.demo,u.seed,u.label],[null,null,'Use my driving']);
+  await page.evaluate(()=>setMaxSpeed(15));
+  await page.waitForFunction(()=>window.DriverLearning.context.maxSpeed===15&&window.DriverLearning.batch?.counts?.demonstration>0,{},{timeout:60000});
+  await page.locator('[data-demo-seed]').click();
+  await page.waitForFunction(()=>window.DriverLearning.batch?.counts?.demonstration===0,{},{timeout:60000});
+  assert.doesNotMatch((await use()).sources,/your driving/);
+  await page.screenshot({path:`${out}/use-my-driving.png`});
+
   mark('turning on multiplayer stops and saves a recording');
   await page.locator('[data-demo-record]').click();
   await page.keyboard.down('w');await waitDriving(70);await page.keyboard.up('w');
@@ -238,7 +277,7 @@ try{
   await page.evaluate(()=>setMaxSpeed(10)); // rebuilds the cars with the new top speed
   await page.waitForFunction(()=>window.DemonstrationRecorder.last?.reason==='context'&&window.DemonstrationRecorder.last.saved===true);
   await page.keyboard.up('w');
-  assert.match((await state()).status,/^Stopped: the track, physics, or driving style changed\. Saved \d+\.\d s, 0 laps, \d+ crash(es)?\. 3 of 10 recordings saved in this browser\.$/);
+  assert.match((await state()).status,/^Stopped: the track, physics, driving style, or Solid cars changed\. Saved \d+\.\d s, 0 laps, \d+ crash(es)?\. 3 of 10 recordings saved in this browser\.$/);
   saved=await records();assert.equal(saved.length,3);
   assert.deepEqual([saved[2].stopReason,saved[2].context.maxSpeed,saved[2].context.track],['context',15,demo.context.track],'saved with the old physics');
   await page.evaluate(()=>setMaxSpeed(15));
