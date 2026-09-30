@@ -1,0 +1,10 @@
+{
+ "description": "17 brains and a bad track: the counts first.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[\"AAAA\"],\"brains\":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],\"feedback\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "too-many-brains",
+  "status": 400
+ }
+}

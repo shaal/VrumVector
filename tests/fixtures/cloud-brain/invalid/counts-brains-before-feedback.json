@@ -1,0 +1,10 @@
+{
+ "description": "17 brains and 51 feedback rows: brains counted before feedback.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[],\"brains\":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],\"feedback\":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]}",
+ "expect": {
+  "ok": false,
+  "error": "too-many-brains",
+  "status": 400
+ }
+}

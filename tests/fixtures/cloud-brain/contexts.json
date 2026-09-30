@@ -1,0 +1,683 @@
+[
+ {
+  "in": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "1a2b3c4d-5e6f7a8b-812",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "1a2b3c4d-5e6f7a8b-812",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {},
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "profile": "careful",
+   "maxSpeed": 0,
+   "traction": 0,
+   "seconds": 0
+  },
+  "out": {
+   "version": 1,
+   "profile": "careful",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "profile": "nope",
+   "maxSpeed": 0.5,
+   "traction": -1,
+   "seconds": 0.2
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 1,
+   "traction": 0,
+   "seconds": 1,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "maxSpeed": 1000000000,
+   "traction": 2,
+   "seconds": 601
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 100,
+   "traction": 1,
+   "seconds": 600,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "maxSpeed": 12.5,
+   "traction": 0.25,
+   "seconds": 45.5
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 12.5,
+   "traction": 0.25,
+   "seconds": 45.5,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "maxSpeed": "30",
+   "traction": "0.3",
+   "seconds": true,
+   "profile": 7,
+   "track": 42
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "maxSpeed": [
+    30
+   ],
+   "traction": false,
+   "seconds": "45"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "profile": "balanced"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "profile": "calm"
+  },
+  "out": {
+   "version": 1,
+   "profile": "calm",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "profile": "careful"
+  },
+  "out": {
+   "version": 1,
+   "profile": "careful",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "profile": "wild"
+  },
+  "out": {
+   "version": 1,
+   "profile": "wild",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "profile": "reckless"
+  },
+  "out": {
+   "version": 1,
+   "profile": "reckless",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "profile": "Balanced"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "track": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "track": "café"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "track": "a\tb"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "track": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\t"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "track": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\t"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "track": "ab"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "track": " ~ "
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": " ~ ",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "collisions": "off"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "collisions": ""
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "collisions": "solid/k8/rays"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  }
+ },
+ {
+  "in": {
+   "collisions": "SOLID/K008/RAYS"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  }
+ },
+ {
+  "in": {
+   "collisions": "solid/k8"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  }
+ },
+ {
+  "in": {
+   "collisions": "solid/k08x"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8x"
+  }
+ },
+ {
+  "in": {
+   "collisions": "solid/kall"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall"
+  }
+ },
+ {
+  "in": {
+   "collisions": "solid/k0"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k0"
+  }
+ },
+ {
+  "in": {
+   "collisions": "solid/k99999"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k65536"
+  }
+ },
+ {
+  "in": {
+   "collisions": "solid/k8/rays/a/b"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays/a/b"
+  }
+ },
+ {
+  "in": {
+   "collisions": "solid/k8/rays/a/b/c"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  }
+ },
+ {
+  "in": {
+   "collisions": "<script>"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  }
+ },
+ {
+  "in": {
+   "collisions": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  }
+ },
+ {
+  "in": {
+   "collisions": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  }
+ },
+ {
+  "in": {
+   "collisions": "sølid"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  }
+ },
+ {
+  "in": {
+   "collisions": "Solid/K8/Rays "
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  }
+ },
+ {
+  "in": {
+   "collisions": "solid/K8/rays"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  }
+ },
+ {
+  "in": {
+   "collisions": "solid/k999999999999999999999999999999"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k65536"
+  }
+ },
+ {
+  "in": {
+   "collisions": "solid/k00000000000000000000000000000000000000008"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  }
+ },
+ {
+  "in": {
+   "collisions": "solid/k00000000000000000000000000000000000000008/rays"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  }
+ },
+ {
+  "in": {
+   "collisions": "Solid/Kall/RAYS"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  }
+ },
+ {
+  "in": {
+   "collisions": "unknown"
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  }
+ },
+ {
+  "in": {
+   "collisions": {
+    "heatSize": 8
+   }
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "collisions": true
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": {
+   "version": 9,
+   "extra": 1
+  },
+  "out": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  }
+ },
+ {
+  "in": [],
+  "out": null
+ },
+ {
+  "in": "balanced",
+  "out": null
+ },
+ {
+  "in": null,
+  "out": null
+ }
+]

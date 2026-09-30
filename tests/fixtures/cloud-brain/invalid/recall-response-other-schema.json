@@ -1,0 +1,9 @@
+{
+ "description": "An answer in another brain format.",
+ "route": "recall-response",
+ "body": "{\"protocol\":1,\"brainSchema\":5,\"pool\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "brain-schema"
+ }
+}

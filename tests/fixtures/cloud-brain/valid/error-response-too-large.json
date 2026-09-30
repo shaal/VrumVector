@@ -1,0 +1,10 @@
+{
+ "description": "A request over 64 KB (HTTP 413).",
+ "route": "error-response",
+ "body": "{\"protocol\":1,\"error\":\"body-too-large\"}",
+ "expect": {
+  "ok": true,
+  "error": "body-too-large",
+  "status": 413
+ }
+}

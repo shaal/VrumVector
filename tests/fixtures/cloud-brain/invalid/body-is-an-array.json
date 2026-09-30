@@ -1,0 +1,10 @@
+{
+ "description": "A JSON array, not an object.",
+ "route": "contribute",
+ "body": "[1,2,3]",
+ "expect": {
+  "ok": false,
+  "error": "shape",
+  "status": 400
+ }
+}

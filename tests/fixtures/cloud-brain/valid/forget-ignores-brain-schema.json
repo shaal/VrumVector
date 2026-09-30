@@ -1,0 +1,8 @@
+{
+ "description": "A forget with another brainSchema: the format is not checked.",
+ "route": "forget",
+ "body": "{\"protocol\":1,\"brainSchema\":5,\"token\":\"0123456789abcdef0123456789abcdef\"}",
+ "expect": {
+  "ok": true
+ }
+}

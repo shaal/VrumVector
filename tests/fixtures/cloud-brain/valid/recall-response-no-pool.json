@@ -1,0 +1,10 @@
+{
+ "description": "No pool: an empty one.",
+ "route": "recall-response",
+ "body": "{\"protocol\":1,\"brainSchema\":6}",
+ "expect": {
+  "ok": true,
+  "pool": [],
+  "dropped": []
+ }
+}

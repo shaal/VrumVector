@@ -1,0 +1,10 @@
+{
+ "description": "The breaker is on (HTTP 503).",
+ "route": "error-response",
+ "body": "{\"protocol\":1,\"error\":\"disabled\"}",
+ "expect": {
+  "ok": true,
+  "error": "disabled",
+  "status": 503
+ }
+}

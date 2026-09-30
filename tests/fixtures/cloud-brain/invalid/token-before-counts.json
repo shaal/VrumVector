@@ -1,0 +1,10 @@
+{
+ "description": "A bad token and 17 brains: the token first.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"x\",\"tracks\":[],\"brains\":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],\"feedback\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "token",
+  "status": 400
+ }
+}

@@ -1,0 +1,22 @@
+{
+ "description": "feedbackAccepted and an index of -0 come out as 0.",
+ "route": "contribute-response",
+ "body": "{\"protocol\":1,\"accepted\":[],\"rejected\":[{\"index\":-0,\"reason\":\"brain-fitness\"}],\"feedbackAccepted\":-0,\"feedbackRejected\":[{\"index\":-0.0,\"reason\":\"feedback-id\"}]}",
+ "expect": {
+  "ok": true,
+  "accepted": [],
+  "rejected": [
+   {
+    "index": 0,
+    "reason": "brain-fitness"
+   }
+  ],
+  "feedbackAccepted": 0,
+  "feedbackRejected": [
+   {
+    "index": 0,
+    "reason": "feedback-id"
+   }
+  ]
+ }
+}

@@ -1,0 +1,12 @@
+{
+ "description": "An unknown key nested to depth 32 in objects: accepted.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[],\"brains\":[],\"feedback\":[],\"deep\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":1}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}",
+ "expect": {
+  "ok": true,
+  "accepted": [],
+  "rejected": [],
+  "feedbackAccepted": 0,
+  "feedbackRejected": []
+ }
+}

@@ -1,0 +1,10 @@
+{
+ "description": "A token of 33 hex digits.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdefa\",\"tracks\":[],\"brains\":[],\"feedback\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "token",
+  "status": 400
+ }
+}

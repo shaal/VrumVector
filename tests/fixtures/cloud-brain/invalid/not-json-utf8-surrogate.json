@@ -1,0 +1,10 @@
+{
+ "description": "A surrogate encoded as UTF-8 (0xed 0xa0 0x80).",
+ "route": "contribute",
+ "expect": {
+  "ok": false,
+  "error": "not-json",
+  "status": 400
+ },
+ "bodyBase64": "eyJwcm90b2NvbCI6MSwiYnJhaW5TY2hlbWEiOjYsInRva2VuIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYiLCJub3RlIjoi7aCAIiwidHJhY2tzIjpbXSwiYnJhaW5zIjpbXSwiZmVlZGJhY2siOltdfQ=="
+}

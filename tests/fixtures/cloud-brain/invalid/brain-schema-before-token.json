@@ -1,0 +1,10 @@
+{
+ "description": "Another brain format and a bad token: the format first.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":5,\"token\":\"x\",\"tracks\":[],\"brains\":[],\"feedback\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "brain-schema",
+  "status": 400
+ }
+}

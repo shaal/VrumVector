@@ -1,0 +1,10 @@
+{
+ "description": "An error answer (HTTP 429).",
+ "route": "error-response",
+ "body": "{\"protocol\":1,\"error\":\"rate-limited\"}",
+ "expect": {
+  "ok": true,
+  "error": "rate-limited",
+  "status": 429
+ }
+}

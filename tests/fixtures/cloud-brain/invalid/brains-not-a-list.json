@@ -1,0 +1,10 @@
+{
+ "description": "brains is an object.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[],\"brains\":{\"0\":1},\"feedback\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "shape",
+  "status": 400
+ }
+}

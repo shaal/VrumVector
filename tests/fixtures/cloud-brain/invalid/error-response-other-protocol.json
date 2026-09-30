@@ -1,0 +1,10 @@
+{
+ "description": "An error answer in another protocol is a server error.",
+ "route": "error-response",
+ "body": "{\"protocol\":2,\"error\":\"rate-limited\"}",
+ "expect": {
+  "ok": true,
+  "error": "server-error",
+  "status": 500
+ }
+}

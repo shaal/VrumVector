@@ -1,0 +1,9 @@
+{
+ "description": "51 feedback rows accepted.",
+ "route": "contribute-response",
+ "body": "{\"protocol\":1,\"accepted\":[],\"rejected\":[],\"feedbackAccepted\":51,\"feedbackRejected\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

@@ -1,0 +1,9 @@
+{
+ "description": "A refused index given as a string (\"3\").",
+ "route": "contribute-response",
+ "body": "{\"protocol\":1,\"accepted\":[],\"rejected\":[{\"index\":\"3\",\"reason\":\"brain-fitness\"}],\"feedbackAccepted\":0,\"feedbackRejected\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

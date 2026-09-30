@@ -1,0 +1,201 @@
+{
+ "note": "CB1: largest absolute weight of each clone (node scripts/measure-clone-decay.mjs --decays 0.001,0), 7 teachers per track. Deterministic.",
+ "clones": [
+  {
+   "track": "Rectangle",
+   "teacher": "b",
+   "weightDecay": 0.001,
+   "maxWeight": 3.0346,
+   "teacherMaxWeight": 0.9812
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "b",
+   "weightDecay": 0,
+   "maxWeight": 77.7857,
+   "teacherMaxWeight": 0.9812
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "a",
+   "weightDecay": 0.001,
+   "maxWeight": 5.2304,
+   "teacherMaxWeight": 0.9038
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "a",
+   "weightDecay": 0,
+   "maxWeight": 57.2915,
+   "teacherMaxWeight": 0.9038
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "c",
+   "weightDecay": 0.001,
+   "maxWeight": 4.0587,
+   "teacherMaxWeight": 0.9834
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "c",
+   "weightDecay": 0,
+   "maxWeight": 28.9065,
+   "teacherMaxWeight": 0.9834
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "d",
+   "weightDecay": 0.001,
+   "maxWeight": 5.1231,
+   "teacherMaxWeight": 1
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "d",
+   "weightDecay": 0,
+   "maxWeight": 47.2275,
+   "teacherMaxWeight": 1
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "e",
+   "weightDecay": 0.001,
+   "maxWeight": 4.1531,
+   "teacherMaxWeight": 0.9706
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "e",
+   "weightDecay": 0,
+   "maxWeight": 33.6589,
+   "teacherMaxWeight": 0.9706
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "f",
+   "weightDecay": 0.001,
+   "maxWeight": 6.0221,
+   "teacherMaxWeight": 0.9133
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "f",
+   "weightDecay": 0,
+   "maxWeight": 96.781,
+   "teacherMaxWeight": 0.9133
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "g",
+   "weightDecay": 0.001,
+   "maxWeight": 5.3979,
+   "teacherMaxWeight": 0.9969
+  },
+  {
+   "track": "Rectangle",
+   "teacher": "g",
+   "weightDecay": 0,
+   "maxWeight": 23.4313,
+   "teacherMaxWeight": 0.9969
+  },
+  {
+   "track": "Triangle",
+   "teacher": "b",
+   "weightDecay": 0.001,
+   "maxWeight": 4.7122,
+   "teacherMaxWeight": 0.8792
+  },
+  {
+   "track": "Triangle",
+   "teacher": "b",
+   "weightDecay": 0,
+   "maxWeight": 26.3766,
+   "teacherMaxWeight": 0.8792
+  },
+  {
+   "track": "Triangle",
+   "teacher": "a",
+   "weightDecay": 0.001,
+   "maxWeight": 3.9694,
+   "teacherMaxWeight": 1
+  },
+  {
+   "track": "Triangle",
+   "teacher": "a",
+   "weightDecay": 0,
+   "maxWeight": 31.1657,
+   "teacherMaxWeight": 1
+  },
+  {
+   "track": "Triangle",
+   "teacher": "c",
+   "weightDecay": 0.001,
+   "maxWeight": 3.6581,
+   "teacherMaxWeight": 0.9734
+  },
+  {
+   "track": "Triangle",
+   "teacher": "c",
+   "weightDecay": 0,
+   "maxWeight": 29.6982,
+   "teacherMaxWeight": 0.9734
+  },
+  {
+   "track": "Triangle",
+   "teacher": "d",
+   "weightDecay": 0.001,
+   "maxWeight": 6.7598,
+   "teacherMaxWeight": 0.9936
+  },
+  {
+   "track": "Triangle",
+   "teacher": "d",
+   "weightDecay": 0,
+   "maxWeight": 61.1247,
+   "teacherMaxWeight": 0.9936
+  },
+  {
+   "track": "Triangle",
+   "teacher": "e",
+   "weightDecay": 0.001,
+   "maxWeight": 2.9773,
+   "teacherMaxWeight": 1
+  },
+  {
+   "track": "Triangle",
+   "teacher": "e",
+   "weightDecay": 0,
+   "maxWeight": 24.9823,
+   "teacherMaxWeight": 1
+  },
+  {
+   "track": "Triangle",
+   "teacher": "f",
+   "weightDecay": 0.001,
+   "maxWeight": 1.8874,
+   "teacherMaxWeight": 0.9949
+  },
+  {
+   "track": "Triangle",
+   "teacher": "f",
+   "weightDecay": 0,
+   "maxWeight": 48.6743,
+   "teacherMaxWeight": 0.9949
+  },
+  {
+   "track": "Triangle",
+   "teacher": "g",
+   "weightDecay": 0.001,
+   "maxWeight": 3.5469,
+   "teacherMaxWeight": 0.8904
+  },
+  {
+   "track": "Triangle",
+   "teacher": "g",
+   "weightDecay": 0,
+   "maxWeight": 10.0214,
+   "teacherMaxWeight": 0.8904
+  }
+ ]
+}

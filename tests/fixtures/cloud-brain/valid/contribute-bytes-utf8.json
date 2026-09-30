@@ -1,0 +1,12 @@
+{
+ "description": "A body with 2-, 3- and 4-byte UTF-8 characters in an unknown key.",
+ "route": "contribute",
+ "bodyBase64": "eyJwcm90b2NvbCI6MSwiYnJhaW5TY2hlbWEiOjYsInRva2VuIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYiLCJub3RlIjoiw6nigqzwn5iAIiwidHJhY2tzIjpbXSwiYnJhaW5zIjpbXSwiZmVlZGJhY2siOltdfQ==",
+ "expect": {
+  "ok": true,
+  "accepted": [],
+  "rejected": [],
+  "feedbackAccepted": 0,
+  "feedbackRejected": []
+ }
+}

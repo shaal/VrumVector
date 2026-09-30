@@ -1,0 +1,12 @@
+{
+ "description": "Counts of -0 come out as 0.",
+ "route": "stats-response",
+ "body": "{\"protocol\":1,\"brains\":-0,\"tracks\":-0.0,\"contributorsToday\":-0e0,\"contributions24h\":-0}",
+ "expect": {
+  "ok": true,
+  "brains": 0,
+  "tracks": 0,
+  "contributorsToday": 0,
+  "contributions24h": 0
+ }
+}

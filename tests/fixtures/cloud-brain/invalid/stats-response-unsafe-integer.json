@@ -1,0 +1,9 @@
+{
+ "description": "A count beyond 2^53 - 1.",
+ "route": "stats-response",
+ "body": "{\"protocol\":1,\"brains\":9007199254740992,\"tracks\":0,\"contributorsToday\":0,\"contributions24h\":0}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

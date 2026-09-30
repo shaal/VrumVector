@@ -1,0 +1,19 @@
+{
+ "description": "Fitness exactly +1e6 and -1e6.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[],\"brains\":[{\"vector\":\"AACAv37/X78h9Fg+6qlqP/aDQT2mYG0/BBiJPkBZDD80f7C8gsbFvXxqRr/KWl8/fFXHvs8iBz7ubZg9fDofP3SySb8YfKQ+RBxivy0P7r1lY2Q/s6TtviopNb/hrFu+w7IGP+BtZT8aZ8u+YzsVv3fJtb5GXZK+0fekPsZfVz/hCh2/FyMHvzYU+j4XJLM9EN9sv7w4ST/z8qY+1PUZv7hCPL9lFxY/02Qcvyok175DY1M/mJF0PwFHD7+172C/OYo+P5CRwj4ism2/69nEvnZeBL9SYxG+oaKcPhzOS75xpjg/a0guvzZTaT8Xede+s6twPoeTcb20umi/ERYiv3dzgD5A0Sm/Gc7yvbI1BT4pWR0/AeeUviovPL9chiy9sPBsv7cmmT7NtBc/Pfg1PyDLAD9mrCa/PFcWP7m6nz5532S/r7kZvPPtCb8TPvQ+IRpuv6iLfr6wZZQ+7vqpPQdFXr82SIO+rZQ2vv/OZD86TBS/TcztPdcOEj/MkAk/htR9P+8gBb8tNvm+J+M+Ppjwrr7wiAO/ev8Jv1d2mL72UiW+KQEiv0XBEb/We2m/EYrCvQ9CQ7+fQmo/V669vrw2bT9QTUi/dxz+PjInfz+UjWa/HQxovpGzxD4iiEo9OgJNP8HfY74SWYE+EGpyv2BMHj/Qtkm/aGAqv3HGKL+67ns/9URUv0BI0r29qZ2+H2FZv776Ob0hRdc+CUw/P+eBV76+MV0/5B7tvuzjVL9CxiG/CP3RPIbGYD836Bq9jd8GP2evNb8Iqgu/nGBcvnN2Kr/LvdO+so8Wv48F7j7owzm/CWoKPi+OGz88iFo/5Y0vv3u7dr4hACM/JR2UPvGE2D56eoY8MjEpv86mOr/sdca+ml8Wv9jTEj/tbkU/ZVf/vpUHUL4Pkxc+p40sva+l1j54Bwe/FeY+v65kBz4qf8E9HxdAv7nVQ72fViS/wqJFPxhbQr6Mn0e/pVEXP+LacL5kXxW9JvoAPzYZdr86zDM+f3WJvYFsOb8JAUW+AnA4vxdpwr7qmfa+whw/vlnnab8kEgs+zT8JP66V5D7ipxQ+MVlqPX9nWT++DNi+Swlmv7G94r6ddOE+CGAKv0w5uT5mNzq+5rxVPyx1Wj+HP9C+BNUYPzmqKj4x6n2/pPYjPs0xuj1VtCC/NcF3v2PiCr/IQBA9KIgiv5ifbL8tvle/2sYYP95xAL+Qzw8/FVCdvgUabj4gIWm/VIvJPmau6z4gJis/OsA4PptVFj+rVlS/1N7zvskpB7/QlF4/f95uv6pX0b4QG3e/byDlvg==\",\"fitness\":1000000},{\"vector\":\"mpnZwFYyo8BgyHrAXxSSvtRLIUDJhyXACIcMQLpWP0DtdIrAYhuPQLgEUMBcx8BAYVdpwGv+t8C9QZdAQlaYQKlaFj9CnYQ/7domwC7wCMB+EcO+N8MLQPUleUBByI3A1shYwGh4Qz3IZMpA9B1DwIAe9r00vGPAW3tBQMR8fT9PMZXAVLthv+3hj0ATOctAxXEowKE9mz57BojAtkDXwEl5ZsAfcpzArZ9TwF4lxb+L/iK/GLYTwKENmT2ZQofADvtiQFHIp0CffqXAUoKewFFKqsA9QI7A2aLWvjtHgUCc/FpAKx5mQLPxMcDDeJW/cuh4wJIFhr8JNbnACY0QQLgchUDmq5xACyEZwPUyIUAQo7pAxyA3wLgdZz9jHw4/yyezQGytg8A/a8LAWJd7QJgAokBlRNVAgzjXwAr1HMADP4tAgZLOQJ1iyUAg4rjA+nm1wPuMDcBQoT5AjT3dv5T6P0DDT/29sruawDA2AT3L/IbALOjVwHRNlMDeVc3AkIVuQGSTmcA4/IPAuzWVwFYUXD9sBV3Apj1MwKYVscCaenDAyx7EQBcggEA/We+/5YciwAnGAkCzObc9sR1jPmh2CsBdooA/7uF8wH7rrUBmk7i/OtVUQP4+4z+vHzxAJ3FnP5EBNECGRgbAkUvMwOO1DkAU105APgO+Pzv2DMA3cEc+H7cKwBpHLj8S5czAJR5wQPPXhMCCKA2+mQ3XP98oyEC/jWTAq8wCQLyu1kDEVs9AuV1QwPhaT8AxkMs8/Kc/vtILwb+UzJPALeisQHGO10AuGHnAC5ggwEzbqr/ifHDAz454wHKZMT8mc8/AkJcfQIiU18DKdMpAIFvGQOUafECnOkLA2DHGQGNZo0CVu1nASRp6wHljsD87LlVATlZ8PxOroT52pB/A+n6ewDz7P8DqwXE/57qMQINi1MBN3IRAVrXqv2mCrz8izzS/GAPXPrMslMCA7vC/YKTUwD2PwMA1uUU/7TsXwEfDPz/uG3FAFO2lwFWfwkCJvK8/cH2ev3H7mT+5RGnApJU4v0P/0EASW26+imHiP756HEDuVeq/sBJwQAm50cDgHYg/bFNgwOu6CkDqvgk/8Ou7vxLd67/F1Nm+AAukwBAjgsA5m8/Ao5JxwF+erj+zMwxAoqLsv9SB879dXr/AAvW4v4drucDWbs/AGxK3wBjSyD8GdhZAkU67QGKeQ8BahMdAyplmQICzg8CtnxZA6slDPxLBskBatI1AOEdbvxb/4z91sjJA5+6Yv93BncANUc3AyyS7QKwMzr/D0Bw/GP9/QA==\",\"fitness\":-1000000}],\"feedback\":[]}",
+ "expect": {
+  "ok": true,
+  "accepted": [
+   "brain_f7f8d1c4119a66e85d7ed05f290501dd",
+   "brain_964108f23fb236a159c42f29d48ae112"
+  ],
+  "rejected": [],
+  "feedbackAccepted": 0,
+  "feedbackRejected": [],
+  "fitness": [
+   1000000,
+   -1000000
+  ]
+ }
+}

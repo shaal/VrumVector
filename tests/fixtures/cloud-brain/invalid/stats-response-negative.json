@@ -1,0 +1,9 @@
+{
+ "description": "A negative count.",
+ "route": "stats-response",
+ "body": "{\"protocol\":1,\"brains\":-1,\"tracks\":0,\"contributorsToday\":0,\"contributions24h\":0}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

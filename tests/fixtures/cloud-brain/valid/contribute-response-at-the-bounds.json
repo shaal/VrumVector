@@ -1,0 +1,39 @@
+{
+ "description": "16 accepted ids, refused indices 15 and 49, 50 rows accepted.",
+ "route": "contribute-response",
+ "body": "{\"protocol\":1,\"accepted\":[\"brain_4b79a5af10db514eafaf7c7dfc4df337\",\"brain_f9561ffd7539d279130031cff87568a9\",\"brain_de0c4c92556dc0e71f72f3418d899c65\",\"brain_a30ccde9e1cf82a588c4e9402ad9a7a7\",\"brain_d99a73c03313faff39a41592535b5484\",\"brain_e25ad97c573a9c6a4bda084e1f39b317\",\"brain_2610cf36948dbe745e6019e53e7f65e4\",\"brain_73497f401f8449060c59ab4d35936ba7\",\"brain_199a142058179e9f5f0918614892bdc4\",\"brain_30913297f7213414dde4bd3525b83e66\",\"brain_affe25e8a42e451ca064010f65aeafc3\",\"brain_93f6a94e90b3d7078b88e9813e725df8\",\"brain_b942bc76d339eb789f31d61aea2bfe43\",\"brain_ad455677497817b6595b0ffef094df82\",\"brain_e07abed5eb983700bffc55995a2709be\",\"brain_1941ab66c685bb5e42ef23b28830bcc6\"],\"rejected\":[{\"index\":15,\"reason\":\"brain-fitness\"}],\"feedbackAccepted\":50,\"feedbackRejected\":[{\"index\":49,\"reason\":\"feedback-id\"}]}",
+ "expect": {
+  "ok": true,
+  "accepted": [
+   "brain_4b79a5af10db514eafaf7c7dfc4df337",
+   "brain_f9561ffd7539d279130031cff87568a9",
+   "brain_de0c4c92556dc0e71f72f3418d899c65",
+   "brain_a30ccde9e1cf82a588c4e9402ad9a7a7",
+   "brain_d99a73c03313faff39a41592535b5484",
+   "brain_e25ad97c573a9c6a4bda084e1f39b317",
+   "brain_2610cf36948dbe745e6019e53e7f65e4",
+   "brain_73497f401f8449060c59ab4d35936ba7",
+   "brain_199a142058179e9f5f0918614892bdc4",
+   "brain_30913297f7213414dde4bd3525b83e66",
+   "brain_affe25e8a42e451ca064010f65aeafc3",
+   "brain_93f6a94e90b3d7078b88e9813e725df8",
+   "brain_b942bc76d339eb789f31d61aea2bfe43",
+   "brain_ad455677497817b6595b0ffef094df82",
+   "brain_e07abed5eb983700bffc55995a2709be",
+   "brain_1941ab66c685bb5e42ef23b28830bcc6"
+  ],
+  "rejected": [
+   {
+    "index": 15,
+    "reason": "brain-fitness"
+   }
+  ],
+  "feedbackAccepted": 50,
+  "feedbackRejected": [
+   {
+    "index": 49,
+    "reason": "feedback-id"
+   }
+  ]
+ }
+}

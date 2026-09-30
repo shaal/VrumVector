@@ -166,14 +166,27 @@ ruvector sources come from upstream `5356a84e2` plus
 Browser → Worker → object. Bodies are JSON with vectors as base64 little-endian
 Float32 (a brain is 1.3 KB instead of ~2.5 KB of decimal text).
 
-- `GET /health` → `{ok, protocol:1, brain:true|false, build:{target, ruvector}}`
-- `POST /v1/recall` `{trackVec, dynamicsVec?, context, k≤64}` → a ranked
-  candidate pool: `{pool:[{id, vector, meta, score, feedback:{weight,count,contributors}}], tracks, stats}`
-- `POST /v1/contribute` `{token, brains:[≤16], feedback:[≤50]}` →
-  `{accepted:[id], rejected:[{index, reason}], quota}`; idempotent (IDs are
-  recomputed server-side from the vector bytes with the same xxHash32 scheme)
-- `GET /v1/stats` → brains, tracks, contributors today, contributions in 24 h
-- `DELETE /v1/contributor` `{token}` → forget my contributions
+The exact format, the order of every check and every refusal are in
+[CB1](../validation/cloud-brain.md#cb1-the-wire-format) (`AI-Car-Racer/cloud/wire.js`
+and the fixtures in `tests/fixtures/cloud-brain/`). Every body carries
+`protocol: 1`; contributions, recalls and recall answers also `brainSchema: 6`.
+
+- `GET /health` → `{ok, protocol:1, brain:true|false, build:{target, ruvector, spike}}`
+- `POST /v1/recall` `{track, dynamics?, context, k?}` (k 1 to 64, 50 by
+  default) → a ranked candidate pool: `{protocol, brainSchema, pool:[{id,
+  vector, fitness, score, meta, feedback:{weight,count,contributors}}]}` (up to
+  256 KiB)
+- `POST /v1/contribute` `{token, tracks:[≤4], brains:[≤16], feedback:[≤50]}`
+  → `{protocol, accepted:[id], rejected:[{index, reason}], feedbackAccepted,
+  feedbackRejected:[{index, reason}]}` (a `quota` field comes with CB4);
+  idempotent. Brain ids are 128 bits of SHA-256 of the weights' bytes,
+  recomputed by the service (CB1: xxHash32 ids can be forged). A brain points
+  at its track by index in `tracks` (CB1: a track in every brain did not fit
+  16 brains in 64 KB).
+- `GET /v1/stats` → `{protocol, brains, tracks, contributorsToday, contributions24h}`
+- `POST /v1/forget` `{protocol, token}` → forget my contributions (a `POST`
+  keeps it a CORS simple request)
+- Errors: `{protocol, error}` with 413, 429, 503, 500 or 400 (CB1)
 - CB6: `POST /v1/sona` `{token, export}`; X1: `GET /v1/leaderboard?track=`
 
 Transport: HTTP with `Content-Type: text/plain` bodies (a CORS "simple request",
@@ -215,20 +228,24 @@ retrieval (HNSW over everyone's archive) on the server.
 The object serializes all writes; each request's SQLite writes commit together.
 Duplicate contributions are no-ops (content IDs). Clients see eventual
 consistency: the replica is at most one pull behind. Server state is versioned
-(`meta.schema`, `BRAIN_SCHEMA_VERSION` = 6 in every request): a client on
-another brain schema is refused, not merged.
+(`meta.sql_schema`; `brainSchema: 6`, the `BRAIN_SCHEMA_VERSION`, in every
+contribution and recall): a client on another brain schema is refused, not
+merged.
 
 ### Abuse and validation
 
 Everything is hostile until checked, on the server (and mirrored on the client
 for fast feedback):
 
-- Exact lengths (244 / 512 / 64), every float finite, |w| ≤ 16 (clones from
-  gradient descent can exceed the GA's [-1, 1]; CB1 measures real maxima), track
-  vectors L2-normalised within 1e-3.
-- Bounded meta: known keys only, numbers clamped (reuse `cleanContext`,
-  `crosstab/wire.js cleanLearning`), strings ≤ 64 chars, parentIds ≤ 8.
-- Body ≤ 64 KB, ≤ 16 brains and ≤ 50 feedback rows per request; per-token and
+- Exact lengths (244 / 512 / 64), every float finite, |w| ≤ 16 ("Use my
+  driving" clones reach 6.76, CB1), track and dynamics vectors L2-normalised
+  within 1e-3, canonical base64, strict JSON types.
+- Bounded meta: known keys only, typed, numbers clamped (the app's
+  `cleanContext` and `cleanLearning`, `learning/policy.js`), `context.track`
+  printable ASCII of at most 180 characters, the collision label at most 40,
+  parentIds ≤ 8.
+- Body ≤ 64 KB, ≤ 4 tracks, ≤ 16 brains and ≤ 50 feedback rows per request;
+  fitness within ±1e6; per-token and
   per-IP rate limits (Rate Limiting binding; a token bucket in the object as a
   fallback) and daily quotas.
 - **Claims are not trusted.** A brain's claimed fitness only ranks it for
@@ -285,7 +302,7 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   on Rectangle and Triangle, n ≥ 6 per arm over at least 2 sessions (cross-track
   variance is high; Triangle punishes shapes that help Rectangle).
 - **Abuse:** hostile fixtures rejected with reasons; a brain with a forged
-  fitness of 1e9 is never served to others before corroboration and sinks after
+  fitness at the bound (1e6) is never served to others before corroboration and sinks after
   honest feedback; no input makes the object panic.
 - **Cost:** measured requests and rows written per training hour.
 
@@ -368,13 +385,35 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
     `storage`, hyperbolic HNSW and SONA build and run;
     `simd` is unused on wasm32; `hnsw` (hnsw_rs → nix) fails; SONA's clock
     reads 0 on Emscripten (CB6 patch).
-- [ ] **CB1 — Wire format, validation and shared fixtures (browser side).**
+- [x] **CB1 — Wire format, validation and shared fixtures (browser side).**
   `AI-Car-Racer/cloud/wire.js`: base64 Float32 encode/decode, limits, meta
-  cleaning (reusing `crosstab/wire.js` and `learning/policy.js`), content IDs from
-  `archive/identity.js`. `tests/fixtures/cloud-brain/{valid,invalid}/*.json` for
+  cleaning (reusing `learning/policy.js`), content IDs (as planned: those of
+  `archive/identity.js`; CB1 moved to SHA-256). `tests/fixtures/cloud-brain/{valid,invalid}/*.json` for
   both sides. Measure the largest weights real clones produce (sets the |w|
   bound). `tests/cloud-brain-wire.test.mjs`. About 3 hours.
   depends: — (parallel with CB0)
+  - [x] `AI-Car-Racer/cloud/wire.js`: protocol 1, canonical base64
+    little-endian Float32, strict JSON types (an integer is any integral
+    number; null is absent), a fixed order of checks, SHA-256 content ids
+    (xxHash32 ids can be forged), request builders, parsers that never throw
+    (stable reason codes), and the four answers (recall, contribute, stats,
+    error) with their HTTP statuses. Tracks are listed once per contribution
+    (≤ 4) and brains point at them.
+  - [x] 154 fixture bodies (10 of them raw bytes) plus the `contexts.json`
+    (49) and `meta.json` (39) cleaning tables
+    (`node scripts/cloud-brain-fixtures.mjs`); every reason code and every
+    pair of adjacent checks covered; of 266 single mutations over five
+    review rounds, all but 13 fail a test (11 behave the same as the code on
+    any JSON input, one differs only in some browsers, one is
+    single-precision summation near the tolerance); `npm run test:cloud-brain`. The service
+    must refuse a `Content-Length` over 64 KB and cap the read, decode strict
+    UTF-8 (`std::str::from_utf8`), parse with serde_json's `float_roundtrip`
+    (checked on the fixtures and 14 000 hard numbers by the fourth review),
+    turn -0 into 0 after `f64::clamp` (which keeps it), and never compute
+    `tracks.len() - 1` (an index into no tracks underflows).
+  - [x] Weight bound 16: "Use my driving" clones reach 6.76 at most (14
+    clones), evolved brains 1.00; clones without decay (10 to 97) are
+    refused. `cleanLearning` moved to `learning/policy.js` for both wires.
 - [ ] **CB2 — SharedBrain service MVP.** Index: ruvector-core
   `memory-only` (flat; about 8 to 12 ms a search at 20 000 brains in CB0's Node
   probe), not
@@ -401,11 +440,19 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   banner; `?brain=shared`. Tests: unit (fake fetch), Playwright against the
   fixture fake, isolation check on the local IndexedDB, one run against the real
   local service (two profiles share seeds). About 8 hours.
+  From CB1: contributions carry cloud ids (SHA-256 of the weights), so the
+  client maps local brains and their parents to cloud ids; `archiveBrain`
+  needs a `source` (`demonstration` for a "Use my driving" clone) to send;
+  batches are split by bytes (the counts do not bound a request's size); the
+  Shared brain option needs a secure context (`crypto.subtle`); answers are
+  read as bytes (`await res.arrayBuffer()`) and given to the `wire.js`
+  parsers as they are, never through `res.text()` or `res.json()`.
   depends: CB1 (fake); CB2 (integration run)
 - [ ] **CB4 — Abuse and trust.** Contributor token and hashed storage, rate
   limits and quotas, robust feedback aggregation with per-contributor caps and a
   2σ filter, quarantine until corroboration, forged-fitness and flood tests,
-  native fuzzing of validators, `DELETE /v1/contributor`. About 6 hours.
+  native fuzzing of validators, `POST /v1/forget` (the CB1 `forget` fixtures
+  apply from then; CB2 skips them). About 6 hours.
   depends: CB2
 - [ ] **CB5 — Deploy (needs your OK).** `deploy.yml` step like the multiplayer
   one (`vectorvroom-brain`, PR previews `vectorvroom-brain-pr-<n>`) with cached

@@ -1,0 +1,46 @@
+{
+ "description": "List items that are not objects (null too: null is an item, not an absent one): each brain is brain-encoding, each row feedback-id.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[],\"brains\":[null,7,[],\"brain\"],\"feedback\":[null,\"row\",[],3]}",
+ "expect": {
+  "ok": true,
+  "accepted": [],
+  "rejected": [
+   {
+    "index": 0,
+    "reason": "brain-encoding"
+   },
+   {
+    "index": 1,
+    "reason": "brain-encoding"
+   },
+   {
+    "index": 2,
+    "reason": "brain-encoding"
+   },
+   {
+    "index": 3,
+    "reason": "brain-encoding"
+   }
+  ],
+  "feedbackAccepted": 0,
+  "feedbackRejected": [
+   {
+    "index": 0,
+    "reason": "feedback-id"
+   },
+   {
+    "index": 1,
+    "reason": "feedback-id"
+   },
+   {
+    "index": 2,
+    "reason": "feedback-id"
+   },
+   {
+    "index": 3,
+    "reason": "feedback-id"
+   }
+  ]
+ }
+}

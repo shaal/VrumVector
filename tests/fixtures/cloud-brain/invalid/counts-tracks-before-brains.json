@@ -1,0 +1,10 @@
+{
+ "description": "5 tracks and 17 brains: tracks counted first.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[\"AAAA\",\"AAAA\",\"AAAA\",\"AAAA\",\"AAAA\"],\"brains\":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],\"feedback\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "too-many-tracks",
+  "status": 400
+ }
+}

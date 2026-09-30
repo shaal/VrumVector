@@ -1,0 +1,12 @@
+{
+ "description": "Lists absent or null: empty.",
+ "route": "contribute-response",
+ "body": "{\"protocol\":1,\"rejected\":null,\"feedbackAccepted\":0}",
+ "expect": {
+  "ok": true,
+  "accepted": [],
+  "rejected": [],
+  "feedbackAccepted": 0,
+  "feedbackRejected": []
+ }
+}

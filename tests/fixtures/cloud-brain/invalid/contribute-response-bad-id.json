@@ -1,0 +1,9 @@
+{
+ "description": "An accepted id that is not a cloud id.",
+ "route": "contribute-response",
+ "body": "{\"protocol\":1,\"accepted\":[\"brain_x\"],\"rejected\":[],\"feedbackAccepted\":0,\"feedbackRejected\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

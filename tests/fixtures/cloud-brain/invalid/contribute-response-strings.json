@@ -1,0 +1,9 @@
+{
+ "description": "feedbackAccepted given as a string (\"5\").",
+ "route": "contribute-response",
+ "body": "{\"protocol\":1,\"accepted\":[],\"rejected\":[],\"feedbackAccepted\":\"5\",\"feedbackRejected\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

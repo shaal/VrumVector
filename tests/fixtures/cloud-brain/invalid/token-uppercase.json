@@ -1,0 +1,10 @@
+{
+ "description": "A token that is not 32 lowercase hex digits.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789ABCDEF0123456789ABCDEF\",\"tracks\":[],\"brains\":[],\"feedback\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "token",
+  "status": 400
+ }
+}

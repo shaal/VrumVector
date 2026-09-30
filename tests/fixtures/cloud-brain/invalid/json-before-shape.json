@@ -1,0 +1,10 @@
+{
+ "description": "An array holding 1e400: well-formedness before shape.",
+ "route": "contribute",
+ "body": "[1e400]",
+ "expect": {
+  "ok": false,
+  "error": "not-json",
+  "status": 400
+ }
+}

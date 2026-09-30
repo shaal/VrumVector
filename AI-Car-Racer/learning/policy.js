@@ -61,6 +61,27 @@ export function contextKey(value) {
   if(c.collisions!=='off')key.push(c.collisions);
   return JSON.stringify(key);
 }
+// The learning part of a brain's meta as it crosses to another tab or the
+// cloud brain: a clean context, a style score, and bounded driving stats;
+// anything else is dropped.
+export function cleanLearning(value) {
+  if (!value?.context) return undefined;
+  const learning = {context:cleanContext(value.context),styleScore:clamp(value.styleScore,0,1)};
+  if (value.driving && typeof value.driving === 'object') {
+    learning.driving = {};
+    for (const key of ['averageSpeed','nearWallRate','slideRate','smoothness']) {
+      if (Number.isFinite(value.driving[key])) learning.driving[key] = clamp(value.driving[key],0,1);
+    }
+    for (const key of ['steeringChanges','aliveSeconds']) {
+      if (Number.isFinite(value.driving[key])) learning.driving[key] = clamp(value.driving[key],0,1e9);
+    }
+    if (typeof value.driving.crashed === 'boolean') learning.driving.crashed = value.driving.crashed;
+    // Collision mode (car-collisions C4).
+    if (typeof value.driving.carContact === 'boolean') learning.driving.carContact = value.driving.carContact;
+    if (Number.isFinite(value.driving.nearCarRate)) learning.driving.nearCarRate = clamp(value.driving.nearCarRate,0,1);
+  }
+  return learning;
+}
 export function mergeEvaluations(previous,current,limit=20){
   const rows=Array.isArray(previous?.evaluations)?previous.evaluations.filter(row=>row&&Number.isFinite(row.fitness)).slice(0,limit):[];
   const add=value=>{
