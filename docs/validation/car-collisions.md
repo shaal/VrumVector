@@ -4,8 +4,9 @@ Opt-in solid cars, planned in [car-collisions.md](../plan/car-collisions.md).
 This page records what each task measured. C1 built the shared collision
 core and the `Car.update()` split. C2 wired the core into all four
 simulators, behind an experiment that is off by default, and changed who
-crashes ([C2](#c2-the-four-simulators)). With the experiment off, training
-behaves exactly as before.
+crashes ([C2](#c2-the-four-simulators)). C3 made the rays see the solid
+cars of their heat ([C3](#c3-rays-see-cars)). With the experiment off,
+training behaves exactly as before.
 
 ## C1: the shared core
 
@@ -499,3 +500,132 @@ so these are upper bounds.
   collision mode, a layout from a normal-mode crash map can be recalled, and
   contact deaths still count in the gates' reach rates (C4). The display
   draws cars of all heats on top of each other (C5).
+
+## C3: rays see cars
+
+In collision mode, each car's 7 rays now also hit the solid cars of its heat
+(decision D3). The network stays `[10, 16, 4]`, `BRAIN_SCHEMA_VERSION` stays
+6, and every saved brain stays valid.
+
+### What a ray sees
+
+- **Its nearest hit, wall or car.** `Sensor.update()` reads the walls as
+  before, then calls `CarCollisions.seeCars(sensor)`. A car is its outline:
+  three short walls, each tested with the arithmetic of `getIntersection`.
+  A car must be strictly nearer than the wall to replace it, so a tie keeps
+  the wall. The network still reads `1 - offset`.
+- **Only solid heat-mates.** Ghosts, parked cars, wrecks, cars of other
+  heats, and the car's own body are never hit. The rays sense after the
+  contact pass, so a car crashed by a contact in this step is already a
+  wreck. A ghost's rays see solid cars too.
+- **Readings carry a `kind`:** `'wall'` or `'car'`.
+- **Connection.** `CarCollisions.step()` calls `attachRays(cars, state)` on
+  the first step of a generation. It sets `sensor.sight` and
+  `sensor.sightIndex`, and marks each car `solidCars`. With collisions off,
+  no ray is connected, and `sensor.js` never looks up `CarCollisions`
+  (`main.js` does not load the core).
+- **Lesion switches, for tests and C6 (the app never sends them).** In the
+  `collisions` settings of a `begin` or `trial` message: `seeCars: false`
+  hides every car from every ray (solid cars, walls-only rays: C2 exactly,
+  arm 3 of the plan); `blind: [i, ...]` hides cars from the rays of those
+  cars only (`[0]`: the elite).
+
+### Statistics
+
+`DriverProfiles.record` and `summarize` (`driver/profiles.js`):
+
+| Field | When | Meaning |
+|---|---|---|
+| `carContact` | collision mode | a contact crashed the car |
+| `nearCarRate` | rays connected (`seeCars` on; a `blind` car reports 0) | share of frames where a ray read a car under .15 of its length (as `nearWallRate`) |
+| `carSightRate` | rays connected, as `nearCarRate` | share of frames where a ray read a car at any distance |
+| `nearWallRate` | always | now counts wall readings only; a car in front of a wall hides the wall |
+
+With collisions off the summary has exactly its old fields. The live worker's
+`genEnd.collisions` adds `seeCars`, `sensed` (times a car's rays looked for
+cars), and `carReadings`; snapshots add `bestReadingKinds` (per ray of the
+best car: 1 a car, 0 a wall or nothing) for the display (C5).
+
+**Driving styles.** A style's braking (`apply`) reads the nearest hit of the
+middle rays, so careful and calm cars now brake for a car ahead as for a
+wall. The careful style's score uses `nearWallRate`, which now leaves cars
+out; `nearCarRate` is not part of any style score (a reward change would
+need the Rectangle and Triangle check). Every C3 test runs the balanced
+style.
+
+### Evidence
+
+`npm run test:learning` (with `tests/rays-see-cars.test.mjs`) and
+`npm run test:collisions:browser`:
+
+| Claim | How the test checks it |
+|---|---|
+| The geometry | A car ahead is hit where the ray meets its outline; out of reach, behind, another heat, the car itself: nothing; only solid cars; a tie keeps the wall; a corner exactly on a ray is hit and a hair beside it is not; a ray along an edge hits its corner; a ray that starts inside a car reads the edge where it leaves |
+| An independent reading agrees | `getIntersection` over every wall and every solid heat-mate's edges: 20 000 random scenes (any car size, any status), and 8 000 grazing scenes |
+| Real physics | Rectangle and Triangle, 64 cars, 4 s: at every step every reading of every car that sensed is the independent reading after the contact pass, and the network's inputs are `1 - offset`; over 500 car readings per run; deterministic; seeing cars changes the driving |
+| Collisions off is unchanged | The C2 bit-identity tests now load the sensor and the driving statistics from before C3 (`tests/fixtures/*-before-c3.js`, byte-identical to `3d33ee4`) for the "before" side: the live worker, the trial worker, the Node simulator, the split `update()`, a player car, and a short genetic run all match |
+| `seeCars: false` is C2 exactly | The Node simulator, the trial worker, and the live worker against C2's core, sensor, statistics, and worker: identical apart from the new fields (`carContact`, the `genEnd.collisions` counters, `bestReadingKinds`) |
+| The four simulators agree | With rays that see cars, the live worker and the Node simulator match car by car; the trial worker's simulator and the Node simulator match, also with a blind elite |
+| The lesion | A blind elite reads no car while its heat-mates do; deterministic |
+| Statistics | `nearWallRate` counts walls only; `nearCarRate` uses .15 (56 px is near, 64 px is not); `carContact` in collision mode, with and without sight; the old fields exactly with collisions off |
+| The app | In Chromium, the live and A/B workers report `seeCars: true` and car readings; some snapshot shows the best car's rays reading a car; no ray kinds with collisions off |
+| Mutations | In review, 19 of 22 changes to the ray code failed a test. The .15 threshold survived and is now pinned. The other two survivors (a ray that starts exactly on an edge, `t >= 0` against `t > 0`; connecting rays only once per state) are equivalent in practice. Review also found that `carContact` was missing with `seeCars: false`; it is now there in all of collision mode |
+
+### Cost and traffic
+
+`npm run benchmark:collisions` (Node, 500 cars, heats of 8, 15 s, one third
+scripted drivers that steer by their rays, seeds 1 and 2). Every run is made
+twice: rays that see cars, and walls only (C2). [Raw report](car-collisions-c3.json).
+
+| Track | Seed | Contact crashes, walls only → cars | Car sensing alone, ms per step (mean / p95 / first second) | Rays reading a car |
+|---|---|---|---|---|
+| Rectangle | 1 | 192 → 82 | 0.083 / 0.27 / 0.46 | 9.2% |
+| Rectangle | 2 | 169 → 97 | 0.087 / 0.28 / 0.36 | 8.9% |
+| Triangle | 1 | 182 → 109 | 0.058 / 0.25 / 0.34 | 9.8% |
+| Triangle | 2 | 178 → 102 | 0.063 / 0.26 / 0.34 | 10.2% |
+
+- **Cost is under the estimate.** The plan estimated under about 0.5 ms per
+  step at N = 500. Car sensing alone is 0.06 to 0.09 ms per step on average.
+  The worst case, every car of every heat within reach of every ray, is
+  0.38 ms.
+- **Contact crashes fall by 40 to 57%** in this traffic. The scripted
+  drivers steer toward open rays, so they now steer around cars. This is a
+  reflex of a hand-written driver, not learning. C6 measures learning.
+
+**The real worker.** `MEASURE=1 npm run test:collisions:browser`, headless
+Chromium on an Apple M3 Max, N = 500, two generations of 15 s, one session.
+The machine was shared (load average 13 to 50). A first attempt failed the
+harness's timing check at a load average of 75.
+
+| Track | Speed | Off, ms | Walls only, ms | Rays see cars, ms | Contact deaths per generation, walls only → cars |
+|---|---|---|---|---|---|
+| Rectangle | 2x | 0.80 | 0.66 | 0.54 | 98, 143 → 70, 63 |
+| Rectangle | 100x | 0.22 | 0.23 | 0.22 | 150, 151 → 77, 67 |
+| Triangle | 2x | 0.80 | 0.52 | 0.65 | 168, 183 → 115, 88 |
+| Triangle | 100x | 0.25 | 0.24 | 0.26 | 142, 133 → 92, 104 |
+
+- No clear cost from seeing cars: against walls only, -19% to +25% per
+  step, in both directions, on a shared machine. Each mode trains its own
+  population, and dead cars skip sensing, so the step cost also follows how
+  many cars are alive. The Node numbers above (0.06 to 0.09 ms of car
+  sensing per step) are the better measure.
+- 6.1 to 6.9% of the rays read a car.
+- **Contact deaths are not a result.** The live populations learn during
+  the run. In the failed first attempt, Rectangle at 2x went the other way
+  (176, 162 walls only → 217, 213 with rays that see cars).
+
+### Limits
+
+- **Walls and cars look the same to the network** (D3). Separate car inputs
+  are C7.
+- **The learning context does not change.** C3 runs keep the label
+  `'solid/k8'`, as C2 runs (rays saw walls only), so C2 collision-mode
+  champions are exact matches in C3. C2 shipped as an experiment the same
+  week; C4 owns `matchContext` and can split the label if it matters.
+- **Stale readings.** The rays see cars when the car senses. With the sensor
+  stride (up to 4 in collision mode), a reading can be up to 3 steps old,
+  as for walls.
+- **`sensed`** also counts the extra look when a new best car is promoted.
+- **The lesion switches are per car index.** In the live worker car 0 is
+  the elite; the trial worker does not promise that. C6's lesion test needs
+  per-car contact data for the blind car.

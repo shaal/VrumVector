@@ -15,13 +15,7 @@
   });
   const get = id => Object.hasOwn(profiles,id)?profiles[id]:profiles.balanced;
   const unit = n => Math.max(0,Math.min(1,Number(n)||0));
-  // cars: the car's rays can see other cars (collision mode, task C3), so
-  // the stats also count car readings.
-  function createStats(cars=false) {
-    const s={frames:0,speed:0,nearWalls:0,slides:0,turnChanges:0,lastTurn:0};
-    if(cars){s.nearCars=0;s.carSight=0;}
-    return s;
-  }
+  function createStats() {return {frames:0,speed:0,nearWalls:0,slides:0,turnChanges:0,lastTurn:0};}
   function apply(car, outputs) {
     const p=get(car.driverProfile);
     if(p.id==='balanced'||p.id==='reckless')return outputs;
@@ -39,8 +33,6 @@
     const turning=out[1]!==out[2];
     const speed=Math.max(0,car.speed||0);
     const target=car.maxSpeed*(turning?p.corner:p.pace);
-    // The nearest hit of the middle rays: a wall, or in collision mode a car
-    // (a style brakes for a car ahead as for a wall).
     let clearance=Infinity;
     const readings=car.sensor?.readings||[],mid=Math.floor(readings.length/2);
     for(let i=Math.max(0,mid-1);i<=Math.min(readings.length-1,mid+1);i++){
@@ -54,34 +46,19 @@
     return out;
   }
   function record(car) {
-    const sight=!!car.sensor?.sight;
-    const s=car.drivingStats||(car.drivingStats=createStats(sight));
+    const s=car.drivingStats||(car.drivingStats=createStats());
     s.frames++;s.speed+=unit(Math.abs(car.speed)/(car.maxSpeed||1));
     if(car.slide)s.slides++;
     const readings=car.sensor?.readings||[];
-    // A ray reads its nearest hit: a wall, or in collision mode a car.
-    // "Near walls" counts walls only; cars have their own counts.
-    if(readings.some(r=>r&&r.offset<.15&&r.kind!=='car'))s.nearWalls++;
-    if(sight){
-      if(s.carSight===undefined){s.nearCars=0;s.carSight=0;}
-      let seen=0,near=0;
-      for(const r of readings)if(r&&r.kind==='car'){seen=1;if(r.offset<.15)near=1;}
-      s.carSight+=seen;s.nearCars+=near;
-    }
+    if(readings.some(r=>r&&r.offset<.15))s.nearWalls++;
     const c=car.controls,turn=c.left===c.right?0:c.left?1:-1;
     if(turn&&s.lastTurn&&turn!==s.lastTurn)s.turnChanges++;
     if(turn)s.lastTurn=turn;
   }
   function summarize(car) {
     const s=car.drivingStats||createStats(),n=Math.max(1,s.frames);
-    const out={averageSpeed:s.speed/n,nearWallRate:s.nearWalls/n,slideRate:s.slides/n,
+    return {averageSpeed:s.speed/n,nearWallRate:s.nearWalls/n,slideRate:s.slides/n,
       steeringChanges:s.turnChanges,smoothness:1-unit(s.turnChanges/(n/12)),aliveSeconds:s.frames/60,crashed:!!car.damaged};
-    // Collision mode: did a contact crash the car? With rays that see cars
-    // also: how often did a ray read a car (nearCarRate: within .15 of a
-    // ray's length, as nearWallRate; carSightRate: at any distance)?
-    if(car.solidCars||car.sensor?.sight)out.carContact=!!car.contactCrash;
-    if(car.sensor?.sight){out.nearCarRate=(s.nearCars||0)/n;out.carSightRate=(s.carSight||0)/n;}
-    return out;
   }
   function styleScore(car) {
     const p=get(car.driverProfile);if(p.id==='balanced')return 0;

@@ -9,13 +9,16 @@ const presetScope=vm.createContext({window:{}});
 vm.runInContext(presetSource.slice(0,presetSource.indexOf('\n];')+3),presetScope);
 export const presets=presetScope.window.TRACK_PRESETS;
 export class Simulation {
-  // carScript replaces car.js, e.g. with a saved copy for before/after checks.
+  // carScript replaces car.js, e.g. with a saved copy for before/after checks;
+  // scripts ({'sensor.js': source, ...}) replaces any of the files.
   // collisions ({heatSize}, or true) turns on collision mode, as in the
   // workers: a start row per heat and CarCollisions.step() every step.
-  constructor({track='Rectangle',seed='simulation',maxSpeed=15,traction=.5,profile='balanced',carScript=null,collisions=null}={}){
+  constructor({track='Rectangle',seed='simulation',maxSpeed=15,traction=.5,profile='balanced',carScript=null,scripts={},collisions=null}={}){
     const math=Object.create(Math);math.random=seededRandom(seed);
     this.scope=vm.createContext({Math:math,frameCount:0,bestCar:null,traction,invincible:false,SENSOR_STRIDE:1});
-    sources.forEach((source,i)=>vm.runInContext(carScript!=null&&files[i]==='car.js'?carScript:source,this.scope,{filename:files[i]}));
+    const replace={...(carScript!=null?{'car.js':carScript}:{}),...scripts};
+    for(const name of Object.keys(replace))if(!files.includes(name))throw Error('Unknown simulator script '+name);
+    sources.forEach((source,i)=>vm.runInContext(replace[files[i]]??source,this.scope,{filename:files[i]}));
     vm.runInContext('globalThis.CarClass=Car;globalThis.GridClass=SpatialGrid;',this.scope);
     const preset=presets.find(p=>p.name===track);if(!preset)throw Error('Unknown track '+track);
     const borders=[];

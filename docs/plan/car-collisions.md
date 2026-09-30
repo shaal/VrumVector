@@ -1,9 +1,10 @@
 # Car collisions: cars that cannot drive through each other (plan)
 
-**Status:** C1 and C2 are built. C1: the shared core
+**Status:** C1, C2, and C3 are built. C1: the shared core
 `AI-Car-Racer/collisions.js` and the `Car.update()` split. C2: all four
 simulators use the core, behind an experiment that is off by default
-(🧪 Experiments → "Solid cars", or `?collide=1`). Decisions D1–D4 were
+(🧪 Experiments → "Solid cars", or `?collide=1`). C3: in that mode the rays
+also see the solid cars of their heat. Decisions D1–D4 were
 taken on 2026-09-24; D2 was changed the same day, during C2 (below).
 Results: [validation](../validation/car-collisions.md).
 
@@ -140,6 +141,13 @@ So making the whole population solid does not work:
     today's sensing cost and under about 0.5 ms per step at N = 500
     (estimate).
   - Limit: walls and cars look the same to the network.
+  - **Built in C3.** `CarCollisions.seeCars` runs after the wall readings;
+    a car is its three edges, a ray keeps its nearest hit (a tie keeps the
+    wall), and readings carry `kind` (`'wall'` or `'car'`). Two lesion
+    switches for C6, never sent by the app: `seeCars: false` (arm 3) and
+    `blind: [i]` (the lesion test). Car sensing costs 0.06 to 0.09 ms per
+    step at N = 500 (worst case 0.38 ms). Details:
+    [validation](../validation/car-collisions.md#c3-rays-see-cars).
 - **Later, if needed: separate car inputs** (for example 3 inputs: nearest
   car's direction and closing speed). This changes the network to
   `[13, 16, 4]` (292 floats).
@@ -297,10 +305,17 @@ Smaller defaults (change them at C1 review if needed):
     not "alive"), contact deaths out of the Adaptive-gates crash centroid,
     the sensor stride capped at 4, the Experiments toggle and `?collide=1`,
     and C4's `collisions` context field and key.
-- [ ] **C3 — Rays see cars.** Rays hit solid heat-mates; readings carry a
+- [x] **C3 — Rays see cars.** Rays hit solid heat-mates; readings carry a
   `kind`; contact and near-car statistics in `DriverProfiles.summarize`.
   About 3 hours.
   depends: C2
+  - [x] `seeCars` and `attachRays` in the core; `Sensor.update()` calls it
+    when the rays are connected; wall readings get `kind: 'wall'`.
+  - [x] `carContact` (collision mode), `nearCarRate` and `carSightRate`
+    (rays that see cars) in `summarize`; `nearWallRate` counts walls only.
+  - [x] Lesion switches `seeCars: false` and `blind` in the collision
+    settings; `genEnd.collisions` counts car readings; snapshots carry
+    `bestReadingKinds`.
 - [ ] **C4 — Learning context and ruvector.** The backward-compatible
   `collisions` field, the `matchContext` factor, `meta.driving` fields,
   crash-map filtering, SONA guard. About 3 hours.
@@ -309,7 +324,9 @@ Smaller defaults (change them at C1 review if needed):
     appended to `contextKey` only when it is not `'off'`, and "a different
     mode is never an exact match". Contact deaths are already left out of
     the Adaptive-gates crash centroid.
-  - [ ] Still to do: the `matchContext` factor for a different mode,
+  - [ ] Still to do: the `matchContext` factor for a different mode
+    (and whether C2 runs, whose rays saw walls only, need their own label:
+    C3 kept `'solid/k8'`),
     `carContact` and `nearCarRate` in `meta.driving`, contact deaths in the
     crash-map archive (a separate heat map, or filtered out), crash maps
     tagged with the mode (so Adaptive gates never recall a normal-mode layout

@@ -7,10 +7,6 @@ class Sensor{
 
         this.rays=[];
         this.readings=[];
-        // Collision mode (collisions.js attachRays): the state whose solid
-        // cars these rays also see, and this car's index in it.
-        this.sight=null;
-        this.sightIndex=-1;
     }
 
     update(roadBorders){
@@ -21,9 +17,6 @@ class Sensor{
                 this.#getReading(this.rays[i],roadBorders)
             );
         }
-        // Rays see cars (task C3): a solid car of this car's heat that is
-        // nearer than the wall replaces the reading, with kind 'car'.
-        if(this.sight)CarCollisions.seeCars(this);
     }
 
     #getReading(ray,roadBorders){
@@ -54,7 +47,6 @@ class Sensor{
                 }
             }
         }
-        if(best)best.kind='wall';
         return best;
     }
 
