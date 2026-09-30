@@ -5,12 +5,16 @@
 // (CONTEXTS contexts a brain, each from CONTRIBUTORS contributors, 180-character
 // track keys); then measures recall latency, the object's Wasm memory (a
 // high-water mark, from the spike build's /spike/memory), the first recall
-// after a restart (the index rebuilt from SQLite), and that OVER more brains
-// leave the count at the cap. Recorded in docs/validation/cloud-brain.md (CB2).
+// after a restart (the index rebuilt from SQLite), that OVER more brains
+// leave the count at the cap, and (CB4) forgetting a contributor who is in
+// every feedback record. Recorded in docs/validation/cloud-brain.md (CB2,
+// CB4). The daily quotas are lifted and each request has its own address,
+// so neither limit stops the load.
 //
 //   node scripts/cloud-brain-load.mjs [--brains 20000] [--tracks 5000] [--over 1000] [--contexts 8] [--contributors 8]
 //
 // Needs the cloud-brain toolchain; PORT (default 8882).
+import {createHash} from 'node:crypto';
 import {mkdtemp, rm} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,11 +36,13 @@ const unit = (seed, n) => { const v = vector(seed, n); const norm = Math.hypot(.
 const context = i => ({profile: ['balanced', 'wild', 'careful'][i % 3], track: 'load-' + (i % 97), maxSpeed: 15, traction: 0.5, seconds: 20, collisions: 'off'});
 
 const env = {CLOUD_BRAIN_FEATURES: 'spike', CLOUD_BRAIN_ALLOW_SPIKE: '1'};
-const vars = {ALLOW_LOCAL: 'true', CLOUD_BRAIN_SPIKE: '1'};
+const vars = {ALLOW_LOCAL: 'true', CLOUD_BRAIN_SPIKE: '1', QUOTA_REQUESTS: '1000000000', QUOTA_BRAINS: '1000000000', QUOTA_FEEDBACK: '1000000000'};
 const persist = await mkdtemp(path.join(os.tmpdir(), 'cloud-brain-load-'));
 let dev = await startDev({port: PORT, persist, vars, env});
-const post = (route, body) => fetch(dev.origin + route, {method: 'POST', body, headers: {Origin: PAGE}, signal: AbortSignal.timeout(120_000)});
-const get = route => fetch(dev.origin + route, {headers: {Origin: PAGE}, signal: AbortSignal.timeout(120_000)});
+let sent = 0;
+const headers = () => ({Origin: PAGE, 'CF-Connecting-IP': `10.${(++sent >> 16) & 255}.${(sent >> 8) & 255}.${sent & 255}`});
+const post = (route, body) => fetch(dev.origin + route, {method: 'POST', body, headers: headers(), signal: AbortSignal.timeout(120_000)});
+const get = route => fetch(dev.origin + route, {headers: headers(), signal: AbortSignal.timeout(120_000)});
 const memory = async () => +(((await (await get('/spike/memory')).json()).bytes) / 2 ** 20).toFixed(1);
 const quantile = (xs, q) => xs.slice().sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(q * xs.length))];
 
@@ -129,6 +135,21 @@ try {
     report.recallWithFeedback = await recalls('with feedback');
     report.memoryWithFeedback = await memory();
   }
+  const flooder = (1).toString(16).padStart(32, 'f');
+  const forget = async token => {
+    const t0 = performance.now();
+    const forgot = await (await post('/v1/forget', wire.forgetBody({token}))).json();
+    return {ms: +(performance.now() - t0).toFixed(1), ...forgot};
+  };
+  // A token nobody used; one made to share the flooder's 16-bit tag (the
+  // first 4 hex digits of its id), which is in every record; the flooder.
+  const id = t => createHash('sha256').update(t).digest('hex').slice(0, 32);
+  let n = 0;
+  while (id(n.toString(16).padStart(32, '0')).slice(0, 4) !== id(flooder).slice(0, 4)) n++;
+  report.forgetFresh = await forget('0f'.repeat(16));
+  report.forgetSameTag = await forget(n.toString(16).padStart(32, '0'));
+  report.forgetEverywhere = await forget(flooder);
+  report.memoryAfterForget = await memory();
   await dev.stop();
   dev = await startDev({port: PORT, persist, vars, env});
   const cold = performance.now();
@@ -143,6 +164,10 @@ try {
     report.memoryOver = await memory();
   }
   console.log(JSON.stringify(report, null, 1));
+} catch (e) {
+  // What wrangler said, for a failure that is not the service's own answer.
+  console.error(`cloud-brain-load failed: ${e?.message}\n--- wrangler dev ---\n${dev.log().slice(-6000)}`);
+  throw e;
 } finally {
   await dev.stop();
   await rm(persist, {recursive: true, force: true});

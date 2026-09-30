@@ -8,9 +8,11 @@ preview. Nothing here is deployed yet.
 
 - `core/`: the service without the Workers runtime (the wire format of
   `AI-Car-Racer/cloud/wire.js` in Rust, the brain, ranking, feedback, caps and
-  eviction), tested natively.
-- `src/main.rs`: the front door (breaker, origins and CORS, the 64 KB body
-  limit, routes) and the `SharedBrain` object with its SQLite store.
+  eviction, trust, quotas and forget), tested natively; `core/fuzz/` its
+  fuzz targets (cargo-fuzz, nightly).
+- `src/main.rs`: the front door (breaker, origins and CORS, the per-address
+  rate limits, the 64 KB body limit, routes) and the `SharedBrain` object
+  with its SQLite store.
 - `.work/ruvector`: ruvector-core (upstream `5356a84e2`, memory-only, a flat
   index), fetched by `scripts/build-cloud-brain.sh` (ignored by git).
 
@@ -21,6 +23,13 @@ rustup toolchain install beta-2026-09-27 --profile minimal \
   --target wasm32-unknown-emscripten --target wasm32-unknown-unknown
 cargo install worker-build --version 0.8.7 --locked
 cd cloud-brain && npm ci
+```
+
+For fuzzing (CB4) only, a nightly and cargo-fuzz:
+
+```sh
+rustup toolchain install nightly-2026-09-29 --profile minimal
+cargo install cargo-fuzz --locked
 ```
 
 `rust-toolchain.toml` pins the beta: a newer beta (1.100) changes Cargo's build
@@ -40,10 +49,17 @@ build command runs `build.sh` in wrangler's working folder, which fetches the
 ruvector sources the first time.
 
 Routes: `GET /health`, `POST /v1/recall`, `POST /v1/contribute`,
-`GET /v1/stats` (bodies and answers: [CB1](../docs/validation/cloud-brain.md#cb1-the-wire-format)).
+`GET /v1/stats`, `POST /v1/forget` (bodies and answers: [CB1](../docs/validation/cloud-brain.md#cb1-the-wire-format),
+[CB4](../docs/validation/cloud-brain.md#cb4-abuse-and-trust)).
 Variables: `DISABLE_BRAIN=true` answers every `/v1/` route with 503
 `disabled`; `ALLOW_LOCAL=true` allows `http://localhost:<port>` and
-`http://127.0.0.1:<port>` origins besides the deployed ones.
+`http://127.0.0.1:<port>` origins besides the deployed ones;
+`QUOTA_REQUESTS`, `QUOTA_BRAINS`, `QUOTA_FEEDBACK` set a contributor's
+daily quota (10 000, 5 000 and 50 000 by default; a string, a number or
+a boolean in `vars` all read). The per-address limits are the `ratelimits`
+bindings in `wrangler.jsonc` (20 contributions, 60 recalls, stats and
+health checks, and 3 forgets a minute; IPv6 by /64); `/health` says
+`limits: true` when all are bound.
 
 ## Test
 
@@ -51,6 +67,7 @@ Variables: `DISABLE_BRAIN=true` answers every `/v1/` route with 503
 bash scripts/build-cloud-brain.sh --test   # native: cargo test (the CB1 fixtures too)
 npm run test:cloud-brain:service           # the built Worker under wrangler dev
 node scripts/cloud-brain-load.mjs          # 20 000 brains: memory, latency, restart
+bash scripts/fuzz-cloud-brain.sh 600       # 10 minutes each of the wire and brain fuzz targets
 ```
 
 `CLOUD_BRAIN_FEATURES=spike npm run dev -- --var CLOUD_BRAIN_SPIKE:1` adds

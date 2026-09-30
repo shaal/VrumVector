@@ -172,21 +172,23 @@ The exact format, the order of every check and every refusal are in
 and the fixtures in `tests/fixtures/cloud-brain/`). Every body carries
 `protocol: 1`; contributions, recalls and recall answers also `brainSchema: 6`.
 
-- `GET /health` → `{ok, protocol:1, brain:true|false, build:{target, ruvector, spike}}`
+- `GET /health` → `{ok, protocol:1, brain:true|false, limits:true|false, build:{target, ruvector, spike}}`
+  (`limits`: both rate limiters are bound, CB4)
 - `POST /v1/recall` `{track, dynamics?, context, k?}` (k 1 to 64, 50 by
   default) → a ranked candidate pool: `{protocol, brainSchema, pool:[{id,
   vector, fitness, score, meta, feedback:{weight,count,contributors}}]}` (up to
   256 KiB)
 - `POST /v1/contribute` `{token, tracks:[≤4], brains:[≤16], feedback:[≤50]}`
   → `{protocol, accepted:[id], rejected:[{index, reason}], feedbackAccepted,
-  feedbackRejected:[{index, reason}]}` (a `quota` field comes with CB4);
-  idempotent. Brain ids are 128 bits of SHA-256 of the weights' bytes,
+  feedbackRejected:[{index, reason}]}`; idempotent. (The `quota` field
+  once planned here was dropped in CB4: past a daily quota the answer is
+  429 `rate-limited` with `Retry-After`, which the client backs off on.) Brain ids are 128 bits of SHA-256 of the weights' bytes,
   recomputed by the service (CB1: xxHash32 ids can be forged). A brain points
   at its track by index in `tracks` (CB1: a track in every brain did not fit
   16 brains in 64 KB).
 - `GET /v1/stats` → `{protocol, brains, tracks, contributorsToday, contributions24h}`
-- `POST /v1/forget` `{protocol, token}` → forget my contributions (a `POST`
-  keeps it a CORS simple request)
+- `POST /v1/forget` `{protocol, token}` → `{protocol, brains, feedback}`:
+  forget my contributions (a `POST` keeps it a CORS simple request; CB4)
 - Errors: `{protocol, error}` with 413, 429, 503, 500 or 400 (CB1)
 - CB6: `POST /v1/sona` `{token, export}`; X1: `GET /v1/leaderboard?track=`
 
@@ -247,15 +249,17 @@ for fast feedback):
   printable ASCII of at most 180 characters, the collision label at most 40,
   parentIds ≤ 8.
 - Body ≤ 64 KB, ≤ 4 tracks, ≤ 16 brains and ≤ 50 feedback rows per request;
-  fitness within ±1e6; per-token and
-  per-IP rate limits (Rate Limiting binding; a token bucket in the object as a
-  fallback) and daily quotas.
+  fitness within ±1e6; per-IP rate limits (Rate Limiting binding) and
+  per-token daily quotas (CB4; the token bucket once planned in the object
+  as a fallback was not built: `/health` says whether the limiters are
+  bound).
 - **Claims are not trusted.** A brain's claimed fitness only ranks it for
   others after corroboration: offspring feedback from at least two other
-  contributors, aggregated robustly (per-contributor cap, trimmed mean, 2σ outlier
-  filter as in ruvector's `mcp-brain-server/aggregate.rs`). The GA loop is
-  self-correcting: seeds that others breed from and do badly with sink. X1
-  (server re-simulation) is the strong version.
+  contributors in its own context, aggregated robustly (per-contributor
+  values, a trimmed mean; CB4 found a 2σ filter cannot drop anything among
+  the 8 or fewer values a record keeps). The GA loop is self-correcting:
+  seeds that others breed from and do badly with sink. X1 (server
+  re-simulation) is the strong version.
 - No panics on input: parse with fallible code, fuzz the validators natively.
 - Circuit breaker `DISABLE_BRAIN=true` (same pattern as `DISABLE_MULTIPLAYER`).
 
@@ -504,7 +508,7 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
     local IndexedDB byte-identical after a shared session, and two profiles
     on the real local service: B's first generation (generation 0) 15 of 16 cars from A's
     brains, B's feedback in A's pool), in Chromium and WebKit.
-- [ ] **CB4 — Abuse and trust.** Contributor token and hashed storage, rate
+- [x] **CB4 — Abuse and trust.** Contributor token and hashed storage, rate
   limits and quotas, robust feedback aggregation with per-contributor caps and a
   2σ filter, quarantine until corroboration, forged-fitness and flood tests,
   native fuzzing of validators, `POST /v1/forget` (the CB1 `forget` fixtures
@@ -516,6 +520,34 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   brain is valued to pick what goes), worth caching before quotas raise the
   rate.
   depends: CB2
+  - [x] Quarantine: a claim counts once two other contributors reported the
+    brain's offspring in its own context, and then as what they showed (at
+    most the claim, at least `min(claim, 0)`); before that the brain ranks
+    and is served as `min(claim, 0)`, and is still served. The recall
+    answer's `fitness` is this trusted fitness; the browser refreshes it at
+    every pull until it measures the brain, and never measures offspring
+    against it.
+  - [x] Feedback per contributor in the 64-byte record (8 contributors, the
+    most recent kept; 16-bit tags in memory, full ids in SQLite), a trimmed
+    mean instead of the 2σ filter (which cannot drop anything among 5 or
+    fewer values), a contributor's own brains not evidence, a brain's own
+    context always kept, eviction weighed by contributors and protecting
+    corroborated brains only.
+  - [x] Rate limits: the Rate Limiting binding in the front door (20
+    contributions, 60 reads and 3 forgets a minute per address, IPv6 by
+    /64, `/health` counted),
+    429 `rate-limited` with an exposed `Retry-After`; per-token daily quotas
+    in `contributors` (10 000 requests, 5 000 brains, 50 000 rows), which
+    holds today only. No token bucket fallback: `/health` says `limits`.
+  - [x] `POST /v1/forget` by the token's full id (not quota-limited; a few
+    records read by key, more in one pass); SQL schema 2; every CB1 fixture
+    over HTTP.
+  - [x] cargo-fuzz targets `wire` and `brain` (`scripts/fuzz-cloud-brain.sh`,
+    nightly-2026-09-29); forged-fitness, flood, lock, collision and
+    migration tests (docs/validation/cloud-brain.md#cb4-abuse-and-trust).
+    Measured at the caps: memory as CB2 (70.1 MiB), a forget 18 ms to 3 s.
+    The valuation at the cap is not cached (a contribution there 64 to 85
+    ms; the quotas did not raise the rate it can be asked at).
 - [ ] **CB5 — Deploy (needs your OK).** `deploy.yml` step like the multiplayer
   one (`vectorvroom-brain`, PR previews `vectorvroom-brain-pr-<n>`) with cached
   toolchain; writes the endpoint into `AI-Car-Racer/cloud/config.json` (CB3
@@ -528,6 +560,15 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   `npm run test:cloud-brain:service`. For D2: the first recall after a restart
   (0.7 to 1.1 s locally with the most feedback) and a contribution at the cap (53 to 82 ms) exceed the Free
   plan's 10 ms CPU a request.
+  From CB4: check on the deployed Worker that a client cannot choose
+  `CF-Connecting-IP` (the rate-limit key), that `/health` says
+  `limits: true` (the `ratelimits` namespace ids 4201 to 4203 must be
+  unique in the account, PR previews included), and add the fuzz run to
+  CI or the runbook (`bash scripts/fuzz-cloud-brain.sh`, nightly). For D2:
+  forgetting a contributor who is in every feedback record rewrites each
+  one (3.0 s locally for 160 000; a token that reported nothing, 18 ms),
+  and a quota-exhausted client retries about once a minute (the client
+  does not read `Retry-After` yet).
   depends: CB3, CB4
 - [ ] **CB6 — Shared SONA.** Browser posts `WasmEphemeralAgent.exportState()`
   trajectories (bounded, validated); the object runs
@@ -595,5 +636,9 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   Mitigation: caps sized from CB2's measured total.
 - Poisoning through forged claims. Mitigation: D7 quarantine, robust
   aggregation, later X1.
+- Sybil tokens (CB4): tokens are free, so two more tokens corroborate a
+  forged claim, and a few can bring an honest brain back to neutral.
+  Mitigation: per-address limits, feedback never sinks a brain below
+  `min(claim, 0)`; Turnstile (D8) or X1 if abuse appears.
 - Quota sharing with multiplayer on the same account. Mitigation: batching,
   breaker, runbook alerts.

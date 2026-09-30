@@ -1,0 +1,33 @@
+[package]
+name = "vectorvroom-brain-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Coverage-guided fuzzing of the cloud brain (CB4): the wire parsers, and the brain driven by random requests. Run by scripts/fuzz-cloud-brain.sh on a nightly toolchain."
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+serde_json = "1"
+vectorvroom-brain-core = { path = ".." }
+
+# Its own workspace: nightly and libFuzzer stay out of the service's.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "wire"
+path = "fuzz_targets/wire.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "brain"
+path = "fuzz_targets/brain.rs"
+test = false
+doc = false
+bench = false

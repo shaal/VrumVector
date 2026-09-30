@@ -1,14 +1,17 @@
 //! The shared brain (core/src/brain.rs): contributions, recall ranking,
 //! feedback, caps and eviction, persistence, a store that fails, stats.
-//! Requests go through the real wire parsers.
+//! Requests go through the real wire parsers. Trust, quotas and forget
+//! (CB4) are in tests/trust.rs; tests here that rank by claimed fitness use
+//! `trusting()` (claims count without corroboration).
 
 use serde_json::{json, Value};
-use vectorvroom_brain_core::brain::{contributor_id, match_factor, Brain, Config, MemStore, Store};
+use vectorvroom_brain_core::brain::{contributor_id, match_factor, tag, Brain, Config, MemStore, Store};
 use vectorvroom_brain_core::wire::{self, encode_f32, parse_contribute, parse_recall, Context};
 
 const T0: u64 = 1_790_000_000_000; // 2026-09-21, a fixed clock
 const TOKEN: &str = "0123456789abcdef0123456789abcdef";
 const OTHER: &str = "fedcba9876543210fedcba9876543210";
+const TOKEN_C: &str = "cccccccccccccccccccccccccccccccc";
 
 fn stream(seed: u64) -> impl FnMut() -> f32 {
     let mut s = seed.max(1);
@@ -76,6 +79,11 @@ fn recall_body(track: &[f32], dynamics: Option<&[f32]>, profile: &str, k: usize)
     serde_json::to_vec(&v).unwrap()
 }
 
+/// Claims count without corroboration: for tests of the ranking itself.
+fn trusting() -> Config {
+    Config { corroborators: 0, ..Config::default() }
+}
+
 struct Fixture {
     brain: Brain,
     store: MemStore,
@@ -87,7 +95,7 @@ impl Fixture {
     }
     fn contribute(&mut self, token: &str, body: &[u8], now: u64) -> Value {
         let c = parse_contribute(body).expect("a valid contribution");
-        json!(self.brain.contribute(c, &contributor_id(token), now, &mut self.store).unwrap())
+        json!(self.brain.contribute(c, &contributor_id(token), now, &mut self.store).unwrap().expect("within the quota"))
     }
     fn recall(&self, body: &[u8]) -> Value {
         json!(self.brain.recall(&parse_recall(body).unwrap(), &self.store).unwrap())
@@ -114,7 +122,8 @@ fn a_contributed_brain_comes_back_bit_for_bit() {
     let entry = &pool["pool"][0];
     assert_eq!(entry["id"], id(10));
     assert_eq!(entry["vector"], encode_f32(&brain(10)));
-    assert_eq!(entry["fitness"], 42.5);
+    // Not corroborated: served with a neutral fitness, not its claim (CB4).
+    assert_eq!(entry["fitness"], 0.0);
     assert_eq!(entry["meta"]["generation"], 3);
     assert_eq!(entry["meta"]["learning"]["context"]["profile"], "balanced");
     assert_eq!(entry["feedback"], json!({"weight": 0.0, "count": 0, "contributors": 0}));
@@ -150,7 +159,7 @@ fn near_tracks_are_one_track() {
 
 #[test]
 fn recall_ranks_the_nearest_track_first_then_fitness() {
-    let mut f = Fixture::new(Config::default());
+    let mut f = Fixture::new(trusting());
     let (a, b) = (unit(1, wire::TRACK_DIM), unit(2, wire::TRACK_DIM));
     f.contribute(TOKEN, &contribution(&[a.clone(), b.clone()],
         &[item(10, 10.0, Some(0)), item(11, 90.0, Some(0)), item(12, 500.0, Some(1)), item(13, 1000.0, None)], json!([])), T0);
@@ -165,7 +174,7 @@ fn recall_ranks_the_nearest_track_first_then_fitness() {
 
 #[test]
 fn with_no_track_near_every_brain_is_a_candidate() {
-    let mut f = Fixture::new(Config::default());
+    let mut f = Fixture::new(trusting());
     f.contribute(TOKEN, &contribution(&[], &[item(10, 10.0, None), item(11, 90.0, None)], json!([])), T0);
     let answer = f.recall(&recall_body(&unit(1, wire::TRACK_DIM), None, "balanced", 50));
     assert_eq!(ids(&answer), vec![id(11), id(10)]);
@@ -199,23 +208,29 @@ fn offspring_feedback_moves_the_weight_as_the_browser_does() {
     f.contribute(TOKEN, &contribution(std::slice::from_ref(&track), &[item(10, 40.0, Some(0)), item(11, 40.0, Some(0))], json!([])), T0);
     let row = |seed: u64, profile: &str, mean: f64| json!({"id": id(seed), "context": context(profile), "meanFitness": mean, "count": 8});
     let answer = f.contribute(OTHER, &contribution(&[], &[], json!([
-        row(10, "balanced", 60.0),                  // its own context: vs its fitness 40 → +0.5
-        row(11, "wild", 60.0),                      // another context: sets the baseline only
+        row(10, "balanced", 60.0),                  // its own context: vs its fitness 40 → +0.5, OTHER's first value
+        row(11, "wild", 60.0),                      // another context: sets OTHER's baseline only
         {"id": wire::brain_id(&brain(99)), "context": context("balanced"), "meanFitness": 1, "count": 1},
     ])), T0 + 1);
     assert_eq!(answer["feedbackAccepted"], 2);
     assert_eq!(answer["feedbackRejected"], json!([{"index": 2, "reason": "feedback-unknown"}]));
-    // The next generation's report, in the next request: vs the baseline 60 → +0.5.
+    // The next generation's report, in the next request: vs OTHER's baseline 60 → +0.5.
     f.contribute(OTHER, &contribution(&[], &[], json!([row(11, "wild", 90.0)])), T0 + 2);
     let pool = f.recall(&recall_body(&track, None, "balanced", 2));
     assert_eq!(ids(&pool)[0], id(10), "good feedback lifts the brain");
     let fb = &pool["pool"][0]["feedback"];
-    assert!((fb["weight"].as_f64().unwrap() - 0.15).abs() < 1e-12, "{fb}");
+    // A contributor's first measured row sets their value (stored in steps of 1/32 767).
+    assert!((fb["weight"].as_f64().unwrap() - 0.5).abs() < 1e-4, "{fb}");
     assert_eq!((fb["count"].as_u64(), fb["contributors"].as_u64()), (Some(1), Some(1)));
     let wild = f.recall(&recall_body(&track, None, "wild", 2));
     let entry = wild["pool"].as_array().unwrap().iter().find(|e| e["id"] == id(11)).unwrap();
-    assert!((entry["feedback"]["weight"].as_f64().unwrap() - 0.15).abs() < 1e-12);
+    assert!((entry["feedback"]["weight"].as_f64().unwrap() - 0.5).abs() < 1e-4);
     assert_eq!(entry["feedback"]["count"], 2);
+    // The next row moves it by the moving average: vs 90 → +0.5 again, then 60 → -1/3.
+    f.contribute(OTHER, &contribution(&[], &[], json!([row(11, "wild", 60.0)])), T0 + 3);
+    let wild = f.recall(&recall_body(&track, None, "wild", 2));
+    let entry = wild["pool"].as_array().unwrap().iter().find(|e| e["id"] == id(11)).unwrap();
+    assert!((entry["feedback"]["weight"].as_f64().unwrap() - (0.3 * (-1.0 / 3.0) + 0.7 * 0.5)).abs() < 1e-4, "{entry}");
 }
 
 #[test]
@@ -223,29 +238,31 @@ fn feedback_keeps_8_contexts_a_brain_and_counts_8_contributors() {
     use vectorvroom_brain_core::brain::{MAX_CONTEXTS_PER_BRAIN, MAX_CONTRIBUTORS};
     let mut f = Fixture::new(Config::default());
     f.contribute(TOKEN, &contribution(&[], &[item(10, 40.0, None)], json!([])), T0);
-    // 40 contexts, one a request: all but the 8 reported last are dropped.
+    // 40 contexts (none its own), one a request: all but the 8 reported last are dropped.
     for i in 0..40u64 {
-        let ctx = json!({"profile": "balanced", "track": format!("t{i}"), "maxSpeed": 15, "traction": 0.5, "seconds": 20});
+        let ctx = json!({"profile": "balanced", "track": format!("x{i}"), "maxSpeed": 15, "traction": 0.5, "seconds": 20});
         f.contribute(OTHER, &contribution(&[], &[], json!([{"id": id(10), "context": ctx, "meanFitness": 50, "count": 2}])), T0 + 1 + i);
     }
     assert_eq!(f.store.feedback.len(), MAX_CONTEXTS_PER_BRAIN);
-    let held = |t: &str| f.store.feedback.values().any(|r| r.context.contains(&format!("\"track\":\"{t}\"")));
-    assert!(!held("t0") && !held("t31") && held("t32") && held("t39"));
+    let held = |t: &str| f.store.feedback.values().any(|r| r.context.as_deref().unwrap_or("").contains(&format!("\"track\":\"{t}\"")));
+    assert!(!held("x0") && !held("x31") && held("x32") && held("x39"));
     let reopened = Brain::open(Config::default(), &mut f.store, T0 + 100).unwrap();
     let query = |brain: &Brain, t: &str| {
         let body = serde_json::to_vec(&json!({"protocol": 1, "brainSchema": 6, "track": encode_f32(&unit(1, wire::TRACK_DIM)),
             "context": {"profile": "balanced", "track": t, "maxSpeed": 15, "traction": 0.5, "seconds": 20}})).unwrap();
         json!(brain.recall(&parse_recall(&body).unwrap(), &f.store).unwrap())["pool"][0]["feedback"]["count"].clone()
     };
-    assert_eq!((query(&reopened, "t39"), query(&reopened, "t0")), (json!(1), json!(0)));
-    // Contributors: counted up to 8.
+    assert_eq!((query(&reopened, "x39"), query(&reopened, "x0")), (json!(1), json!(0)));
+    // Contributors: the 8 who reported last are kept.
     let ctx = context("balanced");
     for i in 0..30u64 {
         let token = format!("{i:032x}");
         f.contribute(&token, &contribution(&[], &[], json!([{"id": id(10), "context": ctx, "meanFitness": 50, "count": 1}])), T0 + 200 + i);
     }
     let row = f.store.feedback.values().find(|r| r.count == 30).expect("the balanced context");
-    assert_eq!(row.contributors.len(), MAX_CONTRIBUTORS);
+    assert_eq!(row.slots.len(), MAX_CONTRIBUTORS);
+    let last: Vec<u16> = (22..30u64).rev().map(|i| tag(&contributor_id(&format!("{i:032x}")))).collect();
+    assert_eq!(row.slots.iter().map(|s| s.who).collect::<Vec<_>>(), last, "the most recent first");
     let pool = f.recall(&recall_body(&unit(1, wire::TRACK_DIM), None, "balanced", 1));
     assert_eq!(pool["pool"][0]["feedback"]["contributors"], MAX_CONTRIBUTORS);
     assert_eq!(pool["pool"][0]["feedback"]["count"], 30);
@@ -253,7 +270,7 @@ fn feedback_keeps_8_contexts_a_brain_and_counts_8_contributors() {
 
 #[test]
 fn a_full_brain_evicts_the_least_valuable_but_keeps_each_tracks_best_and_the_new() {
-    let mut f = Fixture::new(Config { max_brains: 4, max_tracks: 10, keep_per_track: 1 });
+    let mut f = Fixture::new(Config { max_brains: 4, max_tracks: 10, keep_per_track: 1, ..trusting() });
     let (a, b) = (unit(1, wire::TRACK_DIM), unit(2, wire::TRACK_DIM));
     // Track b's only brain is weak but the best of its track: kept.
     f.contribute(TOKEN, &contribution(&[a.clone(), b.clone()],
@@ -271,7 +288,7 @@ fn a_full_brain_evicts_the_least_valuable_but_keeps_each_tracks_best_and_the_new
 
 #[test]
 fn feedback_changes_what_is_evicted_and_among_equals_the_oldest_goes() {
-    let mut f = Fixture::new(Config { max_brains: 3, max_tracks: 10, keep_per_track: 0 });
+    let mut f = Fixture::new(Config { max_brains: 3, max_tracks: 10, keep_per_track: 0, ..Config::default() });
     f.contribute(TOKEN, &contribution(&[], &[item(10, 10.0, None)], json!([])), T0);
     f.contribute(TOKEN, &contribution(&[], &[item(11, 10.0, None)], json!([])), T0 + 1);
     f.contribute(TOKEN, &contribution(&[], &[item(12, 10.0, None)], json!([])), T0 + 2);
@@ -287,7 +304,7 @@ fn feedback_changes_what_is_evicted_and_among_equals_the_oldest_goes() {
 
 #[test]
 fn full_tracks_make_room_from_an_unused_one_or_keep_the_brain_without_a_track() {
-    let mut f = Fixture::new(Config { max_brains: 100, max_tracks: 2, keep_per_track: 1 });
+    let mut f = Fixture::new(Config { max_brains: 100, max_tracks: 2, keep_per_track: 1, ..Config::default() });
     let t = |s| unit(s, wire::TRACK_DIM);
     f.contribute(TOKEN, &contribution(&[t(1), t(2)], &[item(10, 1.0, Some(0)), item(11, 1.0, Some(1))], json!([])), T0);
     // Both tracks have brains: a third track is not stored, its brain is.
@@ -296,7 +313,7 @@ fn full_tracks_make_room_from_an_unused_one_or_keep_the_brain_without_a_track() 
     assert!(f.brain.contains(&id(12)));
     assert_eq!(f.brain.track_of(&id(12)), None);
     // A track only listed (no brain on it) takes no room from used ones.
-    let mut g = Fixture::new(Config { max_brains: 100, max_tracks: 2, keep_per_track: 1 });
+    let mut g = Fixture::new(Config { max_brains: 100, max_tracks: 2, keep_per_track: 1, ..Config::default() });
     g.contribute(TOKEN, &contribution(&[t(1), t(2)], &[item(10, 1.0, Some(0))], json!([])), T0);
     g.contribute(TOKEN, &contribution(&[t(3)], &[item(12, 1.0, Some(0))], json!([])), T0 + 1);
     assert_eq!(g.brain.track_count(), 2);
@@ -306,7 +323,7 @@ fn full_tracks_make_room_from_an_unused_one_or_keep_the_brain_without_a_track() 
 
 #[test]
 fn a_reopened_brain_answers_exactly_as_before() {
-    let mut f = Fixture::new(Config { max_brains: 6, max_tracks: 3, keep_per_track: 1 });
+    let mut f = Fixture::new(Config { max_brains: 6, max_tracks: 3, keep_per_track: 1, ..Config::default() });
     let (a, b) = (unit(1, wire::TRACK_DIM), unit(2, wire::TRACK_DIM));
     let mut items: Vec<Item> = (0..8).map(|i| item(20 + i, 10.0 * i as f64 - 20.0, Some((i % 2) as usize))).collect();
     items[3].dynamics = Some(unit(5, wire::DYNAMICS_DIM));
@@ -317,7 +334,7 @@ fn a_reopened_brain_answers_exactly_as_before() {
     let queries = [recall_body(&a, None, "balanced", 64), recall_body(&b, Some(&unit(5, wire::DYNAMICS_DIM)), "wild", 3), recall_body(&unit(9, wire::TRACK_DIM), None, "calm", 64)];
     let before: Vec<Value> = queries.iter().map(|q| f.recall(q)).collect();
     let stats = json!(f.brain.stats(T0 + 20, &f.store).unwrap());
-    let reopened = Brain::open(Config { max_brains: 6, max_tracks: 3, keep_per_track: 1 }, &mut f.store, T0 + 20).unwrap();
+    let reopened = Brain::open(Config { max_brains: 6, max_tracks: 3, keep_per_track: 1, ..Config::default() }, &mut f.store, T0 + 20).unwrap();
     for (q, b) in queries.iter().zip(&before) {
         assert_eq!(&json!(reopened.recall(&parse_recall(q).unwrap(), &f.store).unwrap()), b);
     }
@@ -333,6 +350,7 @@ fn a_store_that_fails_mid_request_leaves_a_brain_that_reopens_consistently() {
         let body = contribution(&[a.clone(), b], &(0..6).map(|i| item(30 + i, i as f64, Some((i % 2) as usize))).collect::<Vec<_>>(), json!([]));
         store.fail_after = Some(fail_after);
         let result = brain.contribute(parse_contribute(&body).unwrap(), &contributor_id(TOKEN), T0, &mut store);
+        let result = result.map(|r| r.expect("within the quota"));
         store.fail_after = None;
         // The Worker drops its brain after a store error and reopens it.
         let reopened = Brain::open(Config::default(), &mut store, T0).unwrap();
@@ -421,7 +439,7 @@ fn hostile_bytes_never_panic() {
             }
         }
     }
-    let mut f = Fixture::new(Config { max_brains: 50, max_tracks: 5, keep_per_track: 1 });
+    let mut f = Fixture::new(Config { max_brains: 50, max_tracks: 5, keep_per_track: 1, ..Config::default() });
     let mut r = stream(7);
     let mut next = move |n: usize| ((r() + 1.0) / 2.0 * n as f32) as usize % n.max(1);
     let (mut parsed, mut runs) = (0, 0);
@@ -443,11 +461,14 @@ fn hostile_bytes_never_panic() {
             parsed += 1;
             let _ = f.brain.contribute(c, &contributor_id(TOKEN), T0 + round as u64, &mut f.store).unwrap();
         }
+        if let Ok(token) = wire::parse_forget(&body) {
+            parsed += 1;
+            let _ = f.brain.forget(&contributor_id(&token), &mut f.store).unwrap();
+        }
         if let Ok(q) = parse_recall(&body) {
             parsed += 1;
             let _ = f.brain.recall(&q, &f.store).unwrap();
         }
-        let _ = wire::parse_forget(&body);
     }
     assert_eq!(runs, 6000);
     assert!(parsed > 100, "only {parsed} edited bodies still parsed");
@@ -475,7 +496,7 @@ fn orthogonal(q: &[f32], seed: u64) -> Vec<f32> {
 fn a_request_never_frees_a_track_it_lists() {
     // One track only: A is listed first (no brain on it yet), B second. B
     // must not take A's place, since A's brain is attached after the tracks.
-    let mut f = Fixture::new(Config { max_brains: 100, max_tracks: 1, keep_per_track: 1 });
+    let mut f = Fixture::new(Config { max_brains: 100, max_tracks: 1, keep_per_track: 1, ..Config::default() });
     let (a, b) = (unit(1, wire::TRACK_DIM), unit(2, wire::TRACK_DIM));
     f.contribute(TOKEN, &contribution(&[a.clone(), b], &[item(10, 1.0, Some(0)), item(11, 1.0, Some(1))], json!([])), T0);
     assert_eq!(f.brain.track_count(), 1);
@@ -485,7 +506,7 @@ fn a_request_never_frees_a_track_it_lists() {
     assert_eq!(f.store.brains[&id(11)].0.track, None);
     assert_eq!(ids(&f.recall(&recall_body(&a, None, "balanced", 5)))[0], id(10));
     // An old unused track matched again is listed too: a new track frees another.
-    let mut g = Fixture::new(Config { max_brains: 100, max_tracks: 2, keep_per_track: 1 });
+    let mut g = Fixture::new(Config { max_brains: 100, max_tracks: 2, keep_per_track: 1, ..Config::default() });
     let (x, z, n) = (unit(3, wire::TRACK_DIM), unit(4, wire::TRACK_DIM), unit(5, wire::TRACK_DIM));
     g.contribute(TOKEN, &contribution(&[x.clone(), z.clone()], &[], json!([])), T0);
     g.contribute(TOKEN, &contribution(&[x.clone(), n], &[item(12, 1.0, Some(0)), item(13, 1.0, Some(1))], json!([])), T0 + 1);
@@ -493,7 +514,7 @@ fn a_request_never_frees_a_track_it_lists() {
     assert!(g.brain.track_of(&id(13)).is_some_and(|t| g.store.tracks.contains_key(t)));
     assert_eq!(ids(&g.recall(&recall_body(&x, None, "balanced", 1))), vec![id(12)]);
     // Live and reopened agree.
-    let reopened = Brain::open(Config { max_brains: 100, max_tracks: 2, keep_per_track: 1 }, &mut g.store, T0 + 2).unwrap();
+    let reopened = Brain::open(Config { max_brains: 100, max_tracks: 2, keep_per_track: 1, ..Config::default() }, &mut g.store, T0 + 2).unwrap();
     for q in [recall_body(&x, None, "balanced", 5), recall_body(&z, None, "balanced", 5)] {
         assert_eq!(json!(reopened.recall(&parse_recall(&q).unwrap(), &g.store).unwrap()), g.recall(&q));
     }
@@ -501,7 +522,7 @@ fn a_request_never_frees_a_track_it_lists() {
 
 #[test]
 fn the_oldest_unused_track_makes_room() {
-    let mut f = Fixture::new(Config { max_brains: 100, max_tracks: 2, keep_per_track: 1 });
+    let mut f = Fixture::new(Config { max_brains: 100, max_tracks: 2, keep_per_track: 1, ..Config::default() });
     let t = |s| unit(s, wire::TRACK_DIM);
     f.contribute(TOKEN, &contribution(&[t(1)], &[], json!([])), T0);
     f.contribute(TOKEN, &contribution(&[t(2)], &[], json!([])), T0 + 1);
@@ -522,7 +543,7 @@ fn one_feedback_row_counts_per_brain_and_context_in_a_request() {
     assert_eq!(answer["feedbackAccepted"], 2);
     assert_eq!(answer["feedbackRejected"], json!([{"index": 1, "reason": "feedback-duplicate"}, {"index": 3, "reason": "feedback-duplicate"}]));
     let fb = &f.recall(&recall_body(&track, None, "balanced", 1))["pool"][0]["feedback"];
-    assert!((fb["weight"].as_f64().unwrap() - 0.15).abs() < 1e-12, "{fb}");
+    assert!((fb["weight"].as_f64().unwrap() - 0.5).abs() < 1e-4, "{fb}");
     assert_eq!(fb["count"], 1);
 }
 
@@ -543,7 +564,7 @@ fn a_context_without_a_track_key_is_never_exact() {
     };
     assert_eq!(recall(&f)["weight"], 0.0);
     f.contribute(OTHER, &contribution(&[], &[], rows(90.0)), T0 + 2);
-    assert!((recall(&f)["weight"].as_f64().unwrap() - 0.15).abs() < 1e-12);
+    assert!((recall(&f)["weight"].as_f64().unwrap() - 0.5).abs() < 1e-4);
 }
 
 #[test]
@@ -555,15 +576,15 @@ fn in_another_context_each_row_is_measured_against_the_last() {
         let rows = json!([{"id": id(10), "context": context("wild"), "meanFitness": mean, "count": 8}]);
         f.contribute(OTHER, &contribution(&[], &[], rows), T0 + 1 + i as u64);
     }
-    // 60 sets the baseline; 90: 0.3 × 30/60 = 0.15; 120: 0.3 × 30/90 + 0.7 × 0.15.
+    // 60 sets the baseline; 90: 30/60 = 0.5 (the first value); 120: 0.3 × 30/90 + 0.7 × 0.5.
     let fb = &f.recall(&recall_body(&track, None, "wild", 1))["pool"][0]["feedback"];
-    assert!((fb["weight"].as_f64().unwrap() - (0.1 + 0.105)).abs() < 1e-12, "{fb}");
+    assert!((fb["weight"].as_f64().unwrap() - (0.1 + 0.35)).abs() < 1e-4, "{fb}");
     assert_eq!((fb["count"].as_u64(), fb["contributors"].as_u64()), (Some(3), Some(1)), "three rows, one contributor");
 }
 
 #[test]
 fn feedback_in_another_context_does_not_move_the_ranking() {
-    let mut f = Fixture::new(Config::default());
+    let mut f = Fixture::new(trusting());
     let track = unit(1, wire::TRACK_DIM);
     f.contribute(TOKEN, &contribution(std::slice::from_ref(&track), &[item(10, 60.0, Some(0)), item(11, 50.0, Some(0))], json!([])), T0);
     // Brain 10's offspring did badly, but when driving wild.
@@ -627,7 +648,7 @@ fn equal_distances_rank_the_same_after_every_rebuild() {
 
 #[test]
 fn an_evicted_brain_leaves_no_feedback_behind() {
-    let mut f = Fixture::new(Config { max_brains: 2, max_tracks: 10, keep_per_track: 0 });
+    let mut f = Fixture::new(Config { max_brains: 2, max_tracks: 10, keep_per_track: 0, ..Config::default() });
     f.contribute(TOKEN, &contribution(&[], &[item(10, 1.0, None), item(11, 90.0, None)], json!([])), T0);
     let rows = json!([{"id": id(10), "context": context("balanced"), "meanFitness": -50, "count": 4}]);
     f.contribute(OTHER, &contribution(&[], &[], rows), T0 + 1);
@@ -656,7 +677,7 @@ fn a_contribution_at_midnight_is_today() {
 fn the_score_is_the_documented_product() {
     // (0.5 + 0.5·track sim) × (0.5 + 0.5·tanh(fitness / 100)) × (1 + 0.3·dynamics sim)
     // × matchContext factor × (1 + 0.3·feedback weight).
-    let mut f = Fixture::new(Config::default());
+    let mut f = Fixture::new(trusting());
     let track = unit(1, wire::TRACK_DIM);
     let q = unit(2, wire::DYNAMICS_DIM);
     let theta: f32 = 0.6;
@@ -672,14 +693,17 @@ fn the_score_is_the_documented_product() {
     let score = pool["pool"][0]["score"].as_f64().unwrap();
     let expected = 1.0 * (0.5 + 0.5 * (0.5f64 / 100.0).tanh()) * (1.0 + 0.3 * f64::from(theta.cos())) * 0.45 * 1.0;
     assert!((score - expected).abs() < 1e-5, "wild: {score} vs {expected}");
-    // In its own context, fitness 0.5: (1 − 0.5) / max(1, 0.5) = 0.5, a weight of 0.15.
+    // In its own context, fitness 0.5: (1 − 0.5) / max(1, 0.5) = 0.5, the
+    // first value, so a weight of 0.5 (its offspring showed 1.0, more than
+    // the claim: the claim stays).
     let rows = json!([{"id": id(10), "context": context("balanced"), "meanFitness": 1.0, "count": 2}]);
     f.contribute(OTHER, &contribution(&[], &[], rows), T0 + 2);
     let pool = f.recall(&recall_body(&track, Some(&q), "balanced", 1));
     let score = pool["pool"][0]["score"].as_f64().unwrap();
-    let expected = 1.0 * (0.5 + 0.5 * (0.5f64 / 100.0).tanh()) * (1.0 + 0.3 * f64::from(theta.cos())) * 1.0 * (1.0 + 0.3 * 0.15);
+    let expected = 1.0 * (0.5 + 0.5 * (0.5f64 / 100.0).tanh()) * (1.0 + 0.3 * f64::from(theta.cos())) * 1.0 * (1.0 + 0.3 * 0.5);
     assert!((score - expected).abs() < 1e-5, "balanced: {score} vs {expected}");
-    assert!((pool["pool"][0]["feedback"]["weight"].as_f64().unwrap() - 0.15).abs() < 1e-12);
+    assert!((pool["pool"][0]["feedback"]["weight"].as_f64().unwrap() - 0.5).abs() < 1e-4);
+    assert_eq!(pool["pool"][0]["fitness"], 0.5);
 }
 
 #[test]
@@ -696,24 +720,69 @@ fn a_recall_searches_the_5_nearest_tracks() {
 }
 
 #[test]
-fn a_brains_value_weighs_each_context_by_its_count() {
-    // X: ten reports a little above its fitness in its own context (+0.097,
-    // count 10), two in another that went badly (−0.2, count 2). Weighted
-    // by count X is worth more than Y (no feedback); unweighted, less.
-    let mut f = Fixture::new(Config { max_brains: 2, max_tracks: 10, keep_per_track: 0 });
+fn a_brains_value_weighs_each_context_by_its_contributors() {
+    // X: three contributors report its offspring a little above its fitness
+    // in its own context (+0.1 each); one contributor reports ten times that
+    // they went badly in another (−0.2). Weighted by contributors X is worth
+    // more than Y (no feedback); weighted by rows (or unweighted), less:
+    // one contributor's many rows count once.
+    let mut f = Fixture::new(Config { max_brains: 2, max_tracks: 10, keep_per_track: 0, ..trusting() });
     f.contribute(TOKEN, &contribution(&[], &[item(11, 10.0, None)], json!([])), T0);
     f.contribute(TOKEN, &contribution(&[], &[item(10, 10.0, None)], json!([])), T0 + 1);
-    for i in 0..10u64 {
+    for i in 0..3u64 {
         let rows = json!([{"id": id(10), "context": context("balanced"), "meanFitness": 11, "count": 3}]);
-        f.contribute(OTHER, &contribution(&[], &[], rows), T0 + 2 + i);
+        f.contribute(&format!("{:032x}", 0xbee + i), &contribution(&[], &[], rows), T0 + 2 + i);
     }
-    for (i, mean) in [10.0, 10.0 / 3.0].into_iter().enumerate() {
+    // Each row 20 % under the contributor's last (their weight -0.2).
+    for (i, mean) in (0..11).map(|i| 10.0 * 0.8f64.powi(i)).enumerate() {
         let rows = json!([{"id": id(10), "context": context("wild"), "meanFitness": mean, "count": 3}]);
         f.contribute(OTHER, &contribution(&[], &[], rows), T0 + 20 + i as u64);
     }
-    f.contribute(TOKEN, &contribution(&[], &[item(12, 10.0, None)], json!([])), T0 + 30);
+    f.contribute(TOKEN, &contribution(&[], &[item(12, 10.0, None)], json!([])), T0 + 40);
     assert!(f.brain.contains(&id(10)), "X is worth more");
     assert!(!f.brain.contains(&id(11)), "Y goes");
+}
+
+#[test]
+fn a_context_counts_its_contributors_with_a_value() {
+    // In value and in the order of replacement, a contributor whose rows only
+    // set a baseline counts for nothing.
+    let others: Vec<String> = (0..5u64).map(|i| format!("{:032x}", 0xc0de + i)).collect();
+    let wild = |mean: f64| json!([{"id": id(10), "context": context("wild"), "meanFitness": mean, "count": 3}]);
+    // X: +0.1 in its own context (one contributor); -0.1 in another where
+    // one contributor measured and five only set baselines. Weighed by
+    // contributors with a value X is level with Y (the older Y goes); by
+    // contributors, X is worth less and goes.
+    let mut f = Fixture::new(Config { max_brains: 2, max_tracks: 10, keep_per_track: 0, ..trusting() });
+    f.contribute(TOKEN, &contribution(&[], &[item(11, 10.0, None)], json!([])), T0);
+    f.contribute(TOKEN, &contribution(&[], &[item(10, 10.0, None)], json!([])), T0 + 1);
+    f.contribute(OTHER, &contribution(&[], &[], json!([{"id": id(10), "context": context("balanced"), "meanFitness": 11, "count": 3}])), T0 + 2);
+    f.contribute(OTHER, &contribution(&[], &[], wild(10.0)), T0 + 3);
+    f.contribute(OTHER, &contribution(&[], &[], wild(9.0)), T0 + 4);
+    for (i, who) in others.iter().enumerate() {
+        f.contribute(who, &contribution(&[], &[], wild(10.0)), T0 + 5 + i as u64);
+    }
+    f.contribute(TOKEN, &contribution(&[], &[item(12, 10.0, None)], json!([])), T0 + 20);
+    assert!(f.brain.contains(&id(10)) && !f.brain.contains(&id(11)), "Y goes");
+    // Replacement: of two replaceable contexts, the one nobody measured goes
+    // first, though five reported it.
+    let mut g = Fixture::new(Config::default());
+    g.contribute(TOKEN, &contribution(&[], &[item(10, 40.0, None)], json!([])), T0);
+    let ctx = |t: &str| json!({"profile": "wild", "track": t, "maxSpeed": 15, "traction": 0.5, "seconds": 20});
+    let row = |t: &str, mean: f64| json!([{"id": id(10), "context": ctx(t), "meanFitness": mean, "count": 1}]);
+    for i in 0..6 {
+        for (who, round) in [(OTHER, 0), (OTHER, 1), (TOKEN_C, 0), (TOKEN_C, 1)] {
+            g.contribute(who, &contribution(&[], &[], row(&format!("kept{i}"), 5.0 + round as f64)), T0 + 1 + i * 10 + round);
+        }
+    }
+    g.contribute(OTHER, &contribution(&[], &[], row("measured", 5.0)), T0 + 100);
+    g.contribute(OTHER, &contribution(&[], &[], row("measured", 6.0)), T0 + 101);
+    for (i, who) in others.iter().enumerate() {
+        g.contribute(who, &contribution(&[], &[], row("baselines", 5.0)), T0 + 102 + i as u64);
+    }
+    g.contribute(OTHER, &contribution(&[], &[], row("new", 5.0)), T0 + 200);
+    let held = |t: &str| g.store.feedback.values().any(|r| r.context.as_deref().unwrap_or("").contains(&format!("\"track\":\"{t}\"")));
+    assert!(held("measured") && !held("baselines") && held("new"));
 }
 
 // ─── from the third review ──────────────────────────────────────────────────
@@ -757,57 +826,90 @@ fn many_equal_distances_rank_the_same_after_every_rebuild() {
 }
 
 #[test]
-fn new_contexts_cannot_push_out_ones_that_repeated_reports_built() {
+fn new_contexts_cannot_push_out_ones_several_contributors_built_and_its_own_is_always_taken() {
+    let fresh = |t: &str| json!({"id": id(10), "context": {"profile": "wild", "track": t, "maxSpeed": 15, "traction": 0.5, "seconds": 20}, "meanFitness": 1, "count": 1});
+    let (third, fourth) = ("33333333333333333333333333333333", "44444444444444444444444444444444");
+    let own = |f: &Fixture| f.recall(&recall_body(&unit(1, wire::TRACK_DIM), None, "balanced", 1))["pool"][0]["feedback"]["contributors"].clone();
+    // Eight contexts, each measured by two contributors (a first row sets
+    // each one's baseline, the second measures): none can go.
     let mut f = Fixture::new(Config::default());
     f.contribute(TOKEN, &contribution(&[], &[item(10, 40.0, None)], json!([])), T0);
-    for i in 0..5u64 {
-        let rows = json!([{"id": id(10), "context": context("balanced"), "meanFitness": 50, "count": 3}]);
-        f.contribute(OTHER, &contribution(&[], &[], rows), T0 + 1 + i);
+    for who in [OTHER, third] {
+        for round in 0..2u64 {
+            let rows: Vec<Value> = (0..8).map(|i| fresh(&format!("n{i}"))).collect();
+            f.contribute(who, &contribution(&[], &[], json!(rows)), T0 + 1 + round);
+        }
     }
-    let fresh = |t: String| json!({"id": id(10), "context": {"profile": "wild", "track": t, "maxSpeed": 15, "traction": 0.5, "seconds": 20}, "meanFitness": 1, "count": 1});
-    // Eight new contexts at once: seven fill the cap, the eighth has nothing to replace.
-    let answer = f.contribute(OTHER, &contribution(&[], &[], json!((0..8).map(|i| fresh(format!("n{i}"))).collect::<Vec<_>>())), T0 + 10);
-    assert_eq!(answer["feedbackAccepted"], 7);
-    assert_eq!(answer["feedbackRejected"], json!([{"index": 7, "reason": "feedback-full"}]));
-    // One more later replaces a context reported once, never the balanced one.
-    let answer = f.contribute(OTHER, &contribution(&[], &[], json!([fresh("m0".into())])), T0 + 11);
+    let answer = f.contribute(OTHER, &contribution(&[], &[], json!([fresh("n8")])), T0 + 2);
+    assert_eq!(answer["feedbackRejected"], json!([{"index": 0, "reason": "feedback-full"}]));
+    // Its own context is always taken, in place of the weakest other.
+    let answer = f.contribute(OTHER, &contribution(&[], &[], json!([{"id": id(10), "context": context("balanced"), "meanFitness": 50, "count": 2}])), T0 + 3);
     assert_eq!(answer["feedbackAccepted"], 1);
-    let balanced = |f: &Fixture| f.recall(&recall_body(&unit(1, wire::TRACK_DIM), None, "balanced", 1))["pool"][0]["feedback"]["count"].clone();
-    assert_eq!(balanced(&f), 5);
+    assert_eq!(own(&f), 1);
     assert_eq!(f.store.feedback.len(), 8);
-    // Not reported for 7 days, even a well-reported context can go: here
-    // every other context was reported twice this week.
+    // And no new context ever pushes it out.
+    let answer = f.contribute(fourth, &contribution(&[], &[], json!([fresh("n9")])), T0 + 4);
+    assert_eq!(answer["feedbackRejected"], json!([{"index": 0, "reason": "feedback-full"}]));
     let week = 7 * 86_400_000;
+    for i in 0..8u64 {
+        f.contribute(fourth, &contribution(&[], &[], json!([fresh(&format!("late{i}"))])), T0 + week + 10 + i);
+    }
+    assert_eq!(own(&f), 1, "its own context stays, however stale");
+    // One contributor's many rows do not make a context several built:
+    // a token that reports its own 8 contexts twice holds none of them; nor
+    // do two tokens whose rows only set baselines.
     let mut g = Fixture::new(Config::default());
     g.contribute(TOKEN, &contribution(&[], &[item(10, 40.0, None)], json!([])), T0);
-    for i in 0..5u64 {
-        let rows = json!([{"id": id(10), "context": context("balanced"), "meanFitness": 50, "count": 3}]);
-        g.contribute(OTHER, &contribution(&[], &[], rows), T0 + 1 + i);
+    for round in 0..2u64 {
+        let rows: Vec<Value> = (0..8).map(|i| fresh(&format!("j{i}"))).collect();
+        g.contribute(fourth, &contribution(&[], &[], json!(rows)), T0 + 1 + round);
     }
-    for i in 0..14u64 {
-        g.contribute(OTHER, &contribution(&[], &[], json!([fresh(format!("o{}", i / 2))])), T0 + week + i);
+    let answer = g.contribute(OTHER, &contribution(&[], &[], json!([fresh("honest")])), T0 + 5);
+    assert_eq!(answer["feedbackAccepted"], 1, "{answer}");
+    let mut h = Fixture::new(Config::default());
+    h.contribute(TOKEN, &contribution(&[], &[item(10, 40.0, None)], json!([])), T0);
+    for who in [third, fourth] {
+        h.contribute(who, &contribution(&[], &[], json!((0..8).map(|i| fresh(&format!("b{i}"))).collect::<Vec<_>>())), T0 + 1);
     }
-    let answer = g.contribute(OTHER, &contribution(&[], &[], json!([fresh("x".into())])), T0 + week + 100);
-    assert_eq!(answer["feedbackAccepted"], 1);
-    assert_eq!(balanced(&g), 0, "the stale context was the one to go");
+    let answer = h.contribute(OTHER, &contribution(&[], &[], json!([fresh("honest")])), T0 + 6 * 86_400_000);
+    assert_eq!(answer["feedbackAccepted"], 1, "{answer}");
+    // A request never replaces a context it reported itself: of 9 new
+    // contexts at once, 8 fit and the ninth is refused.
+    let mut k = Fixture::new(Config::default());
+    k.contribute(TOKEN, &contribution(&[], &[item(10, 40.0, None)], json!([])), T0);
+    let answer = k.contribute(OTHER, &contribution(&[], &[], json!((0..9).map(|i| fresh(&format!("q{i}"))).collect::<Vec<_>>())), T0 + 1);
+    assert_eq!((answer["feedbackAccepted"].clone(), answer["feedbackRejected"].clone()), (json!(8), json!([{"index": 8, "reason": "feedback-full"}])));
+    // Not reported for 7 days, even a context two contributors built can go.
+    let answer = f.contribute(OTHER, &contribution(&[], &[], json!([fresh("after-a-week")])), T0 + 2 * week);
+    assert_eq!(answer["feedbackAccepted"], 1, "{answer}");
 }
 
 #[test]
 fn rows_that_do_not_clean_are_deleted_when_the_brain_is_rebuilt() {
-    use vectorvroom_brain_core::brain::{BrainRow, FeedbackRow};
+    use vectorvroom_brain_core::brain::{BrainRow, FeedbackRow, Slot};
+    let who = contributor_id(OTHER);
     let mut f = Fixture::new(Config::default());
     f.contribute(TOKEN, &contribution(&[], &[item(10, 40.0, None)], json!([])), T0);
     // A brain row whose meta is not JSON, and 10 feedback rows (an older build's cap).
     let bad = BrainRow { id: id(11), fitness: 1.0, track: None, dynamics: None, meta: "{not json".into(), contributor: "x".into(), created: T0 };
     f.store.brains.insert(id(11), (bad, brain(11)));
+    let slot = Slot { who: tag(&who), id: who.clone(), value: Some(0.1), baseline: Some(50.0) };
     for i in 0..10u64 {
-        let row = FeedbackRow { brain: id(10), context_key: format!("{i:016x}"), context: String::new(), weight: 0.1, count: 1, baseline: None, contributors: vec![1], updated: T0 + i };
+        let row = FeedbackRow { brain: id(10), context_key: format!("{i:016x}"), context: None, weight: 0.1, count: 1, slots: vec![slot.clone()], updated: T0 + i };
         f.store.feedback.insert((id(10), row.context_key.clone()), row);
+    }
+    // Slots that do not read (the SQL store loads them as none), one
+    // contributor twice, or a tag that is not its id's.
+    let wrong = Slot { who: tag(&who) ^ 1, ..slot.clone() };
+    for (key, slots) in [("00000000000000aa", vec![]), ("00000000000000bb", vec![slot.clone(), slot.clone()]), ("00000000000000cc", vec![wrong])] {
+        let row = FeedbackRow { brain: id(10), context_key: key.into(), context: None, weight: 0.0, count: 1, slots, updated: T0 + 50 };
+        f.store.feedback.insert((id(10), key.into()), row);
     }
     let reopened = Brain::open(Config::default(), &mut f.store, T0 + 20).unwrap();
     assert!(!reopened.contains(&id(11)) && !f.store.brains.contains_key(&id(11)), "the bad row is gone from both");
-    assert_eq!(f.store.feedback.len(), 8, "the 8 most recent stay");
+    assert_eq!(f.store.feedback.len(), 8, "the 8 most recent that read stay");
     assert!(!f.store.feedback.contains_key(&(id(10), format!("{:016x}", 0))) && !f.store.feedback.contains_key(&(id(10), format!("{:016x}", 1))));
+    assert!(["aa", "bb", "cc"].iter().all(|k| !f.store.feedback.contains_key(&(id(10), format!("00000000000000{k}")))));
     // Contributed again, brain 11 is stored whole.
     f.brain = reopened;
     f.contribute(TOKEN, &contribution(&[], &[item(11, 1.0, None)], json!([])), T0 + 21);

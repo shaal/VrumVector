@@ -217,7 +217,8 @@ every fixture is read as bytes, and a text fixture as text too):
 
 - CB2 implements these rules in Rust (`cloud-brain/core/src/wire.rs`) and
   runs the same fixtures.
-- Rate limits, quotas and trust (quarantine until corroborated) are CB4.
+- Rate limits, quotas and trust (quarantine until corroborated) are CB4
+  ([below](#cb4-abuse-and-trust)).
 - The browser keeps its xxHash32 ids locally; CB3 computes cloud ids from
   weights when it contributes and when it records parents.
 
@@ -241,7 +242,7 @@ Worker adds the front door, the object and its SQLite store.
   `Content-Length` over 64 KB is refused before it is read, and a body
   without one is read only up to the limit (413 `body-too-large`). Routes:
   `POST /v1/recall`, `POST /v1/contribute`, `GET /v1/stats`
-  (`POST /v1/forget` comes with CB4). When the object fails (a panic, a
+  (`POST /v1/forget` and the rate limits came with CB4). When the object fails (a panic, a
   reset), the page still gets a readable 500 `server-error` with CORS
   headers. The object itself serves only those three routes (404 before
   reading a body), and refuses with `disabled` while the breaker is on.
@@ -474,12 +475,197 @@ fake `fetch`.
 - A link that opens shared mode asks with the browser's own dialog, which
   holds the page until answered (a sandboxed frame answers Cancel: the page
   stays local).
-- Pulled brains carry the fitness their contributor claimed, on the track
-  they were found on; a brain from another circuit is kept without a track.
-  A pool is at most the nearest tracks' brains, so it can be smaller than k.
+- Pulled brains carry the fitness the service serves, on the track they
+  were found on; a brain from another circuit is kept without a track. (Up
+  to CB4 that was the claimed fitness; since CB4 it is the trusted fitness,
+  refreshed at every pull until this tab measures the brain.) A pool is at
+  most the nearest tracks' brains, so it can be smaller than k.
 - A brain the service later quarantines or evicts stays in a replica that
   already pulled it (the replica is capped at 2 000 pulled brains).
-- Claimed fitness is trusted until CB4 (quarantine until corroborated).
-  Feedback sent twice (a lost answer, then a retry) counts twice.
+- Claimed fitness was trusted until CB4 (quarantine until corroborated).
+  Feedback sent twice (a lost answer, then a retry) counts twice: since
+  CB4 twice in one contributor's own value, never as a second contributor.
 - The service is not deployed: CB5 writes the endpoint into
   `cloud/config.json` at deploy.
+
+## CB4: abuse and trust
+
+Everything a contributor says is a claim until someone else's offspring
+back it: a brain's claimed fitness, and its contributor's reports about its
+offspring. CB4 adds that trust rule, feedback kept per contributor, limits
+per address and per token, `POST /v1/forget`, and native fuzzing; the
+browser follows the served fitness.
+
+### What it does
+
+- **Quarantine (D7).** A brain is corroborated once two contributors other
+  than its own have reported its offspring in the brain's own context (its
+  learning context, when that has a track key: there every row is measured
+  against the claim). Until then it ranks, is valued for eviction and is
+  served as fitness `min(claim, 0)`: a neutral fitness term, or its claim
+  if that is lower (a claim can only lower a brain). It is still served, so
+  others can breed from it and report. Once corroborated it is worth what
+  its offspring showed (the trimmed mean of the mean fitness each of those
+  contributors reported last), at most its claim and at least
+  `min(claim, 0)`: a claim of 1e6 whose offspring score 50 is worth 50;
+  offspring that do better never raise a claim; reports of -1e6 bring an
+  honest brain back to a neutral fitness, no lower (its feedback weight
+  still ranks it, down to 0.7 times, as any brain whose offspring did
+  badly: below a brain nobody reported). A recall answer's `fitness` is
+  this trusted fitness (the browser ranks its replica by that number).
+  Recall has no token, so this applies to everyone, the brain's own
+  contributor too (their replica holds the brain with its real fitness).
+  A brain whose context has no track key is never corroborated.
+- **Feedback per contributor.** A brain and context keep, in one 64-byte
+  record, up to 8 contributors (the ones who reported most recently; a
+  ninth replaces the least recent), each with a weight and the mean fitness
+  they reported last. A contributor's first measured row sets their
+  weight; later rows move it by an exponential moving average (0.3). In
+  the brain's own context each row is measured against its claim; in
+  another, against the contributor's own previous mean (their first row
+  only sets it), so no contributor's reports shift another's. The weight
+  served and ranked with is the trimmed mean of the contributors' weights:
+  with 3 or more, the lowest and highest quarter (rounded up) are left
+  out, so one contributor among 3 cannot pull it to their end, and each
+  contributor counts once however often they report. (A 2σ filter was the
+  other option: it cannot drop anything among 5 values or fewer, since none
+  is 2σ from their mean, and 8 is the most there are.) A contributor's rows
+  about their own brains are accepted and change nothing. `count` is the
+  other contributors' rows, `contributors` how many are kept. In memory a
+  contributor is a 16-bit tag, the first 4 hex digits of their id (8 tags,
+  8 weights in steps of 1/32 767 and 8 bfloat16 means fit the 64 bytes);
+  the store keeps each slot's full contributor id. Two contributors to one brain and context share a tag
+  about once in 65 536 pairs; they then share a slot, credited to the one
+  who reported last.
+- **Contexts.** A brain's own context is always kept: its first row takes
+  the place of the weakest other context. A new other context replaces the
+  weakest (fewest contributors with a value, then fewest rows, then the
+  oldest) among those one contributor at most measured, or none for 7
+  days; never the brain's own, nor one this request reported; with none,
+  `feedback-full`. Rows that only set a baseline count for nothing. So
+  junk contexts from one token (however many rows) hold no place, and
+  nobody can keep a brain from being corroborated.
+- **Eviction** values brains by trusted fitness, and weighs each context's
+  weight by its contributors with a value (not its rows). Each track's 3 best
+  corroborated brains are kept: an uncorroborated brain holds no place, as
+  anyone can make a track of their own.
+- **Per-address limits** (the front door, before the body is read; the
+  Rate Limiting binding): 20 contributions, 60 recalls, stats and health
+  checks, and 3 forgets a minute, per `CF-Connecting-IP` (an
+  IPv6 address by its /64, which one host holds). A browser sends at most 6
+  contributions a minute. The address is a key, never stored. Past a
+  limit: 429 `rate-limited`, `Retry-After: 60`, with CORS (and
+  `Access-Control-Expose-Headers: Retry-After`) so the page can read it.
+  Without a binding, or when it fails, the request goes on (logged):
+  `/health` says `limits: false`, and the quotas still hold.
+- **Daily quotas** per token (UTC day): 10 000 requests, 5 000 brains and
+  50 000 feedback rows (those that parse), enough for a tab that trains all
+  day (at most one contribution every 10 s). A contribution that would go
+  past any of them is refused whole, 429 `rate-limited` with `Retry-After`
+  the seconds to midnight, and writes nothing. `QUOTA_REQUESTS`,
+  `QUOTA_BRAINS` and `QUOTA_FEEDBACK` change them (a string, a number or a
+  boolean in `vars` all read; so does `DISABLE_BRAIN`). The counts live in
+  the `contributors` table, which holds today's contributors only (older
+  rows go as requests arrive).
+- **Forget.** `POST /v1/forget {protocol, token}` →
+  `{protocol, brains, feedback}`: every brain the token contributed goes,
+  with its feedback, and the token's slot is taken out of every record the
+  store holds with its full id (a record left empty goes); the numbers are
+  what went. Not limited by the quota (the address limit counts it) and not
+  counted. What it reads: the records with a slot of the token's 16-bit
+  tag are in memory; up to 256 are read by key (a token that reported
+  nothing reads a tag's share of the records, a few), more (a heavy
+  contributor, or a token made to share one's tag) in one pass over the
+  stored records, 500 at a time, so a forget never reads more than the
+  records once and builds no list of them. What stays: tracks (they are no one's), the row counts of
+  records the token was in, parent ids in other brains' meta, copies in
+  replicas, today's quota counts. A brain two tokens contributed goes with
+  the first.
+- **The browser.** A pulled brain keeps the service's trusted fitness,
+  refreshed at every pull until this tab measures it (archives it again);
+  its offspring here are not measured against it (the first outcome only
+  sets a baseline, as in another context), since 0 before corroboration is
+  not a measurement.
+- **Storage**: SQL schema 2. Nothing was deployed at schema 1, so the
+  migration starts feedback over (schema 1 had one weight for everyone)
+  and recreates `contributors` with the day's counts; an index on
+  `brains.contributor` serves forget. A record's slots are `id:weight:mean`,
+  the most recent first; a record whose slots do not read, or whose tags
+  are not their ids', is deleted at the next rebuild.
+
+### Measured
+
+`node scripts/cloud-brain-load.mjs` under `wrangler dev` (local workerd;
+Apple M3 Max), the spike build for the memory reading
+([raw](cloud-brain-cb4-load.json)): CB2's load (20 000 brains with the
+largest meta on 5 000 tracks; then 8 contexts on every brain from 8
+contributors, 1 280 000 rows), the quotas lifted and each request from its
+own address; then three forgets.
+
+| | CB4 | CB2 |
+|---|---|---|
+| Filling it (1 250 contributions) | 15.3 s; p50 10.8 ms, p95 16.9 ms | 18.0 s; 13.4, 22.1 ms |
+| Recall (k 64, with dynamics) | p50 12.1 ms, p95 13.8 ms; with all the feedback p50 12.8 ms | 12.8, 14.5; 17.9 ms |
+| The object's Wasm memory (high-water) | 16.3 MiB empty; 48.6 with the brains; 70.1 with all the feedback, after the forgets, after a rebuild and after eviction | the same |
+| First recall after a restart | 1 142 ms | 1 064 ms |
+| 1 008 more brains (eviction) | p50 64 ms, p95 85 ms | 82, 119 ms |
+| Forget: a token nobody used | 18 ms | |
+| Forget: a token made to share the flooder's tag (in every record) | 133 ms (one pass over 160 000 records), nothing forgotten | |
+| Forget: the flooder (in all 160 000 records) | 3 038 ms, 160 000 records rewritten | |
+
+The 64-byte records keep memory where CB2 left it. Before forget read the
+records a page at a time, forgetting the flooder raised the high-water mark
+to 101 MiB (a list of every record); with the ids taken from each slot
+rather than hashed again, the first recall after a restart went from 1.7 s
+back to 1.1 s. Latencies vary between runs (CB2): these are 0.7 to 1.1
+times CB2's.
+Two early runs (on code since changed, while other builds, fuzzers and
+browser tests shared the machine) each lost one request of the flood: a
+120 s timeout, and a 500 whose body was not the service's. The cause was
+not found. Ten later full floods lost none: the whole script four times
+(one with every core kept busy, one beside both fuzzers), the flood alone
+twice, and floods while a second `wrangler dev` built another build and
+while a changed source rebuilt the Worker under it. A 500 not from the
+service is an error the front door let through; an error reading the body
+or making the object's request now answers `server-error` like the object's
+own failures (the client backs off on any 5xx), and the script prints
+`wrangler dev`'s output when a request fails.
+
+On the Workers Free plan (10 ms CPU a request) none of the forgets, the
+restart or a contribution at the cap fits (D2).
+
+### Evidence
+
+| Claim | Test |
+|---|---|
+| Trust, quotas, forget | `cargo test` (`core/tests/trust.rs`, 16 tests): a forged fitness of 1e6 ranks and is served as 0 until two others corroborate it, then as the 50 its offspring showed (its contributor's praise changes nothing, one other's report keeps it at 0 and sinks it); a claim can only lower a brain before corroboration, and a context without a track key never corroborates; one contributor's 50 reports count once and an outlier among four moves the weight from 0.05 to -0.025 (the plain mean would be -0.2375); the 8 contributors kept are the most recent; a quota refuses a request whole (nothing written, `Retry-After` to midnight) and starts over at midnight, per token; the contributors table holds today only; forget deletes the token's brains and takes out exactly its slots (a token with the same tag takes out nothing), keeps stored contexts, and a store failing after each of its writes reopens consistently; eviction by trusted fitness (the flood goes first; trusting claims, the forged brains would win); 60 brains from 30 tokens leave the corroborated ones; reports of -1e6 bring a brain to 0, not below; junk contexts from two tokens cannot keep a brain's own context out; tracks of their own protect no uncorroborated brain; forget goes through 1 280 records (more than a page); what a forget reads (a fresh token nothing, its 3 records by key, a token made to share a heavy contributor's tag one query over the records, never one a record). `core/tests/brain.rs` (36) keeps CB2's tests, with the new rules: contexts several contributors built stay, a brain's own is always taken, a request never replaces its own new contexts, and a brain's value and the replacement order count contributors with a value |
+| The Worker | `npm run test:cloud-brain:service` (14 tests, the built Worker under `wrangler dev`): every CB1 fixture over HTTP, the `forget` ones too; a forged fitness served as 0, then 50 after two others; forget over HTTP; 20 writes a minute from one address then 429 with `Retry-After: 60`, CORS and the header exposed, a body not even read, 3 forgets then 429, 60 reads then 429, `/health` counted as a read, 20 from one IPv6 /64 then 429 and another /64 free; the token nowhere in the object's SQLite files, its hash there; a daily quota (429 with `Retry-After` to midnight, per token; forget past it); the migration from schema 1, whole and cut short (schema 1 feedback gone, a new slot with its contributor id, the new columns); a database newer than the build refused |
+| The browser | `npm run test:cloud-brain:browser` (Chromium and WebKit): as in CB3, and a pulled brain takes the served fitness at every pull until this tab measures it, and its first offspring outcome here only sets a baseline; measured here in one context (archived again), its outcomes there are measured against this tab's fitness (0.25), in the context it was pulled in still not, and a later pull refreshes that evaluation only; on the real service B's generation 0 is still 15 of 16 cars from A's brains, A's pool has B's feedback and no fitness above 0 |
+| Fuzzing | `bash scripts/fuzz-cloud-brain.sh` (libFuzzer and AddressSanitizer, nightly-2026-09-29): on the final code, about 12 minutes each, `wire` 5 075 743 inputs and `brain` 59 706 request sequences (and 3 minutes each before that: 1 536 180 and 20 994); over the task, all clean: 10 minutes each before the review fixes (3 751 250 and 139 718), after the first round (3 522 918 and 64 757) and 5 after the second (2 645 780 and 35 802). A planted trust bug (one corroborator instead of two) was caught in its first seconds ("served 896 with 1 corroborators") |
+| Reviews | Three adversarial reviews (core logic; Worker, SQL and tests; spec and abuse) found a forget that matched 16-bit tags (a stranger could erase others' feedback), a brain's own context that junk contexts could lock out, eviction weighed by rows, reports that could sink a brain to -1e6, tracks of one's own pinning brains, the browser using the served 0 as a baseline, IPv6 addresses each counted alone, `Retry-After` not exposed, and number or boolean `vars` ignored. A second round found the browser's baseline check missing an evaluation's mark after a re-archive, a forget that scanned every record for any token, baseline-only rows holding contexts, and two tests that a mutant passed; a third, that a token made to share a heavy contributor's tag chose what a forget reads, and three tests missing. All are fixed and tested above: 9 mutants of the new rules (each put back as it was: tag forget, no floor, rows or all contributors counted, no request exclusion, no tag prefilter, never one pass) each fail a test |
+
+### Limits
+
+- **Sybil.** Tokens are free: two more tokens corroborate a forged claim
+  (then served at its claim), and a few can bring an honest brain back to
+  a neutral fitness (and its weight lower), or push honest contributors out
+  of a record's 8 slots. In another context than a brain's own, one junk
+  row replaces a context where one contributor measured and the others only
+  set baselines, and two tokens measuring 8 contexts keep new ones out for
+  7 days (the brain's own is always kept). The
+  per-address limits slow this, the quarantine stops a single token, and
+  feedback never takes a brain below `min(claim, 0)`. Turnstile on the
+  first contribution (D8) or server re-simulation (X1) is the fix if abuse
+  appears.
+- A brain is corroborated only in its own context: others must breed from
+  it on the same track key and settings.
+- Tracks are no one's: with 5 000 tracks each holding a brain, a new track
+  is kept without one (CB2). Tokens can fill the table in about an hour
+  from one address.
+- A token past its quota retries about once a minute until midnight: the
+  client backs off to 60 s and does not read `Retry-After` yet.
+- The per-address key trusts `CF-Connecting-IP`, which Cloudflare sets;
+  CB5 checks that a client cannot choose it on the deployed Worker.
+  Cloudflare's limiter counts per location and is approximate.
+- `fastestLap` in meta is served as claimed (it does not rank).
+- The page has no "forget me" control yet; the route is there.

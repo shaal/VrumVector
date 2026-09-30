@@ -7,10 +7,11 @@ description = "One shared vector memory for VectorVroom, as a Rust Worker (docs/
 
 # Standalone: the beta toolchain and the Emscripten target stay out of any
 # other workspace. `core` is the service without `worker` (native tests);
-# .work/ holds the fetched ruvector sources, a workspace of their own.
+# .work/ holds the fetched ruvector sources, a workspace of their own, and
+# core/fuzz the fuzz targets (nightly, CB4).
 [workspace]
 members = ["core"]
-exclude = [".work"]
+exclude = [".work", "core/fuzz"]
 
 [dependencies]
 worker = "=0.8.7"

@@ -1,0 +1,89 @@
+{
+ "date": "2026-09-30T20:22:54.770Z",
+ "machine": "Apple M3 Max (16 threads)",
+ "brains": 20000,
+ "tracks": 5000,
+ "memoryEmpty": 16.3,
+ "fill": {
+  "requests": 1250,
+  "p50": 10.8,
+  "p95": 16.9,
+  "largestBody": 52508,
+  "seconds": 15.3
+ },
+ "stats": {
+  "protocol": 1,
+  "brains": 20000,
+  "tracks": 5000,
+  "contributorsToday": 1,
+  "contributions24h": 1250
+ },
+ "recall": {
+  "label": "warm",
+  "recalls": 50,
+  "p50": 12.1,
+  "p95": 13.8,
+  "largestAnswer": 47768,
+  "pool": 20
+ },
+ "memoryFull": 48.6,
+ "feedback": {
+  "requests": 25600,
+  "rows": 1280000,
+  "p50": 7.4,
+  "p95": 12,
+  "seconds": 212.5
+ },
+ "recallWithFeedback": {
+  "label": "with feedback",
+  "recalls": 50,
+  "p50": 12.8,
+  "p95": 14,
+  "largestAnswer": 47768,
+  "pool": 20
+ },
+ "memoryWithFeedback": 70.1,
+ "forgetFresh": {
+  "ms": 18,
+  "protocol": 1,
+  "brains": 0,
+  "feedback": 0
+ },
+ "forgetSameTag": {
+  "ms": 132.9,
+  "protocol": 1,
+  "brains": 0,
+  "feedback": 0
+ },
+ "forgetEverywhere": {
+  "ms": 3038.1,
+  "protocol": 1,
+  "brains": 0,
+  "feedback": 160000
+ },
+ "memoryAfterForget": 70.1,
+ "firstRecallAfterRestartMs": 1141.5,
+ "memoryAfterRebuild": 70.1,
+ "recallAfterRestart": {
+  "label": "after restart",
+  "recalls": 20,
+  "p50": 13.6,
+  "p95": 14.7,
+  "largestAnswer": 47759,
+  "pool": 20
+ },
+ "over": {
+  "requests": 63,
+  "p50": 63.9,
+  "p95": 85.3,
+  "largestBody": 52507
+ },
+ "statsOver": {
+  "protocol": 1,
+  "brains": 20000,
+  "tracks": 5000,
+  "contributorsToday": 9,
+  "contributions24h": 26913
+ },
+ "memoryOver": 70.1
+}

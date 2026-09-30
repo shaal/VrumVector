@@ -8,7 +8,9 @@
 // 3. isolation: a shared session leaves this browser's own IndexedDB as it was;
 // 4. two browser profiles on the real local service (cloud-brain/, under
 //    wrangler dev): B, fresh, gets A's brains among its first seeds, and B's
-//    offspring feedback reaches A's pool.
+//    offspring feedback reaches A's pool (A's own reports about its own
+//    brains are not evidence, CB4), and A's brains are served with a
+//    neutral fitness until two others corroborate them.
 //
 //   npm run test:cloud-brain:browser     (needs the cloud-brain toolchain for part 4)
 //   BROWSER=firefox (or webkit) runs it in that engine instead of Chromium.
@@ -226,6 +228,69 @@ try {
     await page.evaluate(() => window.__rvCloud.maybePull({force: true}));
     const after = await trackOf();
     assert.ok(Object.values(after).every(t => t !== null), 'filed on this track once found on it: ' + JSON.stringify(after));
+    // CB4: a pulled brain takes the service's trusted fitness at every pull,
+    // until this tab measures it (archives it again).
+    const fitnessOf = () => page.evaluate(async ids => {
+      const {brainId} = await import('./cloud/wire.js'), out = {};
+      for (const b of window.__rvBridge.exportSnapshot().brains) {
+        const id = await brainId(Float32Array.from(b.flat));
+        if (ids.includes(id)) out[id] = {fitness: b.meta.fitness, served: b.meta.cloudFitness ?? null};
+      }
+      return out;
+    }, seeded);
+    const servedBefore = await fitnessOf();
+    const unmeasured = seeded.filter(id => servedBefore[id].served !== null);
+    assert.ok(unmeasured.length >= 1, JSON.stringify(servedBefore));
+    for (const id of seeded) fake.brains.get(id).fitness = 77;
+    await page.evaluate(() => window.__rvCloud.maybePull({force: true}));
+    const servedAfter = await fitnessOf();
+    for (const id of seeded) {
+      const expect = unmeasured.includes(id) ? {fitness: 77, served: 77} : servedBefore[id];
+      assert.deepEqual(servedAfter[id], expect, `${id}: ${JSON.stringify({before: servedBefore[id], after: servedAfter[id]})}`);
+    }
+    // Its offspring here are not measured against the served fitness (0
+    // before corroboration would make every outcome +1): the first only sets
+    // a baseline, as in another context.
+    const firstOutcome = await page.evaluate(() => {
+      const b = window.__rvBridge, ctx = b.info().learning.context;
+      const vector = Float32Array.from({length: 244}, (_, i) => Math.cos(i * 0.21) * 0.5);
+      b.acceptCloudPool([{vector, fitness: 0, meta: {generation: 1, learning: {context: ctx, styleScore: 0}}, trackSim: 1,
+        feedback: {weight: 0, count: 0, contributors: 0}}], window.currentTrackVec, ctx);
+      const row = b.exportSnapshot().brains.find(x => x.flat.every((v, i) => v === vector[i]));
+      b.observeOffspring([{id: row.id, meanFitness: 50, count: 3}], ctx);
+      return {served: row.meta.cloudFitness, track: ctx?.track || '', feedback: b.info().learning.feedback};
+    });
+    assert.ok(firstOutcome.track, 'a context with a track key (an exact match is possible)');
+    assert.equal(firstOutcome.served, 0);
+    assert.deepEqual(firstOutcome.feedback.map(f => f.feedback), [null], JSON.stringify(firstOutcome));
+    // Pulled in its own context C, then measured here in context D (archived
+    // again): in D its outcomes are measured against this tab's fitness; in
+    // C still not against the served one, which a later pull refreshes.
+    const measured = await page.evaluate(async () => {
+      const b = window.__rvBridge, d = b.info().learning.context, c = {...d, profile: d.profile === 'calm' ? 'careful' : 'calm'};
+      const {unflatten} = await import('./brainCodec.js');
+      const vector = Float32Array.from({length: 244}, (_, i) => Math.sin(i * 0.17) * 0.45);
+      const pull = fitness => b.acceptCloudPool([{vector, fitness, meta: {generation: 1, learning: {context: c, styleScore: 0}}, trackSim: 1,
+        feedback: {weight: 0, count: 0, contributors: 0}}], window.currentTrackVec, d);
+      const held = () => b.exportSnapshot().brains.find(x => x.flat.every((v, i) => v === vector[i]));
+      pull(0);
+      b.archiveBrain(unflatten(vector), 40, window.currentTrackVec, 2, [], undefined, undefined, {context: d, styleScore: 0});
+      b.observeOffspring([{id: held().id, meanFitness: 50, count: 3}], c);
+      const inC = b.info().learning.feedback.map(f => f.feedback);
+      b.observeOffspring([{id: held().id, meanFitness: 50, count: 3}], d);
+      const inD = b.info().learning.feedback.map(f => f.feedback);
+      pull(7);
+      const meta = held().meta;
+      return {inC, inD, fitness: meta.fitness, mark: meta.cloudFitness ?? null,
+        rows: meta.evaluations.map(r => [r.learningContext?.profile, r.fitness, r.cloudFitness ?? null]).sort()};
+    });
+    assert.deepEqual(measured.inC, [null], JSON.stringify(measured));
+    assert.deepEqual(measured.inD, [0.25], JSON.stringify(measured));
+    assert.equal(measured.fitness, 40, 'measured here: not refreshed');
+    assert.equal(measured.mark, null);
+    const [calmOrCareful] = measured.rows.filter(r => r[2] !== null);
+    assert.deepEqual(calmOrCareful.slice(1), [7, 7], 'the evaluation it was pulled in is refreshed: ' + JSON.stringify(measured.rows));
+    assert.equal(measured.rows.filter(r => r[2] === null).map(r => r[1]).join(), '40', 'this tab\'s own evaluation is not');
     // Offline: the banner, and the outbox keeps what waits.
     fake.down = 'offline';
     await page.evaluate(async () => {
@@ -309,13 +374,14 @@ try {
     await b.waitForFunction(() => window.__rvCloud?.accepted >= 1, {}, {timeout: 60000});
     const seedsB = await firstSeeds(b);
     assert.ok(seedsB.generation === 0 && seedsB.archive_recall > 0, JSON.stringify(seedsB));
-    // B's offspring feedback reaches A's pool: brains with a second contributor.
+    // B's offspring feedback reaches A's pool. A's own reports about its own
+    // brains are not evidence (CB4): before B, nobody's are counted.
     const contributorsBefore = await a.evaluate(async () => {
       const {unit} = await import('./cloud/session.js');
       const pool = await window.__rvCloud.client.recall({trackVec: unit(window.currentTrackVec), context: window.__rvBridge.info().learning.context || {}, k: 50});
       return Math.max(0, ...pool.map(p => p.feedback.contributors));
     });
-    assert.ok(contributorsBefore <= 1, 'only A so far');
+    assert.equal(contributorsBefore, 0, 'only A so far, and A does not count for its own brains');
     await train(b, 3);
     await b.evaluate(async () => { await window.__rvCloud.settled(); await window.__rvCloud.client.flush(); });
     const poolA = await a.evaluate(async () => {
@@ -324,8 +390,10 @@ try {
         context: window.__rvBridge.info().learning.context || {}, k: 50});
       return pool.map(p => ({fitness: p.fitness, feedback: p.feedback}));
     });
-    assert.ok(poolA.some(p => p.feedback.contributors >= 2), JSON.stringify(poolA.slice(0, 5)));
-    report.real = {statsA, seedsB, entriesWithTwoContributors: poolA.filter(p => p.feedback.contributors >= 2).length, pool: poolA.length};
+    assert.ok(poolA.some(p => p.feedback.contributors >= 1), JSON.stringify(poolA.slice(0, 5)));
+    // One other contributor corroborates nothing yet: every claim is served as at most 0.
+    assert.ok(poolA.every(p => p.fitness <= 0), JSON.stringify(poolA.slice(0, 5)));
+    report.real = {statsA, seedsB, entriesWithFeedback: poolA.filter(p => p.feedback.contributors >= 1).length, pool: poolA.length};
     await contextA.close(); await contextB.close();
   }
 
