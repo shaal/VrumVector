@@ -1,0 +1,562 @@
+[
+ {
+  "in": {},
+  "out": {}
+ },
+ {
+  "in": null,
+  "out": {}
+ },
+ {
+  "in": [
+   1
+  ],
+  "out": {}
+ },
+ {
+  "in": {
+   "generation": 0
+  },
+  "out": {
+   "generation": 0
+  }
+ },
+ {
+  "in": {
+   "generation": 1000000000
+  },
+  "out": {
+   "generation": 1000000000
+  }
+ },
+ {
+  "in": {
+   "generation": 1000000001
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "generation": 41.5
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "generation": -3
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "generation": "41"
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "parentIds": [
+    "brain_f7f8d1c4119a66e85d7ed05f290501dd",
+    "brain_964108f23fb236a159c42f29d48ae112",
+    "brain_f7f8d1c4119a66e85d7ed05f290501dd",
+    "brain_x",
+    "brain_964108f23fb236a159c42f29d48ae112_2",
+    "brain_964108f23fb236a1",
+    7
+   ]
+  },
+  "out": {
+   "parentIds": [
+    "brain_f7f8d1c4119a66e85d7ed05f290501dd",
+    "brain_964108f23fb236a159c42f29d48ae112"
+   ]
+  }
+ },
+ {
+  "in": {
+   "parentIds": [
+    "brain_00000000000000000000000000000000",
+    "brain_00000000000000000000000000000001",
+    "brain_00000000000000000000000000000002",
+    "brain_00000000000000000000000000000003",
+    "brain_00000000000000000000000000000004",
+    "brain_00000000000000000000000000000005",
+    "brain_00000000000000000000000000000006",
+    "brain_00000000000000000000000000000007",
+    "brain_00000000000000000000000000000008",
+    "brain_00000000000000000000000000000009"
+   ]
+  },
+  "out": {
+   "parentIds": [
+    "brain_00000000000000000000000000000000",
+    "brain_00000000000000000000000000000001",
+    "brain_00000000000000000000000000000002",
+    "brain_00000000000000000000000000000003",
+    "brain_00000000000000000000000000000004",
+    "brain_00000000000000000000000000000005",
+    "brain_00000000000000000000000000000006",
+    "brain_00000000000000000000000000000007"
+   ]
+  }
+ },
+ {
+  "in": {
+   "parentIds": "brain"
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "parentIds": []
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "parentIds": [
+    "brain_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "brain_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "brain_00000000000000000000000000000001",
+    "brain_00000000000000000000000000000002",
+    "brain_00000000000000000000000000000003",
+    "brain_00000000000000000000000000000004",
+    "brain_00000000000000000000000000000005",
+    "brain_00000000000000000000000000000006",
+    "brain_00000000000000000000000000000007",
+    "brain_00000000000000000000000000000008"
+   ]
+  },
+  "out": {
+   "parentIds": [
+    "brain_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "brain_00000000000000000000000000000001",
+    "brain_00000000000000000000000000000002",
+    "brain_00000000000000000000000000000003",
+    "brain_00000000000000000000000000000004",
+    "brain_00000000000000000000000000000005",
+    "brain_00000000000000000000000000000006",
+    "brain_00000000000000000000000000000007"
+   ]
+  }
+ },
+ {
+  "in": {
+   "parentIds": [
+    "brain_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+   ]
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "fastestLap": 0
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "fastestLap": 1e-9
+  },
+  "out": {
+   "fastestLap": 1e-9
+  }
+ },
+ {
+  "in": {
+   "fastestLap": 1000000
+  },
+  "out": {
+   "fastestLap": 1000000
+  }
+ },
+ {
+  "in": {
+   "fastestLap": 1000001
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "fastestLap": "100"
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "source": "evolved"
+  },
+  "out": {
+   "source": "evolved"
+  }
+ },
+ {
+  "in": {
+   "source": "demonstration"
+  },
+  "out": {
+   "source": "demonstration"
+  }
+ },
+ {
+  "in": {
+   "source": "cloud"
+  },
+  "out": {
+   "source": "cloud"
+  }
+ },
+ {
+  "in": {
+   "source": "Evolved"
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "source": ""
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "source": 1
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    }
+   }
+  },
+  "out": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": 0
+   }
+  }
+ },
+ {
+  "in": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": 7
+   }
+  },
+  "out": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": 1
+   }
+  }
+ },
+ {
+  "in": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": -1
+   }
+  },
+  "out": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": 0
+   }
+  }
+ },
+ {
+  "in": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": "0.5"
+   }
+  },
+  "out": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": 0
+   }
+  }
+ },
+ {
+  "in": {
+   "learning": {
+    "context": {
+     "profile": "wild"
+    }
+   }
+  },
+  "out": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "wild",
+     "track": "",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": 0
+   }
+  }
+ },
+ {
+  "in": {
+   "learning": {
+    "context": []
+   }
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "learning": {
+    "styleScore": 1
+   }
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "learning": []
+  },
+  "out": {}
+ },
+ {
+  "in": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "driving": {
+     "averageSpeed": 3,
+     "nearWallRate": -1,
+     "slideRate": 0.5,
+     "smoothness": "1",
+     "steeringChanges": 2000000000,
+     "aliveSeconds": -5,
+     "nearCarRate": 0.25,
+     "crashed": "yes",
+     "carContact": true,
+     "unknown": 1
+    }
+   }
+  },
+  "out": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": 0,
+    "driving": {
+     "averageSpeed": 1,
+     "nearWallRate": 0,
+     "slideRate": 0.5,
+     "steeringChanges": 1000000000,
+     "aliveSeconds": 0,
+     "nearCarRate": 0.25,
+     "carContact": true
+    }
+   }
+  }
+ },
+ {
+  "in": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "driving": []
+   }
+  },
+  "out": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": 0
+   }
+  }
+ },
+ {
+  "in": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "driving": {}
+   }
+  },
+  "out": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": 0,
+    "driving": {}
+   }
+  }
+ },
+ {
+  "in": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "driving": {
+     "smoothness": 2,
+     "slideRate": 2,
+     "nearCarRate": 2,
+     "nearWallRate": 2,
+     "averageSpeed": -1,
+     "steeringChanges": -1,
+     "aliveSeconds": 2000000000
+    }
+   }
+  },
+  "out": {
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": 0,
+    "driving": {
+     "smoothness": 1,
+     "slideRate": 1,
+     "nearCarRate": 1,
+     "nearWallRate": 1,
+     "averageSpeed": 0,
+     "steeringChanges": 0,
+     "aliveSeconds": 1000000000
+    }
+   }
+  }
+ },
+ {
+  "in": {
+   "script": "<script>",
+   "__proto__": {
+    "polluted": true
+   },
+   "constructor": 1,
+   "generation": 2
+  },
+  "out": {
+   "generation": 2
+  }
+ }
+]

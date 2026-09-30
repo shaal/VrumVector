@@ -1,0 +1,10 @@
+{
+ "description": "17 brains and feedback not a list: every list shape before any count.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[],\"brains\":[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],\"feedback\":{}}",
+ "expect": {
+  "ok": false,
+  "error": "shape",
+  "status": 400
+ }
+}

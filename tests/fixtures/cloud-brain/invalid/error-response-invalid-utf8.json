@@ -1,0 +1,10 @@
+{
+ "description": "An error answer that is not UTF-8 is a server error.",
+ "route": "error-response",
+ "bodyBase64": "eyJwcm90b2NvbCI6MSwiZXJyb3IiOiJkaXNhYmxlZCIsIm5vdGUiOiLDIn0=",
+ "expect": {
+  "ok": true,
+  "error": "server-error",
+  "status": 500
+ }
+}

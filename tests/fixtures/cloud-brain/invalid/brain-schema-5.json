@@ -1,0 +1,10 @@
+{
+ "description": "Another brain format.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":5,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[],\"brains\":[],\"feedback\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "brain-schema",
+  "status": 400
+ }
+}

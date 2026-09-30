@@ -1,0 +1,9 @@
+{
+ "description": "A count of 1.5.",
+ "route": "stats-response",
+ "body": "{\"protocol\":1,\"brains\":1,\"tracks\":1.5,\"contributorsToday\":1,\"contributions24h\":1}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

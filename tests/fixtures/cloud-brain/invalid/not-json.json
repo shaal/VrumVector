@@ -1,0 +1,10 @@
+{
+ "description": "Not JSON.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,",
+ "expect": {
+  "ok": false,
+  "error": "not-json",
+  "status": 400
+ }
+}

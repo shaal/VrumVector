@@ -1,0 +1,9 @@
+{
+ "description": "No feedbackAccepted.",
+ "route": "contribute-response",
+ "body": "{\"protocol\":1,\"accepted\":[],\"rejected\":[],\"feedbackRejected\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

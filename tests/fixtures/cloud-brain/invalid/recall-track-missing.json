@@ -1,0 +1,10 @@
+{
+ "description": "No track.",
+ "route": "recall",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"context\":{\"version\":1,\"profile\":\"balanced\",\"track\":\"1a2b3c4d-5e6f7a8b-812\",\"maxSpeed\":15,\"traction\":0.5,\"seconds\":20,\"collisions\":\"off\"}}",
+ "expect": {
+  "ok": false,
+  "error": "track",
+  "status": 400
+ }
+}

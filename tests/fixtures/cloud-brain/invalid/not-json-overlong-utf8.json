@@ -1,0 +1,10 @@
+{
+ "description": "An overlong encoding of \"/\" (0xc0 0xaf).",
+ "route": "contribute",
+ "expect": {
+  "ok": false,
+  "error": "not-json",
+  "status": 400
+ },
+ "bodyBase64": "eyJwcm90b2NvbCI6MSwiYnJhaW5TY2hlbWEiOjYsInRva2VuIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYiLCJub3RlIjoiwK8iLCJ0cmFja3MiOltdLCJicmFpbnMiOltdLCJmZWVkYmFjayI6W119"
+}

@@ -1,0 +1,17 @@
+{
+ "description": "meanFitness 1000000.0000000000582076609134674072265626, just past halfway: rounds up, over 1e6.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[],\"brains\":[],\"feedback\":[{\"id\":\"brain_f7f8d1c4119a66e85d7ed05f290501dd\",\"context\":{\"version\":1,\"profile\":\"balanced\",\"track\":\"1a2b3c4d-5e6f7a8b-812\",\"maxSpeed\":15,\"traction\":0.5,\"seconds\":20,\"collisions\":\"off\"},\"meanFitness\":1000000.0000000000582076609134674072265626,\"count\":12}]}",
+ "expect": {
+  "ok": true,
+  "accepted": [],
+  "rejected": [],
+  "feedbackAccepted": 0,
+  "feedbackRejected": [
+   {
+    "index": 0,
+    "reason": "feedback-numbers"
+   }
+  ]
+ }
+}

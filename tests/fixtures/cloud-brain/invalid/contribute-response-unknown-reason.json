@@ -1,0 +1,9 @@
+{
+ "description": "A refused item with an unknown reason.",
+ "route": "contribute-response",
+ "body": "{\"protocol\":1,\"accepted\":[],\"rejected\":[{\"index\":0,\"reason\":\"nope\"}],\"feedbackAccepted\":0,\"feedbackRejected\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

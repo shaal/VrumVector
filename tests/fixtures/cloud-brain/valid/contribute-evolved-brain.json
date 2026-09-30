@@ -1,0 +1,53 @@
+{
+ "description": "One evolved brain with its track (by index), dynamics, and meta.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[\"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\"],\"brains\":[{\"vector\":\"AACAv37/X78h9Fg+6qlqP/aDQT2mYG0/BBiJPkBZDD80f7C8gsbFvXxqRr/KWl8/fFXHvs8iBz7ubZg9fDofP3SySb8YfKQ+RBxivy0P7r1lY2Q/s6TtviopNb/hrFu+w7IGP+BtZT8aZ8u+YzsVv3fJtb5GXZK+0fekPsZfVz/hCh2/FyMHvzYU+j4XJLM9EN9sv7w4ST/z8qY+1PUZv7hCPL9lFxY/02Qcvyok175DY1M/mJF0PwFHD7+172C/OYo+P5CRwj4ism2/69nEvnZeBL9SYxG+oaKcPhzOS75xpjg/a0guvzZTaT8Xede+s6twPoeTcb20umi/ERYiv3dzgD5A0Sm/Gc7yvbI1BT4pWR0/AeeUviovPL9chiy9sPBsv7cmmT7NtBc/Pfg1PyDLAD9mrCa/PFcWP7m6nz5532S/r7kZvPPtCb8TPvQ+IRpuv6iLfr6wZZQ+7vqpPQdFXr82SIO+rZQ2vv/OZD86TBS/TcztPdcOEj/MkAk/htR9P+8gBb8tNvm+J+M+Ppjwrr7wiAO/ev8Jv1d2mL72UiW+KQEiv0XBEb/We2m/EYrCvQ9CQ7+fQmo/V669vrw2bT9QTUi/dxz+PjInfz+UjWa/HQxovpGzxD4iiEo9OgJNP8HfY74SWYE+EGpyv2BMHj/Qtkm/aGAqv3HGKL+67ns/9URUv0BI0r29qZ2+H2FZv776Ob0hRdc+CUw/P+eBV76+MV0/5B7tvuzjVL9CxiG/CP3RPIbGYD836Bq9jd8GP2evNb8Iqgu/nGBcvnN2Kr/LvdO+so8Wv48F7j7owzm/CWoKPi+OGz88iFo/5Y0vv3u7dr4hACM/JR2UPvGE2D56eoY8MjEpv86mOr/sdca+ml8Wv9jTEj/tbkU/ZVf/vpUHUL4Pkxc+p40sva+l1j54Bwe/FeY+v65kBz4qf8E9HxdAv7nVQ72fViS/wqJFPxhbQr6Mn0e/pVEXP+LacL5kXxW9JvoAPzYZdr86zDM+f3WJvYFsOb8JAUW+AnA4vxdpwr7qmfa+whw/vlnnab8kEgs+zT8JP66V5D7ipxQ+MVlqPX9nWT++DNi+Swlmv7G94r6ddOE+CGAKv0w5uT5mNzq+5rxVPyx1Wj+HP9C+BNUYPzmqKj4x6n2/pPYjPs0xuj1VtCC/NcF3v2PiCr/IQBA9KIgiv5ifbL8tvle/2sYYP95xAL+Qzw8/FVCdvgUabj4gIWm/VIvJPmau6z4gJis/OsA4PptVFj+rVlS/1N7zvskpB7/QlF4/f95uv6pX0b4QG3e/byDlvg==\",\"fitness\":1432.3,\"track\":0,\"dynamics\":\"MKtTvtSn073oHAG9vDZFPsUzaL3n0Tm+6KjHvdtgFj5eL+Q7OMctPju9jz0K1go+k2ocPlCQjbwc6gW+ZvufPJjXCT6cBvI9w2j5PWaveTyShk++84zlvSoKJb4erEW+fxgtvgGb8z041Ui++q6QPWGBCz6E8Sw+1UZEvKAydD15hDm+wG/4PbiIBT3OonS9W03aPHJcI75gIl69C8jIO/XOQD6pnwQ+RPR5vE0gQz03Ihg+YNsOviHQuz0/+bG5vZU7Ps8pHj6ryQA+nFpBvtgz9r1qdQ8+SU0bPpU0SbzeJjk8pspFPP/v7T0B6RW+HfbVPGeqOz6jHNm9FET0PQ==\",\"meta\":{\"generation\":41,\"parentIds\":[\"brain_964108f23fb236a159c42f29d48ae112\"],\"fastestLap\":1432.5,\"source\":\"evolved\",\"learning\":{\"context\":{\"version\":1,\"profile\":\"balanced\",\"track\":\"1a2b3c4d-5e6f7a8b-812\",\"maxSpeed\":15,\"traction\":0.5,\"seconds\":20,\"collisions\":\"off\"},\"styleScore\":0.25,\"driving\":{\"averageSpeed\":0.62,\"nearWallRate\":0.08,\"slideRate\":0.01,\"smoothness\":0.9,\"crashed\":false}}}}],\"feedback\":[]}",
+ "expect": {
+  "ok": true,
+  "accepted": [
+   "brain_f7f8d1c4119a66e85d7ed05f290501dd"
+  ],
+  "rejected": [],
+  "feedbackAccepted": 0,
+  "feedbackRejected": [],
+  "firstMeta": {
+   "generation": 41,
+   "parentIds": [
+    "brain_964108f23fb236a159c42f29d48ae112"
+   ],
+   "fastestLap": 1432.5,
+   "source": "evolved",
+   "learning": {
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "styleScore": 0.25,
+    "driving": {
+     "averageSpeed": 0.62,
+     "nearWallRate": 0.08,
+     "slideRate": 0.01,
+     "smoothness": 0.9,
+     "crashed": false
+    }
+   }
+  },
+  "fitness": [
+   1432.3
+  ],
+  "tracks": [
+   0
+  ],
+  "trackPrints": [
+   "brain_dff623eaca339dd3cff54ccb60ae221e"
+  ],
+  "dynamicsPrints": [
+   "brain_ede59372981f344272cb26b7985d21cb"
+  ]
+ }
+}

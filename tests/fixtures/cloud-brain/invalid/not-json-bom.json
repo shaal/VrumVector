@@ -1,0 +1,10 @@
+{
+ "description": "A byte-order mark before the JSON.",
+ "route": "contribute",
+ "body": "﻿{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[],\"brains\":[],\"feedback\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "not-json",
+  "status": 400
+ }
+}

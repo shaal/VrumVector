@@ -34,26 +34,7 @@
 
 import { FLAT_LENGTH } from '../brainCodec.js';
 import { hashBrain } from '../archive/hash.js';
-import {cleanContext,clamp} from '../learning/policy.js';
-
-function cleanLearning(value) {
-  if (!value?.context) return undefined;
-  const learning = {context:cleanContext(value.context),styleScore:clamp(value.styleScore,0,1)};
-  if (value.driving && typeof value.driving === 'object') {
-    learning.driving = {};
-    for (const key of ['averageSpeed','nearWallRate','slideRate','smoothness']) {
-      if (Number.isFinite(value.driving[key])) learning.driving[key] = clamp(value.driving[key],0,1);
-    }
-    for (const key of ['steeringChanges','aliveSeconds']) {
-      if (Number.isFinite(value.driving[key])) learning.driving[key] = clamp(value.driving[key],0,1e9);
-    }
-    if (typeof value.driving.crashed === 'boolean') learning.driving.crashed = value.driving.crashed;
-    // Collision mode (car-collisions C4).
-    if (typeof value.driving.carContact === 'boolean') learning.driving.carContact = value.driving.carContact;
-    if (Number.isFinite(value.driving.nearCarRate)) learning.driving.nearCarRate = clamp(value.driving.nearCarRate,0,1);
-  }
-  return learning;
-}
+import {cleanLearning} from '../learning/policy.js';
 
 function f32ToArray(v) {
   if (!v) return null;

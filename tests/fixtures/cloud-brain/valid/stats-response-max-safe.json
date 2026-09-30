@@ -1,0 +1,12 @@
+{
+ "description": "A count of 2^53 - 1.",
+ "route": "stats-response",
+ "body": "{\"protocol\":1,\"brains\":9007199254740991,\"tracks\":1,\"contributorsToday\":1,\"contributions24h\":1}",
+ "expect": {
+  "ok": true,
+  "brains": 9007199254740991,
+  "tracks": 1,
+  "contributorsToday": 1,
+  "contributions24h": 1
+ }
+}

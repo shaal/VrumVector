@@ -1,0 +1,10 @@
+{
+ "description": "An error the browser does not know is a server error.",
+ "route": "error-response",
+ "body": "Internal Server Error",
+ "expect": {
+  "ok": true,
+  "error": "server-error",
+  "status": 500
+ }
+}

@@ -1,0 +1,10 @@
+{
+ "description": "Forget with a short token.",
+ "route": "forget",
+ "body": "{\"protocol\":1,\"token\":\"abc\"}",
+ "expect": {
+  "ok": false,
+  "error": "token",
+  "status": 400
+ }
+}

@@ -1,0 +1,10 @@
+{
+ "description": "A readable error answer with a reason the browser does not know is a server error.",
+ "route": "error-response",
+ "body": "{\"protocol\":1,\"error\":\"nope\"}",
+ "expect": {
+  "ok": true,
+  "error": "server-error",
+  "status": 500
+ }
+}

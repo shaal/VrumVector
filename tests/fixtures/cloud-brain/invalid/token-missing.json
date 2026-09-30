@@ -1,0 +1,10 @@
+{
+ "description": "No token.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"tracks\":[],\"brains\":[],\"feedback\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "token",
+  "status": 400
+ }
+}

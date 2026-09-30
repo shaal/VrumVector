@@ -1,0 +1,10 @@
+{
+ "description": "A listed track that is a number: track (not shape).",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[5],\"brains\":[],\"feedback\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "track",
+  "status": 400
+ }
+}

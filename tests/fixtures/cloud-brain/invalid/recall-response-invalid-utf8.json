@@ -1,0 +1,9 @@
+{
+ "description": "An answer with a byte (0xff) that is never UTF-8.",
+ "route": "recall-response",
+ "expect": {
+  "ok": false,
+  "error": "not-json"
+ },
+ "bodyBase64": "eyJwcm90b2NvbCI6MSwiYnJhaW5TY2hlbWEiOjYsInBvb2wiOltdLCJub3RlIjoi/yJ9"
+}

@@ -1,0 +1,24 @@
+{
+ "description": "The answer to a contribution.",
+ "route": "contribute-response",
+ "body": "{\"protocol\":1,\"accepted\":[\"brain_f7f8d1c4119a66e85d7ed05f290501dd\"],\"rejected\":[{\"index\":1,\"reason\":\"brain-not-finite\"}],\"feedbackAccepted\":3,\"feedbackRejected\":[{\"index\":0,\"reason\":\"feedback-id\"}]}",
+ "expect": {
+  "ok": true,
+  "accepted": [
+   "brain_f7f8d1c4119a66e85d7ed05f290501dd"
+  ],
+  "rejected": [
+   {
+    "index": 1,
+    "reason": "brain-not-finite"
+   }
+  ],
+  "feedbackAccepted": 3,
+  "feedbackRejected": [
+   {
+    "index": 0,
+    "reason": "feedback-id"
+   }
+  ]
+ }
+}

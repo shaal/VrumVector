@@ -1,0 +1,9 @@
+{
+ "description": "A refused brain at index -1.",
+ "route": "contribute-response",
+ "body": "{\"protocol\":1,\"accepted\":[],\"rejected\":[{\"index\":-1,\"reason\":\"brain-fitness\"}],\"feedbackAccepted\":0,\"feedbackRejected\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

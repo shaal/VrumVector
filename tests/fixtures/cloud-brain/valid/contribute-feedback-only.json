@@ -1,0 +1,56 @@
+{
+ "description": "Offspring feedback without brains; counts and fitness at their bounds.",
+ "route": "contribute",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[],\"brains\":[],\"feedback\":[{\"id\":\"brain_f7f8d1c4119a66e85d7ed05f290501dd\",\"context\":{\"version\":1,\"profile\":\"balanced\",\"track\":\"1a2b3c4d-5e6f7a8b-812\",\"maxSpeed\":15,\"traction\":0.5,\"seconds\":20,\"collisions\":\"off\"},\"meanFitness\":1000000,\"count\":1000000},{\"id\":\"brain_964108f23fb236a159c42f29d48ae112\",\"context\":{\"version\":1,\"profile\":\"balanced\",\"track\":\"1a2b3c4d-5e6f7a8b-812\",\"maxSpeed\":15,\"traction\":0.5,\"seconds\":20,\"collisions\":\"off\"},\"meanFitness\":-1000000,\"count\":1},{\"id\":\"brain_964108f23fb236a159c42f29d48ae112\",\"context\":{\"profile\":\"wild\",\"maxSpeed\":500},\"meanFitness\":9.1,\"count\":3}]}",
+ "expect": {
+  "ok": true,
+  "accepted": [],
+  "rejected": [],
+  "feedbackAccepted": 3,
+  "feedbackRejected": [],
+  "feedbackRows": [
+   {
+    "id": "brain_f7f8d1c4119a66e85d7ed05f290501dd",
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "meanFitness": 1000000,
+    "count": 1000000
+   },
+   {
+    "id": "brain_964108f23fb236a159c42f29d48ae112",
+    "context": {
+     "version": 1,
+     "profile": "balanced",
+     "track": "1a2b3c4d-5e6f7a8b-812",
+     "maxSpeed": 15,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "meanFitness": -1000000,
+    "count": 1
+   },
+   {
+    "id": "brain_964108f23fb236a159c42f29d48ae112",
+    "context": {
+     "version": 1,
+     "profile": "wild",
+     "track": "",
+     "maxSpeed": 100,
+     "traction": 0.5,
+     "seconds": 20,
+     "collisions": "off"
+    },
+    "meanFitness": 9.1,
+    "count": 3
+   }
+  ]
+ }
+}

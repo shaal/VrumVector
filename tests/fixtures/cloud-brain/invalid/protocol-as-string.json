@@ -1,0 +1,10 @@
+{
+ "description": "protocol \"1\", a string.",
+ "route": "contribute",
+ "body": "{\"protocol\":\"1\",\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"tracks\":[],\"brains\":[],\"feedback\":[]}",
+ "expect": {
+  "ok": false,
+  "error": "protocol",
+  "status": 400
+ }
+}

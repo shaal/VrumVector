@@ -1,0 +1,12 @@
+{
+ "description": "GET /v1/stats.",
+ "route": "stats-response",
+ "body": "{\"protocol\":1,\"brains\":20000,\"tracks\":31,\"contributorsToday\":4,\"contributions24h\":120}",
+ "expect": {
+  "ok": true,
+  "brains": 20000,
+  "tracks": 31,
+  "contributorsToday": 4,
+  "contributions24h": 120
+ }
+}

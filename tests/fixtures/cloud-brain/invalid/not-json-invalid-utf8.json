@@ -1,0 +1,10 @@
+{
+ "description": "A byte (0xff) that is never UTF-8.",
+ "route": "contribute",
+ "expect": {
+  "ok": false,
+  "error": "not-json",
+  "status": 400
+ },
+ "bodyBase64": "eyJwcm90b2NvbCI6MSwiYnJhaW5TY2hlbWEiOjYsInRva2VuIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYiLCJub3RlIjoi/yIsInRyYWNrcyI6W10sImJyYWlucyI6W10sImZlZWRiYWNrIjpbXX0="
+}

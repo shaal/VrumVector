@@ -1,0 +1,8 @@
+{
+ "description": "Forget a contributor (no brain format needed).",
+ "route": "forget",
+ "body": "{\"protocol\":1,\"token\":\"0123456789abcdef0123456789abcdef\"}",
+ "expect": {
+  "ok": true
+ }
+}
