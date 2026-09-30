@@ -30,15 +30,19 @@
    * @param {number} N
    * @param {number} [canvasW]
    * @param {number} [canvasH]
+   * @param {ArrayLike<number>|null} [popDeathCauses]  length N; car-contact
+   *   deaths (cause 5, collision mode) are left out: they show where cars
+   *   met, not where the road is hard.
    * @returns {Float32Array|null} L2-normalised CRASH_DIM vector, or null if no deaths
    */
-  function encodeDeathMap(popDeathXY, N, canvasW, canvasH) {
+  function encodeDeathMap(popDeathXY, N, canvasW, canvasH, popDeathCauses) {
     if (!popDeathXY || !N) return null;
     const W = canvasW || (typeof canvas !== 'undefined' && canvas && canvas.width) || DEFAULT_W;
     const H = canvasH || (typeof canvas !== 'undefined' && canvas && canvas.height) || DEFAULT_H;
     const grid = new Float32Array(CRASH_DIM);
     let deaths = 0;
     for (let i = 0; i < N; i++) {
+      if (popDeathCauses && popDeathCauses[i] === 5) continue;
       const x = popDeathXY[i * 2];
       const y = popDeathXY[i * 2 + 1];
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;

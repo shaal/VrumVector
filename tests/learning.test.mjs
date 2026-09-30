@@ -89,28 +89,68 @@ test('collision mode joins the learning context; keys without it stay exactly as
   assert.equal(contextKey(context),old(context));
   for(const off of [undefined,null,false,'','off',{enabled:false,heatSize:8}])assert.equal(contextKey({...context,collisions:off}),old(context),String(off));
   const on=cleanContext({...context,collisions:{heatSize:8}});
-  assert.equal(on.collisions,'solid/k8');
-  assert.equal(contextKey(on),JSON.stringify([1,'careful','rectangle',15,.5,20,'solid/k8']));
+  assert.equal(on.collisions,'solid/k8/rays');
+  assert.equal(contextKey(on),JSON.stringify([1,'careful','rectangle',15,.5,20,'solid/k8/rays']));
   assert.notEqual(contextKey(on),contextKey(context));
-  assert.equal(contextKey(on),contextKey({...context,collisions:'solid/k8'}),'a stored label keys like the settings it came from');
-  // Labels: the same heat size the workers use (CarCollisions.config).
-  for(const [value,label] of [[true,'solid/k8'],[{},'solid/k8'],[{heatSize:12.7},'solid/k12'],[{heatSize:0},'solid/k8'],[{heatSize:NaN},'solid/k8'],
-    [{heatSize:Infinity},'solid/kall'],[{heatSize:1e9},'solid/k65536'],['solid/k8/rays','solid/k8/rays'],['SOLID/K8','solid/k8'],['solid/k008','solid/k8'],['solid/k0','solid/k0'],['solid/k99999','solid/k65536'],
+  assert.equal(contextKey(on),contextKey({...context,collisions:'solid/k8/rays'}),'a stored label keys like the settings it came from');
+  // C2's mode (rays see walls only) keeps its own key.
+  assert.notEqual(contextKey(on),contextKey({...context,collisions:'solid/k8'}));
+  assert.equal(contextKey({...context,collisions:{heatSize:8,seeCars:false}}),contextKey({...context,collisions:'solid/k8'}));
+  // Labels: the same heat size the workers use (CarCollisions.config); rays
+  // that see cars unless seeCars is false; blind never changes the label.
+  for(const [value,label] of [[true,'solid/k8/rays'],[{},'solid/k8/rays'],[{heatSize:12.7},'solid/k12/rays'],[{heatSize:0},'solid/k8/rays'],[{heatSize:NaN},'solid/k8/rays'],
+    [{heatSize:Infinity},'solid/kall/rays'],[{heatSize:1e9},'solid/k65536/rays'],[{heatSize:8,seeCars:false},'solid/k8'],[{heatSize:8,seeCars:0},'solid/k8/rays'],
+    [{heatSize:8,blind:[0]},'solid/k8/rays'],[{heatSize:Infinity,seeCars:false},'solid/kall'],
+    ['solid/k8/rays','solid/k8/rays'],['SOLID/K8/RAYS','solid/k8/rays'],['solid/k008/rays','solid/k8/rays'],['SOLID/K8','solid/k8'],['solid/k008','solid/k8'],['solid/k0','solid/k0'],['solid/k99999','solid/k65536'],
     ['<script>','unknown'],['x'.repeat(41),'unknown'],[42,'42']])assert.equal(collisionsLabel(value),label,JSON.stringify(value));
-  for(const [label,settings] of [['solid/k8',{heatSize:8}],['solid/kall',{heatSize:Infinity}],['off',null],['unknown',null],['solid/k0',null],['solid/k8/rays',null]])
+  for(const [label,settings] of [['solid/k8/rays',{heatSize:8}],['solid/kall/rays',{heatSize:Infinity}],['solid/k8',{heatSize:8,seeCars:false}],['solid/kall',{heatSize:Infinity,seeCars:false}],
+    ['off',null],['unknown',null],['solid/k0',null],['solid/k0/rays',null],['solid/k8/radar',null],['solid/k8/rays/x',null]])
     assert.deepEqual(collisionSettings(label),settings,label);
-  assert.equal(collisionsLabel(collisionSettings('solid/k12')),'solid/k12');
+  // A label and the settings it gives are the same mode.
+  for(const label of ['solid/k12','solid/k12/rays','solid/kall','solid/kall/rays'])assert.equal(collisionsLabel(collisionSettings(label)),label);
   // Late results, champions, and feedback follow the key; another collision
-  // mode is never an exact match (how much it counts is task C4).
+  // mode is never an exact match.
   const coach=new LearningCoach();coach.setContext(context);coach.record({fitness:9,popN:1,popStillAlive:1},brain(.4));
   coach.setContext(on);assert.equal(coach.incumbent,null,'collision mode starts its own champion');
   const across=matchContext({learningContext:context},on),same=matchContext({learningContext:on},on);
-  assert.equal(across.exact,false);assert.equal(across.factor,1,'the factor is unchanged until C4');
+  assert.equal(across.exact,false);assert.ok(across.factor<1);
   assert.match(across.label,/transfer candidate/);
   assert.equal(same.exact,true);assert.equal(matchContext({learningContext:{...context,collisions:undefined}},context).exact,true,'legacy memories are normal mode');
   const meta=mergeEvaluations({fitness:4,learningContext:context},{fitness:7,learningContext:on});
   assert.equal(meta.evaluations.length,2,'separate evaluation rows');
   assert.equal(evaluationFor(meta,context).fitness,4);assert.equal(evaluationFor(meta,on).fitness,7);
+});
+test('C4: a memory from another collision mode counts less, and the label says where it is from',()=>{
+  const off=cleanContext(context),rays=cleanContext({...context,collisions:{heatSize:8}}),walls=cleanContext({...context,collisions:'solid/k8'});
+  const k4=cleanContext({...context,collisions:{heatSize:4}}),m=c=>({learningContext:c});
+  // The same mode counts fully; normal driving and Solid cars .8 either way;
+  // two Solid cars modes .9.
+  for(const [memory,query,factor] of [[off,off,1],[rays,rays,1],[off,rays,.8],[rays,off,.8],[walls,rays,.9],[rays,walls,.9],[k4,rays,.9],['unknown',rays,.8],['unknown',off,.8]]){
+    const memoryContext=typeof memory==='string'?{...context,collisions:memory}:memory;
+    const match=matchContext(m(memoryContext),query);
+    assert.ok(Math.abs(match.factor-factor)<1e-12,`${cleanContext(memoryContext).collisions} in ${query.collisions}: ${match.factor}`);
+    assert.equal(match.exact,factor===1);
+  }
+  // It multiplies the other factors: another style and physics too.
+  const both=matchContext(m({...off,profile:'wild',maxSpeed:9}),rays);
+  assert.ok(Math.abs(both.factor-.45*.75*.8)<1e-12);
+  assert.match(both.label,/^wild style · from normal driving · transfer candidate$/);
+  assert.equal(matchContext(m(off),rays).label,'Same style · from normal driving · transfer candidate');
+  assert.equal(matchContext(m(rays),off).label,'Same style · from Solid cars · transfer candidate');
+  assert.equal(matchContext(m(walls),rays).label,'Same style · other Solid cars mode · transfer candidate');
+  assert.equal(matchContext(m({...off,seconds:40}),off).label,'Same style · transfer candidate','no mode note in the same mode');
+  assert.equal(matchContext(m({...off,collisions:'unknown'}),off).label,'Same style · from another car mode · transfer candidate');
+  assert.equal(matchContext(m({...off,collisions:'unknown'}),rays).label,'Same style · from another car mode · transfer candidate');
+  assert.equal(matchContext(m(rays),{...off,collisions:'unknown'}).label,'Same style · from another car mode · transfer candidate');
+  assert.equal(matchContext({},rays).label,'Legacy memory · style unverified · from normal driving');
+  assert.equal(matchContext({},off).label,'Legacy memory · style unverified');
+  // A legacy memory (no context) is normal driving.
+  assert.equal(matchContext({},off).factor,.6);
+  assert.ok(Math.abs(matchContext({},rays).factor-.6*.8)<1e-12);
+  assert.equal(matchContext({},{...context,profile:'balanced'}).factor,.9,'normal mode is unchanged');
+  // evaluationFor prefers a row from this mode over one from another mode.
+  const meta=mergeEvaluations({fitness:9,learningContext:{...off,seconds:40}},{fitness:3,learningContext:{...rays,seconds:40}});
+  assert.equal(evaluationFor(meta,rays).fitness,3);assert.equal(evaluationFor(meta,off).fitness,9);
 });
 test('deduplicated brains keep separate bounded evaluations for each profile and track',()=>{
   const careful={fitness:4,learningContext:context},wild={fitness:8,learningContext:{...context,profile:'wild'}};
@@ -147,6 +187,13 @@ test('cross-tab memories preserve bounded driving metrics',async()=>{
   input.learning.driving={...driving,averageSpeed:Infinity,slideRate:-1,aliveSeconds:NaN,unexpected:'ignored'};
   const safe=fromWire(toWire(brain(.2),4,null,input)).meta.learning.driving;
   assert.equal(safe.slideRate,0);assert.equal(safe.averageSpeed,undefined);assert.equal(safe.aliveSeconds,undefined);assert.equal(safe.unexpected,undefined);
+  // C4: collision-mode drivers carry their contact statistics too.
+  input.learning={context:{...context,collisions:{heatSize:8}},styleScore:.4,driving:{...driving,carContact:true,nearCarRate:.3}};
+  const solid=fromWire(toWire(brain(.2),4,null,input)).meta.learning;
+  assert.equal(solid.context.collisions,'solid/k8/rays');assert.deepEqual(solid.driving,{...driving,carContact:true,nearCarRate:.3});
+  input.learning.driving={...driving,carContact:'yes',nearCarRate:7};
+  const odd=fromWire(toWire(brain(.2),4,null,input)).meta.learning.driving;
+  assert.equal(odd.carContact,undefined);assert.equal(odd.nearCarRate,1);
 });
 test('player lap times remain positive when the AI generation clock resets',()=>{
   const sim=new Simulation();sim.begin(new Float32Array(244));

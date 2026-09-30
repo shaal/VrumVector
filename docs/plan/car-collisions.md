@@ -1,10 +1,12 @@
 # Car collisions: cars that cannot drive through each other (plan)
 
-**Status:** C1, C2, and C3 are built. C1: the shared core
+**Status:** C1 to C4 are built. C1: the shared core
 `AI-Car-Racer/collisions.js` and the `Car.update()` split. C2: all four
 simulators use the core, behind an experiment that is off by default
 (🧪 Experiments → "Solid cars", or `?collide=1`). C3: in that mode the rays
-also see the solid cars of their heat. Decisions D1–D4 were
+also see the solid cars of their heat. C4: vector memory keeps the modes
+apart (context label, recall factor, crash maps, adaptive gates, SONA).
+Decisions D1–D4 were
 taken on 2026-09-24; D2 was changed the same day, during C2 (below).
 Results: [validation](../validation/car-collisions.md).
 
@@ -196,22 +198,27 @@ hand-kept copy of the car polygon (`makeCarPolygon`); do not add a second.
   mode as a non-exact match. **Built in C2** (pulled forward from C4, so
   collision-mode results are kept under their own key and never count as
   normal-mode results): the field (`'off'` or `'solid/k8'`), the key, and
-  "never an exact match". A collision-mode generation can still recall
-  normal-mode memories as transfer candidates, at full weight: how much a
-  different mode counts in `matchContext` (its factor) stays in C4.
+  "never an exact match". **Built in C4:** the label is `'solid/k8/rays'`
+  when the rays see cars (C3), and `'solid/k8'` stays for rays that see
+  walls only (C2 runs); another mode counts .9 (two Solid cars modes) or
+  .8 (normal driving and Solid cars) in `matchContext`, provisional until
+  C6 measures it with its own ablation. Details:
+  [validation](../validation/car-collisions.md#c4-learning-context-and-vector-memory).
 - **Separated automatically once the context has the field:** evaluation
   rows, reranker feedback, the coach and champion cache, transfer candidates,
   and late-result rejection.
 - **Crash maps.** Leave car-contact deaths out of the Adaptive-gates crash
   centroid, or gates will chase pile-ups. A separate "contact heat" map is
-  optional.
+  optional. **Built in C4:** contact deaths are left out of the crash maps
+  and the reach rates too; maps and remembered layouts are kept per mode.
 - **Death cause.** A new cause code (5 = car contact) must be added where
   causes are counted: `metricsComputeRow` in `main.js` and `causeHistogram` in
   `crashMapCodec.js` count unknown codes as "alive" today.
 - **Archive metadata.** Add `carContact` and `nearCarRate` to `meta.driving`
   for the panel and for analysis.
 - **SONA** keys patterns by track only, so it cannot tell the modes apart.
-  Pause SONA steps in collision mode, or add the mode to the step.
+  Pause SONA steps in collision mode, or add the mode to the step. **Built
+  in C4:** paused (and the LoRA adapter's reward with it).
 
 ## How to prove it works
 
@@ -316,7 +323,7 @@ Smaller defaults (change them at C1 review if needed):
   - [x] Lesion switches `seeCars: false` and `blind` in the collision
     settings; `genEnd.collisions` counts car readings; snapshots carry
     `bestReadingKinds`.
-- [ ] **C4 — Learning context and ruvector.** The backward-compatible
+- [x] **C4 — Learning context and ruvector.** The backward-compatible
   `collisions` field, the `matchContext` factor, `meta.driving` fields,
   crash-map filtering, SONA guard. About 3 hours.
   depends: C2
@@ -324,20 +331,32 @@ Smaller defaults (change them at C1 review if needed):
     appended to `contextKey` only when it is not `'off'`, and "a different
     mode is never an exact match". Contact deaths are already left out of
     the Adaptive-gates crash centroid.
-  - [ ] Still to do: the `matchContext` factor for a different mode
-    (and whether C2 runs, whose rays saw walls only, need their own label:
-    C3 kept `'solid/k8'`),
-    `carContact` and `nearCarRate` in `meta.driving`, contact deaths in the
-    crash-map archive (a separate heat map, or filtered out), crash maps
-    tagged with the mode (so Adaptive gates never recall a normal-mode layout
-    in collision mode, and reach rates leave contact deaths out), and the
-    SONA guard.
+  - [x] The label split: `'solid/k8/rays'` for rays that see cars,
+    `'solid/k8'` for C2 runs (walls only) and the `seeCars: false` lesion.
+  - [x] The `matchContext` factor for another mode: .9 between two Solid
+    cars modes, .8 between normal driving and Solid cars (provisional; C6
+    measures it).
+  - [x] `carContact` and `nearCarRate` in `meta.driving` and on the
+    cross-tab wire.
+  - [x] Contact deaths filtered out of the crash maps; maps tagged with the
+    mode; Adaptive gates recall and remember layouts per mode, and switch
+    layouts when Solid cars changes while training; reach rates leave
+    contact deaths out (with a 5-car floor, so an unreached gate is never
+    pruned); pruning still counts contact deaths, as before.
+  - [x] The SONA guard: no step, trajectory, or memory review in collision
+    mode, and no LoRA reward; a pending trajectory is settled first.
 - [ ] **C5 — Display.** Focus the leader's heat, draw contacts, and show the
   mode in the panel. About 3 hours.
   depends: C2
 - [ ] **C6 — Benchmark and validation doc.** The five arms, the traffic
   fixture, the lesion test, two sessions, `docs/validation/car-collisions.md`.
-  About 4 hours plus compute.
+  About 4 hours plus compute. Arm 3 (rays that see walls only) runs with
+  `carCollisions.seeCars = false`, so its context is `'solid/k8'` (C4).
+  C4's .8 and .9 factors only reorder an archive that mixes modes, so arm 5
+  does not measure them: that needs its own ablation (a mixed archive,
+  factor 1 against .8, Rectangle and Triangle, n ≥ 6 over 2 sessions).
+  Also look at the reach-rate floor (5 cars at risk): past it, contact
+  deaths count again, which can show a drop that is not there.
   depends: C3, C4
 - [ ] **C7 — Optional.** Separate car inputs with the padding migration; the
   bump response; one-way contact with your car; rivals chosen from the

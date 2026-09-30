@@ -1,4 +1,14 @@
 import {similarityFromDistance} from './similarity.js';
+import {collisionsLabel} from '../learning/policy.js';
+
+// The collision mode a crash map was archived in (car-collisions C4). Maps
+// from before C4 carry no tag: normal driving, unless their cause histogram
+// counts car contacts, which only collision mode has ('unknown', so they
+// match no mode).
+export function crashMapMode(meta){
+  if(meta&&meta.collisions!=null)return collisionsLabel(meta.collisions);
+  return meta&&meta.causes&&Number(meta.causes.contact)>0?'unknown':'off';
+}
 
 // One crash-map search hit as adaptive gates read it. `similarity` is cosine,
 // which is what CRASH_SIM_MIN in adaptiveGates.js is compared against.
@@ -18,6 +28,7 @@ export function crashLayoutFromHit(hit,entry){
     causes:meta.causes||null,
     bottleneck:meta.bottleneck!=null?(meta.bottleneck|0):null,
     geometrySig:meta.geometrySig||null,
+    collisions:crashMapMode(meta),
     timestamp:meta.timestamp||0,
   };
 }

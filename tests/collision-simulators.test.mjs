@@ -180,19 +180,24 @@ test('the transfer check runs its trials in the context\'s collision mode', asyn
     return worker;
   };
   const context = cleanContext({profile: 'balanced', track: 'transfer-collide', maxSpeed: 15, traction: .5, seconds: 4, collisions: ON});
-  assert.equal(context.collisions, 'solid/k8');
+  assert.equal(context.collisions, 'solid/k8/rays');
   const base = {context, track: {}, profile: 'balanced', maxSpeed: 15, traction: .5, seconds: 4, seeds: [new Float32Array(244).fill(.2)], spawn, trialsPerRun: 1};
   store.clear();
   await runTransferCheck(base);
   assert.deepEqual(posted.map(m => plainSettings(m.collisions)), [ON, ON], 'the mode comes from the context');
-  assert.ok(posted.every(m => m.key.includes('solid/k8')), 'the trial key includes the mode');
+  assert.ok(posted.every(m => m.key.includes('solid/k8/rays')), 'the trial key includes the mode');
   posted.length = 0; store.clear();
   await runTransferCheck({...base, context: cleanContext({...context, collisions: 'off'})});
   assert.ok(posted.length === 2 && posted.every(m => !('collisions' in m)), 'normal mode posts no collision field');
   // A mode this build cannot run is refused, never tested as normal driving.
   posted.length = 0; store.clear();
-  await assert.rejects(runTransferCheck({...base, context: {...context, collisions: 'solid/k8/rays'}}), /cannot run transfer trials in collision mode solid\/k8\/rays/);
+  await assert.rejects(runTransferCheck({...base, context: {...context, collisions: 'solid/k8/radar'}}), /cannot run transfer trials in collision mode solid\/k8\/radar/);
   assert.equal(posted.length, 0);
+  // C2's mode (rays see walls only) runs its trials with the seeCars: false lesion.
+  store.clear();
+  await runTransferCheck({...base, context: cleanContext({...context, collisions: 'solid/k8'})});
+  assert.deepEqual(posted.map(m => ({...m.collisions})), [{heatSize: 8, seeCars: false}, {heatSize: 8, seeCars: false}]);
+  assert.ok(posted.every(m => m.key.includes('solid/k8') && !m.key.includes('solid/k8/rays')));
 });
 
 test('collisions off: the Node simulator matches the trial worker\'s simulator from before C2 and C3', () => {

@@ -5,29 +5,46 @@ export const clamp=(n,lo,hi)=>Math.max(lo,Math.min(hi,Number(n)||0));
 export const validBrain=vector=>vector?.length===FLAT_LENGTH&&Array.from(vector).every(Number.isFinite);
 export const qualityFromFitness=fitness=>Number.isFinite(fitness)?Math.max(0,Math.tanh(fitness/20)):0;
 // Car collisions (docs/plan/car-collisions.md) as a context label: 'off', or
-// 'solid/k<K>' for solid cars in heats of K ('solid/kall': one heat). A
-// settings object ({heatSize}, as the workers get it) or true gives its label.
-// A label from elsewhere (an archive, another tab) is kept when it looks like
-// one, so modes never merge; anything else that is not off is 'unknown'.
+// 'solid/k<K>/rays' for solid cars in heats of K whose rays see the cars of
+// their heat (C3; 'solid/kall/rays': one heat). 'solid/k<K>' is the same mode
+// with rays that see walls only: every C2 run, and the seeCars: false lesion.
+// C4 split the two, so a C2 champion is not an exact match for C3 driving. A
+// settings object ({heatSize, seeCars}, as the workers get it) or true gives
+// its label; blind (a lesion of some cars only) does not change it. A label
+// from elsewhere (an archive, another tab) is kept when it looks like one, so
+// modes never merge; anything else that is not off is 'unknown'.
 export function collisionsLabel(value){
   if(value==null||value===false||value===''||value==='off')return 'off';
   if(value===true)value={};
   if(typeof value==='object'){
     if(value.enabled===false)return 'off';
     const k=Number(value.heatSize??8);
-    return 'solid/k'+(k===Infinity?'all':k>=1?Math.min(65536,Math.floor(k)):8);
+    return 'solid/k'+(k===Infinity?'all':k>=1?Math.min(65536,Math.floor(k)):8)+(value.seeCars===false?'':'/rays');
   }
   // One spelling per mode: 'solid/k008' is 'solid/k8'.
   const text=String(value).toLowerCase().replace(/^solid\/k(\d+)/,(_,k)=>'solid/k'+Math.min(65536,Number(k)));
   return text.length<=40&&/^[a-z0-9]+(\/[a-z0-9]+){0,4}$/.test(text)?text:'unknown';
 }
-// The worker settings ({heatSize}) for a context label, or null (off, or a
-// mode this build cannot run).
+// The worker settings ({heatSize}, plus seeCars: false for rays that see
+// walls only) for a context label, or null (off, or a mode this build cannot
+// run).
 export function collisionSettings(label){
-  const m=/^solid\/k(all|\d{1,5})$/.exec(collisionsLabel(label));
+  const m=/^solid\/k(all|\d{1,5})(\/rays)?$/.exec(collisionsLabel(label));
   if(!m)return null;
   const k=m[1]==='all'?Infinity:Math.min(65536,Number(m[1]));
-  return k>=1?{heatSize:k}:null;
+  if(!(k>=1))return null;
+  return m[2]?{heatSize:k}:{heatSize:k,seeCars:false};
+}
+// How much a memory from another collision mode counts in matchContext (C4).
+// Provisional, not measured. It only reorders an archive that mixes modes; C6
+// measures it (factor 1 against .8 on a mixed archive), and the transfer
+// guard stops recall across contexts where it hurts. Two Solid cars modes
+// (another heat size, or rays that see walls only) are closer to each other
+// than normal driving is to either.
+export function collisionModeFactor(memory,query){
+  const a=collisionsLabel(memory),b=collisionsLabel(query);
+  if(a===b)return 1;
+  return a.startsWith('solid/')&&b.startsWith('solid/')?.9:.8;
 }
 export function cleanContext(value={}) {
   const allowed=['balanced','calm','careful','wild','reckless'];
@@ -75,15 +92,20 @@ export function evaluationFor(meta,context){
 export function matchContext(meta,context) {
   if(!context)return {factor:1,exact:false,label:'Archive memory'};
   const q=cleanContext(context),m=meta?.learningContext?cleanContext(meta.learningContext):null;
-  if(!m)return {factor:q.profile==='balanced'?.9:.6,exact:false,label:'Legacy memory · style unverified'};
+  // A memory from before contexts existed is from normal driving.
+  if(!m)return {factor:(q.profile==='balanced'?.9:.6)*collisionModeFactor('off',q.collisions),exact:false,
+    label:'Legacy memory · style unverified'+(q.collisions==='off'?'':' · from normal driving')};
   const profile=m.profile===q.profile,track=!!q.track&&m.track===q.track;
   const physics=m.maxSpeed===q.maxSpeed&&m.traction===q.traction;
   const duration=m.seconds===q.seconds;
   // An exact match is the same context key, so another collision mode is
-  // never exact. How much a different mode counts (the factor) is task C4.
+  // never exact, and it counts less (collisionModeFactor).
   const mode=m.collisions===q.collisions,same=track&&physics&&duration&&mode;
-  return {factor:(profile?1:.45)*(physics?1:.75)*(duration?1:.85),exact:profile&&same,
-    label:profile?(same?'Same style, track, and conditions':'Same style · transfer candidate'):`${m.profile} style · transfer candidate`};
+  const solid=c=>c.startsWith('solid/');
+  const other=mode?'':m.collisions==='off'?' · from normal driving':!solid(m.collisions)?' · from another car mode':
+    q.collisions==='off'?' · from Solid cars':solid(q.collisions)?' · other Solid cars mode':' · from another car mode';
+  return {factor:(profile?1:.45)*(physics?1:.75)*(duration?1:.85)*collisionModeFactor(m.collisions,q.collisions),exact:profile&&same,
+    label:profile?(same?'Same style, track, and conditions':`Same style${other} · transfer candidate`):`${m.profile} style${other} · transfer candidate`};
 }
 export function selectDiverse(candidates,k=10) {
   const selected=[],limit=Math.max(1,Math.min(50,k|0));

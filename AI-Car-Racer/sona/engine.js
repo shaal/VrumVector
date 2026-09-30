@@ -264,6 +264,20 @@ export function addStep(activations, _attention, stepReward) {
   if(_traj.steps.length>128)_traj.steps.shift();
 }
 
+// Close the pending trajectory before collision-mode driving (car collisions,
+// C4), so it can neither take a collision-mode fitness nor outlive its track.
+// An empty one closes without learning. One that holds steps (from normal
+// driving: since C4, collision mode records none) is learned, with its best step
+// reward, a generation's fitness, as the final fitness. Returns
+// endTrajectory's result, or null.
+export function settleTrajectory() {
+  if (!_traj) return null;
+  if (!_traj.steps.length) { _traj = null; return null; }
+  let best = -Infinity;
+  for (const step of _traj.steps) if (step.reward > best) best = step.reward;
+  return endTrajectory(best);
+}
+
 // Close the trajectory and crystallize patterns. We emit one processTask
 // per recorded step (activations as the embedding, step reward as quality),
 // then one final processTask on the trackVec itself keyed by the session's
