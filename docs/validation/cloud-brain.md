@@ -9,7 +9,7 @@ This page records what each task measured and proved. The toolchain spike
 `AI-Car-Racer/cloud/wire.js`, protocol 1. The browser builds requests and
 checks answers with it; the service (CB2, Rust) applies the same rules in the
 same order, and both run the same fixtures (`tests/fixtures/cloud-brain/`:
-51 valid and 104 invalid bodies, plus `contexts.json` (49 rows) and
+52 valid and 104 invalid bodies, plus `contexts.json` (49 rows) and
 `meta.json` (39 rows) for cleaning, and, since CB2, `match.json` (182 rows:
 the context match the service ranks with); made by
 `node scripts/cloud-brain-fixtures.mjs`). A fixture's body is `body` (text,
@@ -165,7 +165,7 @@ format. (A `POST` with a `text/plain` body is a CORS simple request; a
 
 | Answer | Shape | Checked by the browser |
 |---|---|---|
-| Recall | `{protocol, brainSchema, pool: [{id, vector, fitness, score, meta, feedback: {weight, count, contributors}}]}` | Up to 64 entries (`shape`; no pool is an empty one); an entry is dropped when it is not an object (`shape`), its vector is bad, its id is not its vector's id (`pool-id`), or its id came earlier (`pool-duplicate`); `fitness` and `score` clamped to ±1e6, `weight` to ±1, counts whole from 0 to 1e6 (else 0); meta cleaned as above |
+| Recall | `{protocol, brainSchema, pool: [{id, vector, fitness, score, trackSim, meta, feedback: {weight, count, contributors}}]}` | Up to 64 entries (`shape`; no pool is an empty one); an entry is dropped when it is not an object (`shape`), its vector is bad, its id is not its vector's id (`pool-id`), or its id came earlier (`pool-duplicate`); `fitness` and `score` clamped to ±1e6, `weight` to ±1, counts whole from 0 to 1e6 (else 0); `trackSim` (added in CB3: how near the track it was found on was) clamped to ±1, null when absent or not a number; meta cleaned as above |
 | Contribute | `{protocol, accepted: [id], rejected: [{index, reason}], feedbackAccepted, feedbackRejected: [{index, reason}]}` | Up to 16 cloud ids; `rejected` up to 16 items with index 0 to 15, `feedbackRejected` up to 50 with index 0 to 49, reasons known ones, including three only the service gives (CB2): `feedback-unknown`, a row about a brain it does not hold; `feedback-duplicate`, a second row for the same brain and context in one request; `feedback-full`, a new context for a brain whose 8 contexts cannot be replaced (a list absent or null is empty); `feedbackAccepted` an integer from 0 to 50, required; anything else → `shape` |
 | Stats | `{protocol, brains, tracks, contributorsToday, contributions24h}` | All four required, integers from 0 to 2^53 − 1 → else `shape` |
 | Error | `{protocol, error}` | An unknown or unreadable error (another protocol, not JSON, over 256 KiB, not UTF-8) is `server-error` |
@@ -266,7 +266,8 @@ Worker adds the front door, the object and its SQLite store.
   (0.5 + 0.5·track similarity) × (0.5 + 0.5·tanh(fitness / 100)) ×
   (1 + 0.3·dynamics similarity, for the 25 nearest dynamics) ×
   matchContext factor × (1 + 0.3·feedback weight in the query's context);
-  the best k.
+  the best k. Each entry carries `trackSim`, the similarity of the track it
+  was found on (0 from the fallback), since CB3.
 - **Feedback** follows the browser's `observeOffspring`: in the brain's own
   context (the same context key, with a track key, as `matchContext`'s exact
   match needs) the baseline is its fitness; in another context the first
@@ -367,3 +368,118 @@ pool is as large as the nearest tracks' brains.
 | Mutations of `brain.rs` | 41 single changes over two rounds (constants, bounds, orders, caps, protections, ties, windows, the context replacement rule, the minute counts, the rebuild's cleanup): all fail a test but two that behave the same (the best of a brain's track similarities, when a brain has one track; `<` for `<=` at the 24-hour edge, which the stats filter repeats) |
 | Both targets | `bash scripts/build-cloud-brain.sh --test`: native tests, then the Worker checked for `wasm32-unknown-unknown` (D1's fallback; `getrandom` gets its JavaScript backend there) |
 | The spike routes | `npm run test:cloud-brain:spike` still passes: they stay, behind the `spike` feature and `CLOUD_BRAIN_SPIKE=1`, and the load script reads memory through them |
+
+## CB3: the browser client
+
+`AI-Car-Racer/cloud/`: `mode.js` (which memory), `client.js` (the outbox and
+HTTP), `session.js` (the bridge and the client kept in step), `ui.js` (the
+Memory control), `config.json` (`{"endpoint": null}` until CB5 deploys the
+service). The client never imports the bridge: it is tested in Node with a
+fake `fetch`.
+
+### How it works
+
+- **Switching.** The Vector Memory panel shows **Memory: This browser ·
+  Shared (cloud, beta)** where a service is configured and the page is a
+  secure context (`crypto.subtle` computes cloud ids); elsewhere the row is
+  hidden. A radio alone changes nothing (arrow keys move through radios):
+  a Switch button, which says it reloads the page, switches. Switching to
+  Shared first says what is sent: the best cars' weights (a clone of your
+  own driving too, marked as such), fitness, laps, generation and lineage,
+  driving summaries and the 64-number driving signature, the track's
+  embedding and a fingerprint of its shape, learning settings, offspring
+  results, with an anonymous token that links contributions to each other;
+  the service sees the IP address and does not store it; recordings are
+  never sent. The choice and the consent are saved (`vv.cloudBrain`) and
+  the page reloads.
+  `?brain=shared` and `?brain=local` choose too, and are then removed from
+  the address, so the control is never overridden by a link. A link that
+  opens shared mode records no consent: the page asks the same question
+  before anything is sent, and Cancel returns to this browser's memory.
+- **Isolation.** `cloud/scope.js`, the first script of the page, fixes the
+  mode before any other code runs. Shared mode opens its own IndexedDB
+  (`rv_car_learning_shared`; the GNN, LoRA and SONA state live there too),
+  talks to other tabs only on `vectorvroom-archive-shared`, and keeps its own
+  copy of the training state in `localStorage` (`<key>.shared` for the car
+  saved each generation and used as a prior seed, the driver champions, the
+  transfer guards, the schema version, and their siblings). So neither
+  mode's training reaches the other's.
+- **Push.** A brain this tab archives (not one it pulled, nor one another tab
+  sent) goes to the outbox with its cloud id, its parents' cloud ids (local
+  archive ids mapped to SHA-256 of their weights), its track and dynamics
+  scaled to unit vectors, its meta, and its source: `demonstration` when the
+  archived elite is the exact copy of your driving ("Use my driving":
+  `buildPopulation` keeps a per-car origin, the sim worker reports the
+  elite's), else `evolved`. Offspring feedback the bridge applies goes too,
+  as cloud ids. What the page archives before the session attaches (while
+  it loads its config) waits in the bridge and is handed over. The outbox
+  lives in `localStorage` (`vv.cloudBrainOutbox`; the newest 64 brains and
+  200 rows), shared by this browser's tabs under a Web Lock (every change
+  re-reads it; a browser without Web Locks serializes each tab alone, so
+  two tabs could send the same item twice), and is sent at most every 10 s, split by the counts (16
+  brains on 4 tracks, 50 rows) and by bytes (64 KB). A request holds one row
+  per brain and context (the next row about it waits for the next request,
+  so each generation counts) and no row about a brain still waiting.
+  Refused items, and requests the service refuses whole, leave the outbox;
+  a pause, a 429 or a 5xx keeps it. If `localStorage` is full, the stored
+  copy is removed rather than left stale (sent twice after a reload).
+- **Pull.** A pool for the current track (k 50) is recalled when the page
+  starts (the editor's track is embedded if the run has not started, so the
+  first generation is already seeded from it), when the track changes, and
+  every 5 generations (counted by the coach, whether or not a generation
+  archived a new brain: a plateau needs fresh shared brains the most), and
+  when the learning context changes (a pool's ranking and feedback are per
+  context). Its
+  brains enter the replica through the
+  bridge (`acceptCloudPool`), tagged source `cloud`, without training this
+  tab's LoRA or SONA on them and without being relayed to other tabs. A
+  brain the service found on a track this near (`trackSim` ≥ 0.95) is filed
+  on the current track; others are kept without a track (only the fallback
+  for a replica with no brain on its nearest tracks uses them) until a later
+  pull finds them on a near track, which files them there. The replica
+  takes up to 2 000 pulled brains, then only ones on the current track up
+  to 4 000; past that a pull only refreshes feedback. A pulled brain keeps
+  its `cloud` tag when it is archived again. The service's feedback
+  for this context replaces the replica's own weights. `recommendSeeds`
+  stays synchronous and ranks the replica as before.
+- **Offline.** A failure backs off from 1 s, doubling, to 60 s (±20 %) on a
+  monotonic clock; sending and reading back off apart (a busy contribution
+  queue does not stop recalls, and a recall does not end its backoff), and
+  a network failure holds both until either succeeds. A refused recall
+  backs off too. The status line turns into "Shared brain offline —
+  training from the last copy (retrying in N s)", counting down; training
+  never waits on the network; only the state is announced to screen
+  readers, not the countdown. A small notice also shows at the bottom of
+  the page while offline (the panel is often collapsed). "Paused" when the
+  service's breaker is on; "refused this version — reload to update" when
+  the service refuses the page's protocol or brain format, and then nothing
+  more is sent or asked until the page reloads (the outbox is kept for the
+  newer page). A busy service's backoff outlasts a network failure on top
+  of it. The status says "connecting" until the first answer.
+
+### Evidence
+
+| Claim | Test |
+|---|---|
+| The client | `npm run test:cloud-brain` (`tests/cloud-brain-client.test.mjs`, 19 tests, with a JS fake of the service in `tests/helpers/cloud-brain-fake.mjs`): the mode and consent (the URL chooses, the saved choice otherwise, never shared without a secure context; only a yes records consent, kept across switches); the token; no request at all without an endpoint, and only https or local http endpoints; the outbox survives a new page and empties once sent; 40 brains with the largest meta and 120 rows split into requests within the counts and 64 KB (some filled past 50 KB); one row per brain and context per request (three generations' rows about one parent all counted) and no row ahead of its brain (24 brains and their rows, all counted); two tabs sharing the outbox lose nothing and send nothing twice; refused items and refused requests never resent; offline backoff 1, 2, 4 … 32, 60, 60 s with no request in between, and kept items sent on recovery; paused and busy keep the outbox; sending and reading back off apart, and a refused recall backs off; a full `localStorage` leaves no stale copy; a page refused as outdated sends and asks nothing more and keeps its outbox for a newer page; a network failure does not erase a 429 backoff; the config is fetched once a try and retried only when unreadable; recall and stats; a session maps ids, scales vectors, pulls on start, on a new track, on a new learning context, every 5 generations (new brains or not, and after the coach's count restarts), and not without a track or with a track of zeros; the clone's exact copy keeps its origin in `buildPopulation`, and the real sim worker reports it only for a clone elite |
+| The app | `npm run test:cloud-brain:browser` (`tests/cloud-brain-browser.mjs`, Chromium): no Memory row without a service; with one, a radio alone switches nothing, and Switch to Shared shows the disclosure first (dismissed: nothing saved), accepting reloads into shared mode, and back; a link to shared mode asks first (declined: back to local, nothing sent), is removed from the address, and an opt-out from the control survives a reload; on the fake, the pull on start fills the replica (6 brains, tagged `cloud`) and the first generation (generation 0, read while it runs) is seeded from it (15 of 16 cars), trained brains and offspring feedback about the pulled brains are pushed with context and source, the pulled brains kept without a track are filed on it once a pull finds them there, offline shows the banner (the countdown outside the announced text) and the notice outside the panel, and recovers; **a clone of your driving** (one car, the clone in the protected slot) is archived and sent tagged `demonstration`; **isolation**: after two local generations and a shared session with contributions and pulls, every store of `rv_car_learning` is byte-identical, and a local generation after it takes no shared brain and the local champions are unchanged; **two profiles on the real local service** (the built Worker under wrangler dev): A trains and its brains reach the service; B, fresh, has 15 of 16 cars of its generation 0 seeded from A's brain; after B trains, a brain in A's pool has feedback from 2 contributors (the run writes `test-results/cloud-brain/browser.json`). The whole test passes in Chromium (four runs in a row) and in WebKit (`BROWSER=webkit`, Safari's engine: Web Locks and the storage scoping behave the same); Firefox would not launch in this environment at all (a blank page timed out), so it is not verified |
+| Nothing else moved | `npm run test:learning` (147), `test:learning:browser`, `test:demonstration:browser` (which now checks that every car has an origin and no more carry `demonstration` than were drawn from your driving), and the collision suites (the worker's message is unchanged unless the elite is a clone) |
+
+### Limits
+
+- Both modes share what is not training state: "Use my driving" recordings
+  (`vv-demonstrations`), settings, the graphics and multiplayer choices, the
+  track's checkpoints, and the named brain saves (`vv_brainsave_*`: loading
+  one into a mode is the player's choice).
+- A link that opens shared mode asks with the browser's own dialog, which
+  holds the page until answered (a sandboxed frame answers Cancel: the page
+  stays local).
+- Pulled brains carry the fitness their contributor claimed, on the track
+  they were found on; a brain from another circuit is kept without a track.
+  A pool is at most the nearest tracks' brains, so it can be smaller than k.
+- A brain the service later quarantines or evicts stays in a replica that
+  already pulled it (the replica is capped at 2 000 pulled brains).
+- Claimed fitness is trusted until CB4 (quarantine until corroborated).
+  Feedback sent twice (a lost answer, then a retry) counts twice.
+- The service is not deployed: CB5 writes the endpoint into
+  `cloud/config.json` at deploy.

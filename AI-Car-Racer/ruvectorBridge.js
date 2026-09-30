@@ -49,6 +49,7 @@ import {
   stats as crosstabStats,
 } from './crosstab/channel.js';
 import { toWire as crosstabToWire, fromWire as crosstabFromWire } from './crosstab/wire.js';
+import { brainMode as selectBrainMode } from './cloud/mode.js';
 // P3.B — lineage DAG. Replaces the hand-walked parentIds traversal in
 // getLineage() with a cycle-safe DAG structure (ruvector_dag_wasm) shadowed
 // by a JS-side adjacency list for O(depth) queries. Same fallback discipline
@@ -107,7 +108,13 @@ function _obsTime(label, fn) {
   try { return fn(); } finally { _obsEnd(label); }
 }
 
-const IDB_NAME = 'rv_car_learning';
+// Which memory this page learns into (CB3, cloud/mode.js): shared mode keeps
+// its replica of the cloud brain in a database of its own, so nothing learned
+// in one mode reaches the other. Chosen once per page load.
+// (cloud/scope.js gives shared mode its own localStorage keys too, the schema
+// version and the saved cars among them.)
+const BRAIN_MODE = selectBrainMode();
+const IDB_NAME = BRAIN_MODE === 'shared' ? 'rv_car_learning_shared' : 'rv_car_learning';
 // Bumped to 3 in P1.C to add the dynamics store. onupgradeneeded for v3
 // creates the new store only; brains/tracks/observations/lora are untouched,
 // so old archives continue to hydrate unchanged — they just don't have
@@ -293,6 +300,24 @@ let _federationCapturer = null;
 // call doesn't re-broadcast and trigger an infinite echo loop across tabs.
 let _crosstabEnabled = false;
 let _crosstabReceiving = false;
+// CB3 — the shared cloud brain. The session (cloud/session.js) sets these
+// hooks in shared mode; brains pulled from the cloud enter under
+// _cloudReceiving, which keeps them from being pushed back or from training
+// this tab's adapters as if they were its own generations.
+let _cloudHooks = null;
+let _cloudReceiving = false;
+// In shared mode, what is archived before the session attaches its hooks
+// (the page is still loading its config) waits here, bounded.
+const _cloudBacklog = { brains: [], feedback: [] };
+const CLOUD_BACKLOG_MAX = 64;
+// Brains pulled from the cloud this replica keeps: past CLOUD_REPLICA_MAX it
+// takes new ones only on the current track, up to twice that; past both, a
+// pull only refreshes the feedback of those it holds.
+const CLOUD_REPLICA_MAX = 2000;
+// A pulled brain is filed on the current track when the service found it on
+// a track this close (cosine similarity); else it is kept without a track
+// (it is recalled only when no brain is on a near track).
+const CLOUD_SAME_TRACK_SIM = 0.95;
 // Optional UI hook — uiPanels subscribes to get a pulse when a remote brain
 // lands. Stays null so headless tests don't render.
 let _crosstabOnReceive = null;
@@ -670,7 +695,7 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
   // a read-only counter exposed via getIndexStats().timings.lastGen so
   // the UI panel can show "gen N · window 20"; it does NOT reset the
   // per-stage ring buffers (those are the moving average).
-  try { _obsSetGeneration(generation | 0); } catch (_) { /* safe */ }
+  if (!_cloudReceiving) { try { _obsSetGeneration(generation | 0); } catch (_) { /* safe */ } }
   const vec = flatten(brain);
   const trackId = trackVec ? upsertTrack(trackVec) : null;
   const dynamicsId = (dynamicsVec instanceof Float32Array && dynamicsVec.length === DYNAMICS_DIM)
@@ -698,12 +723,17 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
     }
   }
   if (lap !== undefined) meta.fastestLap = lap;
+  // Where the brain came from, when not from this tab's evolution (CB3): a
+  // clone of your driving ("Use my driving"), or the shared cloud brain.
+  if (learning?.source === 'demonstration' || learning?.source === 'cloud') meta.source = learning.source;
   // Only write dynamicsId when we actually got a vector. Older archives
   // without this field stay shape-compatible; recommendSeeds skips them
   // automatically because `!entry.meta.dynamicsId` → no lookup.
   if (dynamicsId !== null) meta.dynamicsId = dynamicsId;
   const id = findIdenticalVector(_brainMirror,vec)||allocateVectorId('brain',vec,_brainMirror);
   const previous=_brainMirror.get(id);
+  // Archived again (an unchanged elite): it keeps where it came from.
+  if(!meta.source&&previous?.meta?.source)meta.source=previous.meta.source;
   // Deduplication keeps one genome. Evaluations remain separate for each
   // style, track, and set of conditions; repeating an elite is not ancestry.
   meta.parentIds=meta.parentIds.filter(parent=>parent!==id);
@@ -728,7 +758,8 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
   // brain delta. The receiving tabs hash-dedup via F5, so a re-broadcast from
   // A → B → A is collapsed to a single node — the echo guard is belt-and-
   // -braces against runaway traffic, not correctness.
-  if (_crosstabEnabled && !_crosstabReceiving) {
+  // Not a brain pulled from the cloud: the other tabs pull their own.
+  if (_crosstabEnabled && !_crosstabReceiving && !_cloudReceiving) {
     try {
       const wireMeta = {
         generation: meta.generation,
@@ -739,6 +770,14 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
       if (dynamicsVec instanceof Float32Array) wireMeta.dynamicsVec = dynamicsVec;
       crosstabBroadcast(crosstabToWire(vec, meta.fitness, trackVec || null, wireMeta));
     } catch (e) { console.warn('[crosstab] broadcast failed', e); }
+  }
+  // CB3 — shared mode: a new brain of this tab's own goes to the cloud
+  // outbox (not one pulled from the cloud, nor one another tab sent).
+  if (BRAIN_MODE === 'shared' && !previous && !_crosstabReceiving && !_cloudReceiving) {
+    const entry = { vector: vec, fitness: meta.fitness, trackVec: trackVec || null, dynamicsVec: dynamicsVec || null, meta };
+    if (_cloudHooks?.onArchive) {
+      try { _cloudHooks.onArchive(entry); } catch (e) { console.warn('[cloud-brain] push failed', e); }
+    } else if (_cloudBacklog.brains.push(entry) > CLOUD_BACKLOG_MAX) _cloudBacklog.brains.shift();
   }
   // P3.B — incremental DAG add. Safe no-op when the dag wasm didn't load.
   // The DAG uses meta.parentIds to wire edges; unknown parents (not yet in
@@ -751,7 +790,7 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
   // yet for this track (no cached input).
   // Not in collision mode, the brain's or this tab's: the adapter is keyed by
   // track only, as SONA is.
-  try { if (!inCollisionMode(meta.learningContext) && !inCollisionMode()) loraReward(meta.fitness); } catch (e) { console.warn('[lora] reward failed', e); }
+  try { if (!_cloudReceiving && !inCollisionMode(meta.learningContext) && !inCollisionMode()) loraReward(meta.fitness); } catch (e) { console.warn('[lora] reward failed', e); }
   // P2.A — record the generation as a SONA trajectory step. The dynamics
   // vector (P1.C) is the natural "activations" signal for this step: it's
   // a fixed-dim summary of *how the car drove* during the generation, which
@@ -766,7 +805,7 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
                     : (trackVec instanceof Float32Array) ? trackVec : null;
     // A brain from collision mode (this tab's, or a peer tab's) adds no step;
     // only this tab's own mode settles its trajectory.
-    if (stepActs && !inCollisionMode(meta.learningContext) && !sonaSkips()) sonaAddStep(stepActs, null, meta.fitness);
+    if (stepActs && !_cloudReceiving && !inCollisionMode(meta.learningContext) && !sonaSkips()) sonaAddStep(stepActs, null, meta.fitness);
   } catch (e) { console.warn('[sona] step failed', e); }
   schedulePersist();
   return id;
@@ -1331,11 +1370,76 @@ export function setFederationCapturer(capturer) {
 // _crosstabReceiving guard so the broadcast hook above short-circuits — that
 // guard is what keeps two tabs from echoing forever when they see each
 // other's delta on the channel.
+// ─── CB3: the shared cloud brain ─────────────────────────────────────────────
+
+/** 'shared' or 'local': which memory this page learns into (cloud/mode.js). */
+export function brainMode() { return BRAIN_MODE; }
+/**
+ * {onArchive(entry), onFeedback(rows)}, or null. Set by cloud/session.js;
+ * what was archived before (while the page loaded) is handed over first.
+ */
+export function setCloudHooks(hooks) {
+  _cloudHooks = hooks && typeof hooks === 'object' ? hooks : null;
+  if (!_cloudHooks) return;
+  const brains = _cloudBacklog.brains.splice(0), rows = _cloudBacklog.feedback.splice(0);
+  for (const entry of brains) { try { _cloudHooks.onArchive?.(entry); } catch (e) { console.warn('[cloud-brain] push failed', e); } }
+  if (rows.length) { try { _cloudHooks.onFeedback?.(rows); } catch (e) { console.warn('[cloud-brain] feedback failed', e); } }
+}
+/** An archived brain's weights (its cloud id is SHA-256 of them), or null. */
+export function brainVector(id) { return _brainMirror.get(id)?.vector || null; }
+
+/**
+ * A pool the cloud recalled for this track (cloud/wire.js
+ * parseRecallResponse entries) enters the replica: each brain not held yet
+ * is archived (on this track when the service found it on a track this
+ * close, CLOUD_SAME_TRACK_SIM; else without one), tagged source 'cloud'; and
+ * the shared brain's offspring feedback for this context replaces the
+ * replica's own. Past CLOUD_REPLICA_MAX pulled brains, only feedback is
+ * refreshed. Returns how many brains were new.
+ */
+export function acceptCloudPool(pool, trackVec, context = null) {
+  requireReady();
+  if (!Array.isArray(pool) || !pool.length) return 0;
+  const track = trackVec instanceof Float32Array && trackVec.length === TRACK_DIM ? trackVec : null;
+  const ctx = context ? cleanContext(context) : null;
+  let added = 0, held = 0;
+  for (const { meta } of _brainMirror.values()) if (meta?.source === 'cloud') held++;
+  _cloudReceiving = true;
+  try {
+    for (const entry of pool) {
+      if (!(entry?.vector instanceof Float32Array) || entry.vector.length !== FLAT_LENGTH) continue;
+      const m = entry.meta || {};
+      let id = findIdenticalVector(_brainMirror, entry.vector);
+      const onTrack = !!track && Number.isFinite(entry.trackSim) && entry.trackSim >= CLOUD_SAME_TRACK_SIM;
+      if (!id && (held < CLOUD_REPLICA_MAX || (onTrack && held < 2 * CLOUD_REPLICA_MAX))) {
+        const learning = m.learning ? { context: m.learning.context, styleScore: m.learning.styleScore, driving: m.learning.driving, source: 'cloud' } : { source: 'cloud' };
+        id = archiveBrain(unflatten(entry.vector), entry.fitness, onTrack ? track : null, m.generation || 0, [], m.fastestLap, undefined, learning);
+        added++;
+        held++;
+      } else if (id && onTrack && !_brainMirror.get(id)?.meta?.trackId) {
+        // Held without a track (an earlier pull found it elsewhere): now it
+        // was found on this one, so it is filed here.
+        const held_ = _brainMirror.get(id);
+        _brainMirror.set(id, { vector: held_.vector, meta: { ...held_.meta, trackId: upsertTrack(track) } });
+      }
+      const fb = entry.feedback;
+      if (ctx && id && fb && fb.count > 0) {
+        const key = observationKey(id, ctx), previous = _observations.get(key);
+        _observations.set(key, { weight: clamp(fb.weight, -1, 1), count: fb.count, baseline: previous?.baseline });
+      }
+    }
+  } finally { _cloudReceiving = false; }
+  schedulePersist();
+  return added;
+}
+
 export function setCrosstabEnabled(on) {
   const want = !!on;
   if (want === _crosstabEnabled) return _crosstabEnabled;
   if (want) {
     crosstabStart({
+      // Tabs in shared mode talk only to each other (CB3).
+      name: BRAIN_MODE === 'shared' ? 'vectorvroom-archive-shared' : undefined,
       onBrain: (payload /* senderId unused here */) => _onRemoteBrain(payload),
       onPeerCount: (n) => {
         if (typeof _crosstabOnPeerCount === 'function') {
@@ -1484,6 +1588,12 @@ export function observeOffspring(outcomes,context){
     observeGraph(outcome.id,context,feedback);
     _observations.set(key,{weight,count:(previous?.count||0)+1,baseline:outcome.meanFitness});
     _lastLearningFeedback.push({id:outcome.id,count:outcome.count,meanFitness:outcome.meanFitness,feedback,weight});
+  }
+  // CB3 — shared mode: the same outcomes go to the cloud as feedback rows.
+  if(BRAIN_MODE==='shared'&&_lastLearningFeedback.length){
+    const ctx=cleanContext(context),rows=_lastLearningFeedback.map(f=>({id:f.id,context:ctx,meanFitness:f.meanFitness,count:f.count}));
+    if(_cloudHooks?.onFeedback){try{_cloudHooks.onFeedback(rows);}catch(e){console.warn('[cloud-brain] feedback failed',e);}}
+    else{_cloudBacklog.feedback.push(...rows);_cloudBacklog.feedback.splice(0,Math.max(0,_cloudBacklog.feedback.length-4*CLOUD_BACKLOG_MAX));}
   }
   schedulePersist();
 }

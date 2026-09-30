@@ -220,7 +220,8 @@ function _computeAllTimeBest() {
     try {
         for (let i = 0; i < localStorage.length; i++) {
             const k = localStorage.key(i);
-            if (!k || k.indexOf(FASTLAP_PREFIX) !== 0) continue;
+            // (A '.shared' record is shared-brain mode's, CB3: not this browser's own.)
+            if (!k || k.indexOf(FASTLAP_PREFIX) !== 0 || (window.__vvBrainMode !== 'shared' && /\.shared$/.test(k))) continue;
             try {
                 const obj = JSON.parse(localStorage.getItem(k));
                 if (obj && typeof obj.timeS === 'number' && obj.timeS < best) best = obj.timeS;
@@ -1419,6 +1420,7 @@ function performBegin(N){
         runSerial:presentationRunSerial,driverProfile:window.DriverLearning?.profile||'balanced',
         learningContext:window.DriverLearning?.context||null,
         seedParents:window.DriverLearning?.batch?.parents||[],seedKinds:window.DriverLearning?.batch?.kinds||[],
+        seedOrigins:window.DriverLearning?.batch?.origins||[],
         recordPresentation: !!(window.CircuitStudio?.ready && window.CircuitStudio?.enabled),
         startInfo: { x: startInfo.x, y: startInfo.y, heading: startInfo.heading || 0 },
         poseJitter: Object.assign({ radiusPx: 0, angleDeg: 0, maxAttempts: 8 }, window.__poseJitter || {}),
@@ -1562,7 +1564,8 @@ function performNextBatch(genData){
             const brainObj = window.__rvUnflatten(bestBrainFlat);
             archivedBrainId=window.__rvBridge.archiveBrain(
                 brainObj, fitness, trackVec, generation, genData.eliteParentId?[genData.eliteParentId]:[], batchFastest, dynamicsVec,
-                {context:genData.learningContext||window.DriverLearning?.context,styleScore:genData.styleScore,driving:genData.driving}
+                {context:genData.learningContext||window.DriverLearning?.context,styleScore:genData.styleScore,driving:genData.driving,
+                 source:genData.eliteOrigin==='demonstration'?'demonstration':undefined}
             );
             if (!window.__rvSessionBestFitness || fitness > window.__rvSessionBestFitness){
                 window.__rvSessionBestFitness = fitness;

@@ -178,6 +178,9 @@ export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.rand
   const pool=seeds.filter(s=>validBrain(s.vector));
   const protectedSeed=incumbent&&validBrain(incumbent.vector)?incumbent:pool[0]||null;
   const flat=new Float32Array(N*FLAT_LENGTH),parents=new Array(N).fill(null),kinds=new Array(N);
+  // A car that is an exact copy of your driving's clone (H4) keeps that
+  // origin, so an archived clone is tagged source 'demonstration' (CB3).
+  const origins=new Array(N).fill(null);
   // Every car counts once in archive_recall, localStorage_prior,
   // demonstration (a clone of your driving, H4), or random_init; the elite
   // also counts in protected_elite.
@@ -201,10 +204,11 @@ export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.rand
     const amount=elite?0:clamp(mutation*(i%2?.5:1.8),.005,1);
     for(let j=0;j<FLAT_LENGTH;j++)flat[offset+j]=source.vector[j]*(1-amount)+(random()*2-1)*amount;
     parents[i]=source.id||null;kinds[i]=elite?'elite':'mutation';
+    if(amount===0&&source.kind==='demonstration')origins[i]='demonstration';
     if(source.kind==='demonstration')counts.demonstration++;else if(source.id)counts.archive_recall++;else counts.localStorage_prior++;
     if(elite)counts.protected_elite++;
   }
-  return {flat,parents,kinds,counts};
+  return {flat,parents,kinds,origins,counts};
 }
 export function offspringFeedback(outcome,parentFitness){
   if(!outcome||!Number.isFinite(outcome.meanFitness)||!(outcome.count>0)||!Number.isFinite(parentFitness))return null;

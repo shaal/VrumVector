@@ -59,7 +59,7 @@ let _lastTickWall = 0;
 const MAX_STEPS = 60; // legacy name; runtime uses maxAccumForSpeed / maxStepsPerTick
 let bestEpoch = 0;
 let presentationRecorder = null;
-let runSerial=0, learningContext=null, seedParents=[], seedKinds=[];
+let runSerial=0, learningContext=null, seedParents=[], seedKinds=[], seedOrigins=[];
 // Collision mode for this generation: null when off, else {row, state}
 // (CarCollisions.generation) plus per-car scratch for death records.
 let collision = null;
@@ -186,6 +186,7 @@ function handleBegin(m) {
     runSerial=m.runSerial||0;learningContext=m.learningContext||null;
     seedParents=Array.isArray(m.seedParents)?m.seedParents:[];
     seedKinds=Array.isArray(m.seedKinds)?m.seedKinds:[];
+    seedOrigins=Array.isArray(m.seedOrigins)?m.seedOrigins:[];
     self.maxSpeed = m.maxSpeed;
     self.traction = m.traction;
     startInfo = m.startInfo;
@@ -708,6 +709,8 @@ function endGen() {
     self.postMessage({
         type: 'genEnd',
         runSerial,learningContext,seedOutcomes,eliteParentId:seedParents[eliteIndex]||null,
+        // Only when the elite is a clone of your driving (CB3): otherwise the message is as before.
+        ...(seedOrigins[eliteIndex]?{eliteOrigin:seedOrigins[eliteIndex]}:{}),
         styleScore:DriverProfiles.styleScore(bc),driving:DriverProfiles.summarize(bc),
         presentationRun,
         bestBrain: flat,

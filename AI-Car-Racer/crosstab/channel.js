@@ -112,7 +112,7 @@ function handleMessage(ev) {
 
 // Public API ------------------------------------------------------------------
 
-export function start({ onBrain, onPeerCount } = {}) {
+export function start({ onBrain, onPeerCount, name = CHANNEL_NAME } = {}) {
   if (_started) return;
   if (typeof BroadcastChannel === 'undefined') {
     console.warn('[crosstab] BroadcastChannel unavailable in this environment');
@@ -121,7 +121,7 @@ export function start({ onBrain, onPeerCount } = {}) {
   _onBrain = typeof onBrain === 'function' ? onBrain : null;
   _onPeerCount = typeof onPeerCount === 'function' ? onPeerCount : null;
   try {
-    _ch = new BroadcastChannel(CHANNEL_NAME);
+    _ch = new BroadcastChannel(name);
   } catch (e) {
     console.warn('[crosstab] failed to open BroadcastChannel', e);
     _ch = null;

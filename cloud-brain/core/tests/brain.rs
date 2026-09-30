@@ -118,6 +118,7 @@ fn a_contributed_brain_comes_back_bit_for_bit() {
     assert_eq!(entry["meta"]["generation"], 3);
     assert_eq!(entry["meta"]["learning"]["context"]["profile"], "balanced");
     assert_eq!(entry["feedback"], json!({"weight": 0.0, "count": 0, "contributors": 0}));
+    assert!((entry["trackSim"].as_f64().unwrap() - 1.0).abs() < 1e-5, "found on the query's own track");
     assert_eq!((f.brain.len(), f.brain.track_count()), (1, 1));
 }
 
@@ -166,8 +167,9 @@ fn recall_ranks_the_nearest_track_first_then_fitness() {
 fn with_no_track_near_every_brain_is_a_candidate() {
     let mut f = Fixture::new(Config::default());
     f.contribute(TOKEN, &contribution(&[], &[item(10, 10.0, None), item(11, 90.0, None)], json!([])), T0);
-    let pool = ids(&f.recall(&recall_body(&unit(1, wire::TRACK_DIM), None, "balanced", 50)));
-    assert_eq!(pool, vec![id(11), id(10)]);
+    let answer = f.recall(&recall_body(&unit(1, wire::TRACK_DIM), None, "balanced", 50));
+    assert_eq!(ids(&answer), vec![id(11), id(10)]);
+    assert!(answer["pool"].as_array().unwrap().iter().all(|e| e["trackSim"] == 0.0), "no track: similarity 0");
 }
 
 #[test]
