@@ -13,6 +13,8 @@ import {trainClone,trainCloneInWorker,prepareDataset,splitBlocks,pairRows,predic
 import {seededRandom} from '../AI-Car-Racer/graphics/state.js';
 import {lagPairs,keyBits,KEY_ORDER} from '../AI-Car-Racer/learning/demonstration.js';
 import {demonstrationDataset} from '../AI-Car-Racer/learning/dataset.js';
+import {USE_WEIGHT_DECAY,leavesStart} from '../AI-Car-Racer/learning/demonstrationSeed.js';
+import {mutationEffect,weightSize} from './helpers/mutation.mjs';
 
 const ROUND=30; // seconds of closed-loop driving, like one training round
 // Teachers come from short genetic runs with a fixed seed, so every run is the
@@ -124,6 +126,42 @@ test('the same seed gives the same weights, and the dataset is left unchanged',(
   assert.deepEqual(trainClone(synthetic,{maxEpochs:5}).weights,trainClone(synthetic,{maxEpochs:5}).weights);
 });
 
+test('weight decay keeps a clone near the size of evolved brains, so mutation changes its keys more',t=>{
+  // H3's clones came out about 10x larger than evolved brains, so the genetic
+  // run's mutation barely changed their keys. "Use my driving" trains with
+  // USE_WEIGHT_DECAY. Measured over 7 teachers per track: see
+  // docs/validation/human-demonstration.md (H4).
+  const rows={};
+  for(const track of ['Rectangle','Triangle']){
+    const {vector,dataset}=teacher(track);
+    const plain=trainClone(dataset),decayed=trainClone(dataset,{weightDecay:USE_WEIGHT_DECAY});
+    const size={teacher:weightSize(vector),plain:weightSize(plain.weights),decayed:weightSize(decayed.weights)};
+    const effect={teacher:mutationEffect(vector,dataset.inputs,{every:7}),plain:mutationEffect(plain.weights,dataset.inputs,{every:7}),
+      decayed:mutationEffect(decayed.weights,dataset.inputs,{every:7})};
+    assert.ok(decayed.weights.every(Number.isFinite));
+    assert.ok(size.teacher.max<=1.01,`${track}: evolved weights stay within ±1`);
+    assert.ok(size.plain.hidden>4*size.decayed.hidden&&size.plain.max>4*size.decayed.max,`${track}: ${JSON.stringify(size)}`);
+    assert.ok(size.decayed.hidden<1.5&&size.decayed.output<2&&size.decayed.max<8,`${track}: ${JSON.stringify(size.decayed)}`);
+    assert.ok(effect.decayed.all>=.05&&effect.decayed.all>=2*effect.plain.all,`${track}: ${JSON.stringify(effect)}`);
+    // It still copies the driving: a seed, not an exact copy.
+    assert.ok(decayed.report.heldOut.agreement>=.85,`${track}: ${decayed.report.heldOut.agreement}`);
+    assert.equal(decayed.report.maxAbsWeight,size.decayed.max);
+    // And it still drives: further than a forward-only driver, summed over
+    // the spawn and 12 new starts (the main test's closed loop), and away
+    // from the start line.
+    const sim=new Simulation({track,seed:'clone-decay'}),random=seededRandom('clone-loop-'+track),starts=[sim.spawn];
+    for(let i=0;i<12;i++){const s=sim.spawn;starts.push({x:s.x+(random()*2-1)*12,y:s.y+(random()*2-1)*12,angle:s.angle+(random()*2-1)*.12});}
+    const loop=net=>sum(starts.map(start=>drive(sim,net,{seconds:ROUND,start}).progress));
+    const progress={teacher:loop(vector),decayed:loop(decayed.weights),forwardOnly:loop(FORWARD_ONLY)};
+    assert.ok(progress.decayed>progress.forwardOnly,`${track}: ${JSON.stringify(progress)}`);
+    const s=sim.spawn,makeCar=()=>new sim.scope.CarClass(s.x,s.y,30,50,'AI',sim.maxSpeed,s.angle);
+    assert.equal(leavesStart({makeCar,road:sim.road,vector:decayed.weights}).leaves,true,`${track}: pulls away from the start line`);
+    rows[track]={progress,size,effect:Object.fromEntries(Object.entries(effect).map(([k,v])=>[k,{all:round(v.all,3),light:round(v.light,3),heavy:round(v.heavy,3)}])),
+      agreement:{plain:round(plain.report.heldOut.agreement),decayed:round(decayed.report.heldOut.agreement)}};
+  }
+  t.diagnostic(JSON.stringify(rows));
+});
+
 test('the lag choice finds keys that act late, or the nearest candidate',t=>{
   // Teachers evolved with keys that act 9 steps late (a 150 ms reaction), so
   // they are adapted to that delay, as a person is. They crash often and hold
@@ -180,7 +218,8 @@ test('empty, malformed, and non-finite datasets are refused with a reason',()=>{
   assert.deepEqual(trainClone({...booleans,keys:Array.from(booleans.keys,Boolean)},{maxEpochs:2}).weights,trainClone(booleans,{maxEpochs:2}).weights);
   const d=syntheticDataset({runs:1,steps:600});
   for(const options of [{lags:[0]},{lags:[1.5]},{lags:[200]},{lags:[]},{lags:4},{heldOutFraction:0},{heldOutFraction:1},{batchSize:0},
-    {learningRate:NaN},{learningRate:0},{learningRate:2},{patience:0},{screenEpochs:0},{finalists:1.5},{rareCap:.5},{minScoredPairs:0}])
+    {learningRate:NaN},{learningRate:0},{learningRate:2},{patience:0},{screenEpochs:0},{finalists:1.5},{rareCap:.5},{minScoredPairs:0},
+    {weightDecay:-.001},{weightDecay:NaN},{weightDecay:Infinity},{weightDecay:'0.001'}])
     assert.throws(()=>trainClone(d,options),fails('invalid-options'),JSON.stringify(options));
   // Options left undefined take their defaults.
   const small=syntheticDataset({runs:2,steps:600,seed:'undefined-options'});
@@ -344,4 +383,5 @@ test('defaults match the plan',()=>{
   assert.equal(CLONE_DEFAULTS.blockSteps,120,'2-second held-out blocks at 60 steps per second');
   assert.equal(CLONE_DEFAULTS.lags[0],1);assert.ok(CLONE_DEFAULTS.lags.includes(10)&&CLONE_DEFAULTS.lags.at(-1)>=16,'covers a 150-250 ms reaction');
   assert.ok(Object.isFrozen(CLONE_DEFAULTS));
+  assert.equal(CLONE_DEFAULTS.weightDecay,0,'an exact copy by default; "Use my driving" sets its own decay');
 });

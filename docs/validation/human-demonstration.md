@@ -476,3 +476,115 @@ recordings may show otherwise, and the option stays.
   are small and split both ways.
 - **Checkpoints are coarse,** and most clone rounds end in a crash (7 to 11
   of 13), as the teachers' own rounds do (7 to 10).
+
+## H4 — Use my driving
+
+What it does: "Use my driving" in the driver-learning panel trains a copy
+(clone) of the recordings made on this context, in the cloning worker, with
+H2's dataset defaults. It then drives the copy for 3 s from the start line
+(every step senses) and says whether it pulls away. "Add to next
+generation" puts the copy in the seed pool with kind `demonstration`. With
+no champion in this context, the copy leads the pool and takes the protected
+elite slot; with a champion, the champion keeps it and copies of yours fill
+the pool's share of the other slots. The source line then reads, for
+example, "17 from your driving · 5 from memory · 0 from saved drivers · 2
+fresh" (cars, not seeds). The copy is offered only on the context it was
+recorded on: the same walls and gates, top speed, traction, driving style,
+and Solid cars mode. It lives in page memory: a reload drops it. "Train
+again" replaces the copy and keeps it in the pool if it was, unless the new
+copy stays parked at the start line.
+
+Code: `AI-Car-Racer/learning/demonstrationSeed.js` (offer rule, dataset,
+start-line check, seed, pool order), `learning/session.js` (panel),
+`learning/policy.js` (the `demonstration` count), `learning/clone.js`
+(`weightDecay`).
+
+### Weight decay
+
+H3's clones had weights about 10× larger than evolved brains, so the
+genetic run's mutation barely changed their keys. The trainer now takes
+`weightDecay`: an L2 penalty on the weights the car runs (a first-layer
+weight counts divided by its input's spread, as `fold()` deploys it) and on
+the biases. The trainer's default stays 0, so H3's exact-copy tests are
+unchanged. "Use my driving" uses `USE_WEIGHT_DECAY = 0.001`.
+
+Measured with `npm run benchmark:clone-decay` (deterministic): 7 teachers
+per track (H3's teacher settings, seeds `wd-teacher-{a…g}`), 18 000 recorded
+rows each. Progress is checkpoints summed over the spawn and 12 new starts,
+30 s each, as a share of the teacher's. "Keys changed" is the share of the
+teacher's recorded steps (every 7th) where a mutated copy presses other keys
+than the network, over one 24-car population at the default mutation rate
+0.22 (`tests/helpers/mutation.mjs`); light and heavy are the two mutation
+sizes (`a` = 0.11 and 0.40).
+
+Means over the 7 teachers ("largest weight" is the mean of each network's
+largest):
+
+| Track, decay | Held-out agreement | Progress / teacher | RMS hidden / output | Largest weight | Keys changed (light, heavy) |
+|---|---:|---:|---:|---:|---:|
+| Rectangle, 0 | 0.98 | 1.04 | 13.0 / 4.0 | 52 | 5% (2%, 8%) |
+| Rectangle, 0.001 | 0.92 | 0.75 | 0.89 / 1.31 | 4.7 | 13% (6%, 21%) |
+| Triangle, 0 | 0.98 | 1.13 | 7.0 / 2.9 | 33 | 3% (1%, 5%) |
+| Triangle, 0.001 | 0.95 | 1.02 | 0.79 / 1.18 | 3.9 | 8% (3%, 13%) |
+| Teachers (evolved) | — | 1 | 0.48 / 0.46 | ≤ 1 | 49–62% |
+
+Ranges over the 7 teachers at 0.001: agreement 0.73–0.98 (Rectangle) and
+0.86–1.00 (Triangle); largest weight 3.0–6.0 and 1.9–6.8; keys changed
+4–36% and 0–17%. Rectangle progress per teacher (clone/teacher): 13/34,
+45/52, 32/32, 13/17, 27/46, 65/110, 34/33; without decay, every clone was
+within a few checkpoints of its teacher or better.
+
+Reading:
+
+- Decay shrinks the hidden layer about 9–15× and the largest weight about
+  10×, but the output layer only about 3× (it stays 2.5–3× evolved size).
+  Mutation changes the clone's keys 2–3× more often. It stays far below an
+  evolved brain (8–13% against 49–62%), so weight size explains only part
+  of why clones are hard to mutate.
+- The cost is real on Rectangle: the clone drives about a quarter less far,
+  and one of 7 clones drives under half as far (13 of 34). On Triangle it
+  drives as far.
+- An earlier one-off sweep (same teachers, biases not decayed, another
+  mutation seed; Rectangle / Triangle) showed the trade-off along the
+  scale. Agreement: 0.94 / 0.97 at 0.0003, 0.91 / 0.95 at 0.001, 0.88 /
+  0.94 at 0.003. Keys changed: 13% / 7%, 16% / 9%, 17% / 11%. Progress /
+  teacher: 0.88 / 1.09, 0.81 / 1.04, 0.82 / 0.89. Past 0.001 the keys
+  changed barely rise while agreement keeps falling.
+- So 0.001 is provisional. H5's paired check decides whether the seed
+  helps; it should include a no-decay arm (or try 2–3 values).
+
+### Tests
+
+- `tests/demonstration-seed.test.mjs` (in `npm run test:learning`): the offer
+  rule (round length ignored, Solid cars and old recordings), the dataset
+  from one context's recordings with a bad record skipped, the start-line
+  check with the real car on both tracks, the seed's protected elite slot
+  and the count of every car, the champion keeping the elite slot, and the
+  pool order.
+- `tests/cloning.test.mjs`: with `USE_WEIGHT_DECAY` on H3's two teachers, the
+  weights shrink more than 4×, mutation changes at least twice as many keys,
+  held-out agreement stays ≥ 85%, the clone drives further than a
+  forward-only driver, and it pulls away from the start line. Invalid
+  `weightDecay` values are refused.
+- `tests/demonstration.test.mjs`: a Solid cars change ends a recording, and
+  the recording stores the mode.
+- `tests/demonstration-browser.mjs` (real page): "Use my driving" trains a
+  copy from a real WASD recording, the copy pulls away from the start line,
+  "Add to next generation" puts its cars in the next generation (panel
+  source line and the bridge's seed sources), a top-speed change stops the
+  offer and changing it back restores it, and "Stop using my driving"
+  removes it.
+
+### Limits
+
+- **Teachers are networks, not people.** A person's clone will agree less
+  and drive worse; decay adds to that.
+- **One decay value was measured in full** (plus a smaller sweep). The
+  numbers are deterministic, but 7 teachers per shape is small.
+- **The copy is not saved.** A reload, or training on another context,
+  drops it. Persisting it (or archiving it in vector memory, the plan's
+  optional step) is left for later.
+- **"Reset memories" does not remove your driving** from the pool; "Stop
+  using my driving" does.
+- **With Solid cars on, the start-line check drives alone** from the start
+  pose; live cars start from their heat's poses with other cars around.

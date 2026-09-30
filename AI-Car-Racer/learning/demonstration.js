@@ -25,9 +25,11 @@ export const MAX_FRAME_GAP_MS=250;
 export const KEY_ORDER=['forward','left','right','reverse'];
 export const keyBits=c=>(c.forward?1:0)|(c.left?2:0)|(c.right?4:0)|(c.reverse?8:0);
 // One recording has one context: the walls and gates (the track key), the
-// top speed, the traction, and the driving style that trials will use. The
-// round length may change (Auto Train changes it); it is kept as it started.
-export const sameConditions=(a,b)=>!!a&&!!b&&a.track===b.track&&a.maxSpeed===b.maxSpeed&&a.traction===b.traction&&a.profile===b.profile;
+// top speed, the traction, the driving style that trials will use, and the
+// Solid cars mode (`collisions`, H4; missing counts as 'off'). The round
+// length may change (Auto Train changes it); it is kept as it started.
+const mode=c=>c.collisions==null?'off':c.collisions;
+export const sameConditions=(a,b)=>!!a&&!!b&&a.track===b.track&&a.maxSpeed===b.maxSpeed&&a.traction===b.traction&&a.profile===b.profile&&mode(a)===mode(b);
 const sameValues=(a,b)=>!!a&&!!b&&a.length===b.length&&a.every((value,i)=>value===b[i]);
 
 export class DemonstrationRecorder {

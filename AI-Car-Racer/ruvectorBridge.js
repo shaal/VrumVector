@@ -167,10 +167,13 @@ let _rerankerMode = 'none'; // 'gnn' | 'ema' | 'none' — most recent path actua
 // archive + prior + random sums to the full population N — any drift means
 // some slot was silently unaccounted for. `generation` is the gen index at
 // which the snapshot was taken; rendering clients use it as a cache key.
+// `demonstration` counts slots filled from a clone of the player's own
+// driving ("Use my driving", H4); it joins the sum.
 let _lastSeedSources = {
   archive_recall: 0,
   localStorage_prior: 0,
   random_init: 0,
+  demonstration: 0,
   total: 0,
   generation: -1,
 };
@@ -179,11 +182,13 @@ export function setLastSeedSources(obj) {
   const archive = Math.max(0, (obj.archive_recall | 0));
   const prior = Math.max(0, (obj.localStorage_prior | 0));
   const random = Math.max(0, (obj.random_init | 0));
+  const demonstration = Math.max(0, (obj.demonstration | 0));
   _lastSeedSources = {
     archive_recall: archive,
     localStorage_prior: prior,
     random_init: random,
-    total: archive + prior + random,
+    demonstration,
+    total: archive + prior + random + demonstration,
     generation: Number.isFinite(obj.generation) ? (obj.generation | 0) : -1,
   };
 }
@@ -1539,6 +1544,7 @@ export function info() {
       archive_recall: _lastSeedSources.archive_recall,
       localStorage_prior: _lastSeedSources.localStorage_prior,
       random_init: _lastSeedSources.random_init,
+      demonstration: _lastSeedSources.demonstration,
       total: _lastSeedSources.total,
       generation: _lastSeedSources.generation,
     },

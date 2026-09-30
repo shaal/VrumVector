@@ -135,7 +135,10 @@ export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.rand
   const pool=seeds.filter(s=>validBrain(s.vector));
   const protectedSeed=incumbent&&validBrain(incumbent.vector)?incumbent:pool[0]||null;
   const flat=new Float32Array(N*FLAT_LENGTH),parents=new Array(N).fill(null),kinds=new Array(N);
-  const counts={archive_recall:0,localStorage_prior:0,random_init:0,protected_elite:0};
+  // Every car counts once in archive_recall, localStorage_prior,
+  // demonstration (a clone of your driving, H4), or random_init; the elite
+  // also counts in protected_elite.
+  const counts={archive_recall:0,localStorage_prior:0,random_init:0,protected_elite:0,demonstration:0};
   const mutation=clamp(plan?.mutation??.22,.01,1),novel=clamp(plan?.novel??.1,0,.8);
   const nNovel=protectedSeed&&N>1?(N===2?(plan?.stagnant>=5&&plan.round%5===0?1:0):Math.min(N-1,Math.max(1,Math.floor(N*novel)))):N;
   function fillRandom(offset){
@@ -155,7 +158,7 @@ export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.rand
     const amount=elite?0:clamp(mutation*(i%2?.5:1.8),.005,1);
     for(let j=0;j<FLAT_LENGTH;j++)flat[offset+j]=source.vector[j]*(1-amount)+(random()*2-1)*amount;
     parents[i]=source.id||null;kinds[i]=elite?'elite':'mutation';
-    if(source.id)counts.archive_recall++;else counts.localStorage_prior++;
+    if(source.kind==='demonstration')counts.demonstration++;else if(source.id)counts.archive_recall++;else counts.localStorage_prior++;
     if(elite)counts.protected_elite++;
   }
   return {flat,parents,kinds,counts};

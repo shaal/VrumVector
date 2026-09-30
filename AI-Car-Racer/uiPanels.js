@@ -835,10 +835,12 @@
     const archive = s.archive_recall | 0;
     const prior = s.localStorage_prior | 0;
     const random = s.random_init | 0;
+    const demonstration = s.demonstration | 0;
     el.seedSourcesText.textContent =
       'gen seed sources: archive ' + archive +
       ' · prior ' + prior +
-      ' · random ' + random;
+      ' · random ' + random +
+      (demonstration ? ' · your driving ' + demonstration : '');
   }
 
   // Spearman's footrule over the union of ids. Ids present in only one list

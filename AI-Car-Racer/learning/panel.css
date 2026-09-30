@@ -41,3 +41,6 @@
 #driver-learning button[data-demo-record][data-active="true"]:hover {background:#5a2f2c;}
 #driver-learning button[aria-disabled="true"] {cursor:not-allowed;opacity:.6;}
 #driver-learning button[aria-disabled="true"]:hover {background:#284235;}
+.learning-use {margin-top:10px;}
+.learning-use p.learning-demo-live {margin:0 0 6px;}
+#driver-learning button[data-demo-seed][hidden] {display:none;}

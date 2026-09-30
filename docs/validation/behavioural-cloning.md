@@ -269,4 +269,6 @@ show progress, or train on fewer demonstrations.
   Triangle teacher at 0.40). So the offspring of a clone stay close to it. H4
   and H5 must decide whether
   that is good (refinement) or too little exploration (a larger mutation for
-  clone offspring, or weight decay in the trainer).
+  clone offspring, or weight decay in the trainer). H4 added weight decay
+  (`weightDecay`, 0 by default here); see
+  `docs/validation/human-demonstration.md` (H4).
