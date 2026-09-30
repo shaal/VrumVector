@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
+import {startStaticServer} from './helpers/static-server.mjs';
 
 const out='test-results/graphics';
 await mkdir(out,{recursive:true});
-const server=spawn('python3',['-m','http.server','8877','--bind','127.0.0.1'],{stdio:'ignore'});
+const server=startStaticServer('8877');
 const origin='http://127.0.0.1:8877';
 const report=[];
 async function ready(page){

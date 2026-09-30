@@ -22,6 +22,10 @@ python3 -m http.server 8765
 ```
 
 Any static server works (`npx serve`, `caddy file-server`, etc.).
+`scripts/serve.sh [port]` runs the same Python server with a deeper
+connection queue (`scripts/static-server.py`), as the browser tests do: on a
+busy machine the plain server can reset some of the page's module requests,
+and the page then never finishes loading.
 
 ## Deployment (Cloudflare Pages + Workers)
 

@@ -23,4 +23,5 @@ echo "serving $REPO_ROOT on :$PORT"
 echo "  app:      http://localhost:$PORT/AI-Car-Racer/index.html"
 echo "  bench:    http://localhost:$PORT/tests/bench-hnsw.html"
 echo "  phase2:   http://localhost:$PORT/docs/validation/phase2-verify.html"
-exec python3 -m http.server "$PORT"
+# http.server with a deeper listen queue (see scripts/static-server.py).
+exec python3 scripts/static-server.py "$PORT" --bind 0.0.0.0

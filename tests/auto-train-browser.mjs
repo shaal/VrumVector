@@ -3,12 +3,12 @@
 // generation is built, and any user change to the training knobs turns it off.
 import assert from 'node:assert/strict';
 import {waitForServer} from './helpers/server-ready.mjs';
+import {startStaticServer} from './helpers/static-server.mjs';
 import {mkdir,writeFile} from 'node:fs/promises';
-import {spawn} from 'node:child_process';
 import {chromium} from 'playwright';
 
 const out='test-results/auto-train';await mkdir(out,{recursive:true});
-const server=spawn('python3',['-m','http.server','8886','--bind','127.0.0.1'],{stdio:'ignore'});
+const server=startStaticServer('8886');
 const origin='http://127.0.0.1:8886';let browser,page,stage='boot';const errors=[];
 const mark=value=>{stage=value;console.log(stage);};
 const knobs=()=>page.evaluate(()=>({N:batchSize,seconds:Number(nextSeconds),mutate:Number(mutateValue),simSpeed,conservativeInit,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {waitForServer} from './helpers/server-ready.mjs';
+import {startStaticServer} from './helpers/static-server.mjs';
 import {mkdir,writeFile} from 'node:fs/promises';
-import {spawn} from 'node:child_process';
 import {build} from 'esbuild';
 import {Miniflare} from 'miniflare';
 import {chromium} from 'playwright';
@@ -9,7 +9,7 @@ import {chromium} from 'playwright';
 const out='test-results/multiplayer';await mkdir(out,{recursive:true});
 const bundle=await build({entryPoints:['multiplayer/worker.js'],bundle:true,write:false,format:'esm',external:['cloudflare:workers']});
 const mf=new Miniflare({modules:true,script:bundle.outputFiles[0].text,compatibilityDate:'2026-06-17',durableObjects:{ROOMS:{className:'LiveRoom',useSQLite:true}},bindings:{ALLOW_LOCAL:'true'},port:8878});
-const server=spawn('python3',['-m','http.server','8877','--bind','127.0.0.1'],{stdio:'ignore'});
+const server=startStaticServer('8877');
 const origin='http://127.0.0.1:8877';
 let browser;const errors=[];let stage='boot';
 try{
