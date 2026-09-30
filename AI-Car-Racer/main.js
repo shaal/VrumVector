@@ -79,8 +79,12 @@ var carCollisions = { enabled: false, heatSize: 8 };
 // so both sides of a generation always run, and are labelled, the same way.
 var activeCollisions = null;
 try { if (new URLSearchParams(location.search).get('collide') === '1') carCollisions.enabled = true; } catch (_) {}
+// carCollisions.seeCars = false (benchmarks only, never the UI) runs C2's
+// mode, rays that see walls only; the learning context then labels it
+// 'solid/k8', not 'solid/k8/rays' (C4).
 function collisionConfig(){
-    return carCollisions.enabled ? { heatSize: carCollisions.heatSize } : null;
+    if (!carCollisions.enabled) return null;
+    return carCollisions.seeCars === false ? { heatSize: carCollisions.heatSize, seeCars: false } : { heatSize: carCollisions.heatSize };
 }
 window.carCollisionsEnabled = function(){ return carCollisions.enabled; };
 // Turning the mode on or off starts a new generation in the new mode (like a
@@ -89,6 +93,9 @@ window.setCarCollisions = function(on){
     on = !!on;
     if (on === carCollisions.enabled) return false;
     carCollisions.enabled = on;
+    // Adaptive gates keep their layouts per mode (car-collisions C4): they
+    // switch before the new mode's first generation begins.
+    try { window.AdaptiveGates?.onCollisionsChange?.(); } catch (e) { console.warn('[adaptiveGates] mode change failed', e); }
     try {
         if (typeof restartDriverLearning === 'function') restartDriverLearning();
     } finally {
@@ -979,6 +986,14 @@ function updateBestCarProxy(p, m){
     p.brainOutputActivations = m.bestOutputActivations || null;
 }
 
+// The collision mode a generation ran in, as a context for vector memory
+// (car-collisions C4): its learning context, or, without one, 'unknown' when
+// the worker reports solid cars (genEnd.collisions), so it never counts as
+// normal driving.
+function genEndCollisions(m){
+    if (m.learningContext && m.learningContext.collisions) return m.learningContext;
+    return { collisions: m.collisions ? 'unknown' : 'off' };
+}
 function handleGenEnd(m){
     try { window.CircuitStudio?.onGenerationEnd(m, generation); }
     catch (error) { console.warn('[Circuit Studio] replay archive', error); }
@@ -1010,11 +1025,14 @@ function handleGenEnd(m){
             typeof window.__rvBridge.encodeCrashMap === 'function' &&
             typeof window.__rvBridge.archiveCrashMap === 'function' &&
             m.popDeathXY && m.popN) {
-            const vec = window.__rvBridge.encodeCrashMap(m.popDeathXY, m.popN);
+            // Car-contact deaths (cause 5) stay off the map, and the map is
+            // tagged with the collision mode (car-collisions C4).
+            const vec = window.__rvBridge.encodeCrashMap(m.popDeathXY, m.popN, undefined, undefined, m.popDeathCauses);
             if (vec) {
                 const cps = (road && road.checkPointList) ? road.checkPointList : null;
                 let nDeaths = 0;
                 for (let i = 0; i < m.popN; i++) {
+                    if (m.popDeathCauses && m.popDeathCauses[i] === 5) continue;
                     if (Number.isFinite(m.popDeathXY[i * 2])) nDeaths++;
                 }
                 const geoSig = (window.AdaptiveGates && window.AdaptiveGates.geometrySignature)
@@ -1028,6 +1046,7 @@ function handleGenEnd(m){
                     nGates: cps ? cps.length : 0,
                     cps: cps,
                     geometrySig: geoSig,
+                    collisions: genEndCollisions(m).collisions,
                 });
             }
         }
@@ -1048,10 +1067,12 @@ function handleGenEnd(m){
                 if (!window.currentTrackVec && typeof embedCurrentTrack === 'function'){
                     try { embedCurrentTrack(); } catch (_) {}
                 }
-                b.beginPhase4Trajectory(window.currentTrackVec || null);
+                b.beginPhase4Trajectory(window.currentTrackVec || null, genEndCollisions(m));
             }
+            // The bridge skips SONA in collision mode (its patterns are
+            // keyed by track only), so it gets the generation's context.
             if (b.addPhase4Step && m.bestHiddenActivations){
-                b.addPhase4Step(m.bestHiddenActivations, null, m.fitness || 0);
+                b.addPhase4Step(m.bestHiddenActivations, null, m.fitness || 0, genEndCollisions(m));
             }
         }
     } catch (e) { console.warn('[sona] genEnd hook failed', e); }

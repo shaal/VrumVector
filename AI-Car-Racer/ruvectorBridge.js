@@ -36,7 +36,7 @@ import { fanOut, fanOutSync, kPrime as _kPrime } from './federation/fanout.js';
 import { unionByHash, selectTopK } from './federation/rerank.js';
 import { hashBrain } from './archive/hash.js';
 import {allocateVectorId,findIdenticalVector} from './archive/identity.js';
-import {cleanContext,contextKey,matchContext,selectDiverse,offspringFeedback,clamp,mergeEvaluations,evaluationFor} from './learning/policy.js';
+import {cleanContext,contextKey,matchContext,selectDiverse,offspringFeedback,clamp,mergeEvaluations,evaluationFor,collisionsLabel} from './learning/policy.js';
 // Phase 2B — F6 cross-tab live training. Thin wrapper over BroadcastChannel;
 // when enabled, archiveBrain broadcasts a single-brain delta after a
 // successful insert, and received deltas are routed back through archiveBrain
@@ -85,6 +85,7 @@ import {
   beginTrajectory as sonaBeginTrajectory,
   addStep as sonaAddStep,
   endTrajectory as sonaEndTrajectory,
+  settleTrajectory as sonaSettleTrajectory,
   findPatterns as sonaFindPatterns,
 } from './sona/engine.js';
 // Phase 3A — F7 observability. Tiny per-stage timing module; the bridge
@@ -546,12 +547,13 @@ function requireReady() {
 /**
  * Encode death positions into a CRASH_DIM L2-normalised heat vector.
  * Mirrors window.CrashMapCodec.encodeDeathMap when that classic script loaded.
+ * Car-contact deaths (cause 5 in popDeathCauses) are left out.
  */
-export function encodeCrashMap(popDeathXY, N, canvasW, canvasH) {
+export function encodeCrashMap(popDeathXY, N, canvasW, canvasH, popDeathCauses) {
   try {
     if (typeof window !== 'undefined' && window.CrashMapCodec &&
         typeof window.CrashMapCodec.encodeDeathMap === 'function') {
-      return window.CrashMapCodec.encodeDeathMap(popDeathXY, N, canvasW, canvasH);
+      return window.CrashMapCodec.encodeDeathMap(popDeathXY, N, canvasW, canvasH, popDeathCauses);
     }
   } catch (_) {}
   // Inline fallback (same algorithm as crashMapCodec.js)
@@ -560,6 +562,7 @@ export function encodeCrashMap(popDeathXY, N, canvasW, canvasH) {
   const grid = new Float32Array(CRASH_DIM);
   let deaths = 0;
   for (let i = 0; i < N; i++) {
+    if (popDeathCauses && popDeathCauses[i] === 5) continue;
     const x = popDeathXY[i * 2], y = popDeathXY[i * 2 + 1];
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     let gx = Math.floor((x / W) * CRASH_GW);
@@ -605,6 +608,10 @@ export function archiveCrashMap(crashVec, meta = {}) {
   // Wall-geometry signature — adaptive gates refuse to apply a layout whose
   // sig doesn't match the live track (stops Triangle gates on Rectangle).
   if (meta.geometrySig) m.geometrySig = String(meta.geometrySig);
+  // Collision mode (car-collisions C4): adaptive gates recall a layout only
+  // in the mode it was archived in. Untagged maps are from normal driving.
+  const collisions = collisionsLabel(meta.collisions);
+  if (collisions !== 'off') m.collisions = collisions;
   try {
     const id = _crashDB.insert(crashVec, allocateVectorId('crash',crashVec,_crashMirror), m);
     _crashMirror.set(id, { vector: crashVec.slice(), meta: m });
@@ -679,9 +686,16 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
   if (learning?.context) {
     meta.learningContext=cleanContext(learning.context);
     meta.styleScore=clamp(learning.styleScore,0,1);
-    if(learning.driving)meta.driving={averageSpeed:clamp(learning.driving.averageSpeed,0,1),
-      nearWallRate:clamp(learning.driving.nearWallRate,0,1),slideRate:clamp(learning.driving.slideRate,0,1),
-      smoothness:clamp(learning.driving.smoothness,0,1),crashed:!!learning.driving.crashed};
+    if(learning.driving){
+      const d=learning.driving;
+      meta.driving={averageSpeed:clamp(d.averageSpeed,0,1),
+        nearWallRate:clamp(d.nearWallRate,0,1),slideRate:clamp(d.slideRate,0,1),
+        smoothness:clamp(d.smoothness,0,1),crashed:!!d.crashed};
+      // Collision mode (DriverProfiles.summarize): did a car contact crash
+      // this driver, and how often was a car near its rays?
+      if(typeof d.carContact==='boolean')meta.driving.carContact=d.carContact;
+      if(Number.isFinite(d.nearCarRate))meta.driving.nearCarRate=clamp(d.nearCarRate,0,1);
+    }
   }
   if (lap !== undefined) meta.fastestLap = lap;
   // Only write dynamicsId when we actually got a vector. Older archives
@@ -735,7 +749,9 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
   // trackAdapter) is the gradient direction; fitness gates whether it fires.
   // No-op when the adapter isn't ready or `recommendSeeds` hasn't been called
   // yet for this track (no cached input).
-  try { loraReward(meta.fitness); } catch (e) { console.warn('[lora] reward failed', e); }
+  // Not in collision mode, the brain's or this tab's: the adapter is keyed by
+  // track only, as SONA is.
+  try { if (!inCollisionMode(meta.learningContext) && !inCollisionMode()) loraReward(meta.fitness); } catch (e) { console.warn('[lora] reward failed', e); }
   // P2.A — record the generation as a SONA trajectory step. The dynamics
   // vector (P1.C) is the natural "activations" signal for this step: it's
   // a fixed-dim summary of *how the car drove* during the generation, which
@@ -748,7 +764,9 @@ export function archiveBrain(brain, fitness, trackVec, generation = 0, parentIds
   try {
     const stepActs = (dynamicsVec instanceof Float32Array) ? dynamicsVec
                     : (trackVec instanceof Float32Array) ? trackVec : null;
-    if (stepActs && !_sonaPaused) sonaAddStep(stepActs, null, meta.fitness);
+    // A brain from collision mode (this tab's, or a peer tab's) adds no step;
+    // only this tab's own mode settles its trajectory.
+    if (stepActs && !inCollisionMode(meta.learningContext) && !sonaSkips()) sonaAddStep(stepActs, null, meta.fitness);
   } catch (e) { console.warn('[sona] step failed', e); }
   schedulePersist();
   return id;
@@ -1572,16 +1590,35 @@ export function info() {
 // working without a second sidecar import. These are thin pass-throughs.
 // When SONA isn't ready, they no-op silently — callers can fire-and-forget.
 
-export function beginPhase4Trajectory(trackVec) {
-  if (_sonaPaused) return null;
+// SONA (and the LoRA adapter's reward) key what they learn by track only, so
+// they cannot tell collision mode from normal driving (car-collisions C4). In
+// collision mode SONA learns nothing from it: no step is recorded, and no
+// trajectory begins or ends. The pending trajectory is settled first
+// (sona/engine.js settleTrajectory): an empty one closes without learning;
+// one with steps from normal driving (restored after a reload, say) is
+// learned as normal driving. Normal driving later opens a fresh trajectory
+// on its own track (main.js, at the next genEnd). `context` is the
+// generation's learning context; without one, the current context decides.
+function inCollisionMode(context) {
+  const c = context || _learningContext;
+  return !!c && collisionsLabel(c.collisions) !== 'off';
+}
+function sonaSkips(context) {
+  if (_sonaPaused) return true;
+  if (!inCollisionMode(context)) return false;
+  try { sonaSettleTrajectory(); } catch (e) { console.warn('[sona] settle failed', e); }
+  return true;
+}
+export function beginPhase4Trajectory(trackVec, context) {
+  if (sonaSkips(context)) return null;
   try { return sonaBeginTrajectory(trackVec); } catch (e) { console.warn('[sona] begin failed', e); return null; }
 }
-export function addPhase4Step(activations, attention, stepReward) {
-  if (_sonaPaused) return;
+export function addPhase4Step(activations, attention, stepReward, context) {
+  if (sonaSkips(context)) return;
   try { sonaAddStep(activations, attention, stepReward); } catch (e) { console.warn('[sona] addStep failed', e); }
 }
-export function endPhase4Trajectory(finalFitness) {
-  if (_sonaPaused) return null;
+export function endPhase4Trajectory(finalFitness, context) {
+  if (sonaSkips(context)) return null;
   try { return sonaEndTrajectory(finalFitness); } catch (e) { console.warn('[sona] endTrajectory failed', e); return null; }
 }
 export function findSimilarCircuits(trackVec, k = 5) {

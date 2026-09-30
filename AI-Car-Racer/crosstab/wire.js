@@ -48,6 +48,9 @@ function cleanLearning(value) {
       if (Number.isFinite(value.driving[key])) learning.driving[key] = clamp(value.driving[key],0,1e9);
     }
     if (typeof value.driving.crashed === 'boolean') learning.driving.crashed = value.driving.crashed;
+    // Collision mode (car-collisions C4).
+    if (typeof value.driving.carContact === 'boolean') learning.driving.carContact = value.driving.carContact;
+    if (Number.isFinite(value.driving.nearCarRate)) learning.driving.nearCarRate = clamp(value.driving.nearCarRate,0,1);
   }
   return learning;
 }

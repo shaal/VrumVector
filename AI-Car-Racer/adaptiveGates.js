@@ -10,6 +10,13 @@
 //      near-redundant intermediate.
 //   5. Remember high-survival layouts + crash centroids per track.
 //
+// Solid cars (docs/plan/car-collisions.md, C4): car-contact deaths (cause 5)
+// stay out of the reach rates, the crash centroid, and the crash maps; they
+// show where cars met, not where the road is hard. Pruning a gate still
+// counts them (shares of all cars), so a few survivors cannot prune. Layouts are remembered
+// and recalled per collision mode, so a normal-driving layout is never
+// applied in collision mode, nor the other way round.
+//
 // Relation to Heat / ruvector:
 //   Heat mode — live viz of death deposits.
 //   Worker popDeathXY — same events, authoritative end-of-gen positions.
@@ -41,6 +48,7 @@
   const REMOVE_RATIO = 0.97;     // rates[k]/rates[k-1] above this → redundant
   const REMOVE_MIN_REACH = 0.20; // only prune if enough cars reach the pair
   const MEMORY_PREFIX = 'vv_adapt_gates_';
+  const MIN_AT_RISK = 5;         // reach rates: fewer cars at risk, count contact deaths as failures
   const MEMORY_RING = 6;
 
   const state = {
@@ -60,6 +68,7 @@
     genSinceAdapt: 0,
     topoCooldown: 0,
     trackKey: null,
+    mode: null,              // collision mode of the last adapted generation
   };
 
   const CRASH_SIM_MIN = 0.55;      // min cosine sim to trust a retrieved layout
@@ -183,6 +192,32 @@
     return MEMORY_PREFIX + geometrySignature();
   }
 
+  // Collision mode as the learning context labels it ('off', or a label
+  // such as 'solid/k8/rays'). For a generation: its context, or 'unknown'
+  // when the worker reports solid cars without one. Otherwise the mode the
+  // next generation runs in (main.js's setting, through DriverLearning),
+  // which exists before the first generation's context does.
+  function collisionMode(genData) {
+    try {
+      if (genData) {
+        const c = genData.learningContext;
+        if (c && typeof c.collisions === 'string' && c.collisions) return c.collisions;
+        return genData.collisions ? 'unknown' : 'off';
+      }
+      const d = window.DriverLearning;
+      if (d && typeof d.collisionMode === 'function') return d.collisionMode();
+      if (d && d.context && typeof d.context.collisions === 'string') return d.context.collisions;
+      return typeof window.carCollisionsEnabled === 'function' && window.carCollisionsEnabled() ? 'unknown' : 'off';
+    } catch (_) { return 'off'; }
+  }
+
+  // Remembered layouts (localStorage) per track and collision mode. Normal
+  // driving keeps the key it always had.
+  function memoryKey(mode, base) {
+    const key = base || state.trackKey || trackKey();
+    return mode && mode !== 'off' ? key + '|' + mode : key;
+  }
+
   /** True when adaptive state still refers to a different wall geometry. */
   function trackStale() {
     if (!state.trackKey) return true;
@@ -284,13 +319,43 @@
     }
   }
 
-  function reachRates(popCheckpoints, cpLen, N) {
+  /**
+   * Share of cars that reached each gate. A car-contact death (cause 5) is
+   * not a failure at the next gate: from there on, the car leaves the count
+   * (a Kaplan-Meier estimate). From the first gate with fewer than
+   * MIN_AT_RISK cars at risk, the rates are reached / N again, contact
+   * deaths counting as failures: too few cars are no evidence that a gate is
+   * easy (a gate nobody reached must never look passed and be pruned).
+   * Without contact deaths this is exactly reached / N, as before.
+   */
+  function reachRates(popCheckpoints, cpLen, N, popDeathCauses) {
     const rates = new Array(cpLen + 1);
     rates[0] = 1;
+    let contacts = false;
+    if (popDeathCauses) {
+      for (let i = 0; i < N; i++) if (popDeathCauses[i] === 5) { contacts = true; break; }
+    }
+    if (!contacts) {
+      for (let k = 1; k <= cpLen; k++) {
+        let c = 0;
+        for (let i = 0; i < N; i++) if ((popCheckpoints[i] | 0) >= k) c++;
+        rates[k] = c / N;
+      }
+      return rates;
+    }
+    let censored = true;
     for (let k = 1; k <= cpLen; k++) {
-      let c = 0;
-      for (let i = 0; i < N; i++) if ((popCheckpoints[i] | 0) >= k) c++;
-      rates[k] = c / N;
+      // At risk for gate k: cars that reached gate k-1, less the ones a
+      // contact killed before gate k.
+      let atRisk = 0, reached = 0;
+      for (let i = 0; i < N; i++) {
+        const cp = popCheckpoints[i] | 0;
+        if (cp < k - 1) continue;
+        if (cp >= k) { reached++; atRisk++; }
+        else if (popDeathCauses[i] !== 5) atRisk++;
+      }
+      if (atRisk < MIN_AT_RISK) censored = false;
+      rates[k] = censored ? rates[k - 1] * reached / atRisk : reached / N;
     }
     return rates;
   }
@@ -364,15 +429,20 @@
   }
 
   /** Index of most redundant intermediate gate (0-based), or -1. */
-  function findRedundant(rates, cpLen) {
+  function findRedundant(rates, cpLen, shares) {
     // Prefer removing the *easiest* intermediate transition (highest pass ratio),
-    // never first/last.
+    // never first/last. The gate before must be reached by enough of all N
+    // cars (shares), and the gate must be easy both with contact deaths left
+    // out (rates) and counted (shares): a few survivors of a pile-up pass
+    // the next gate every time. Without contact deaths both are the same.
+    shares = shares || rates;
     let bestI = -1;
     let bestRatio = 0;
     for (let k = 2; k <= cpLen - 1; k++) {
       // k is 1-based gate; intermediate if not first/last
-      if (rates[k - 1] < REMOVE_MIN_REACH) continue;
-      const ratio = rates[k - 1] > 1e-6 ? rates[k] / rates[k - 1] : 0;
+      if (shares[k - 1] < REMOVE_MIN_REACH) continue;
+      const ratio = Math.min(rates[k - 1] > 1e-6 ? rates[k] / rates[k - 1] : 0,
+        shares[k - 1] > 1e-6 ? shares[k] / shares[k - 1] : 0);
       if (ratio >= REMOVE_RATIO && ratio > bestRatio) {
         bestRatio = ratio;
         bestI = k - 1; // 0-based
@@ -421,14 +491,15 @@
     };
   }
 
-  function tryRemove(next, rates) {
+  function tryRemove(next, rates, shares) {
+    shares = shares || rates;
     if (state.topoCooldown > 0) return null;
     if (next.length <= MIN_GATES) return null;
     // Only prune when the population is doing OK overall — don't strip
     // structure while everything is still dying early.
-    if (rates[1] < 0.15) return null;
+    if (shares[1] < 0.15) return null;
 
-    const idx = findRedundant(rates, next.length);
+    const idx = findRedundant(rates, next.length, shares);
     if (idx < 0) return null;
 
     next.splice(idx, 1);
@@ -468,12 +539,13 @@
         return window.CrashMapCodec.encodeDeathMap(
           genData.popDeathXY, genData.popN | 0,
           (typeof canvas !== 'undefined' && canvas && canvas.width) || 3200,
-          (typeof canvas !== 'undefined' && canvas && canvas.height) || 1800
+          (typeof canvas !== 'undefined' && canvas && canvas.height) || 1800,
+          genData.popDeathCauses
         );
       }
       const b = window.__rvBridge;
       if (b && typeof b.encodeCrashMap === 'function') {
-        return b.encodeCrashMap(genData.popDeathXY, genData.popN | 0);
+        return b.encodeCrashMap(genData.popDeathXY, genData.popN | 0, undefined, undefined, genData.popDeathCauses);
       }
     } catch (_) {}
     return null;
@@ -501,10 +573,13 @@
     catch (_) { return null; }
     if (!hits || !hits.length) return null;
     state.hnswHits++;
+    let otherMode = 0;
     state.lastCrashHit = hits[0];
 
-    // Prefer highest survival among sufficiently similar maps on *this* wall geometry.
+    // Prefer highest survival among sufficiently similar maps on *this* wall
+    // geometry, archived in this collision mode.
     const geo = geometrySignature();
+    const mode = collisionMode(genData);
     let best = null;
     for (let i = 0; i < hits.length; i++) {
       const h = hits[i];
@@ -514,6 +589,8 @@
       // (avoids painting Triangle gates onto Rectangle after a preset switch).
       if (!h.geometrySig || h.geometrySig !== geo) continue;
       if ((h.similarity || 0) < CRASH_SIM_MIN) continue;
+      // 'unknown' (no context, or a pre-C4 collision map) matches no mode.
+      if (mode === 'unknown' || (h.collisions || 'off') !== mode) { otherMode++; continue; }
       if ((h.survival || 0) < survival + CRASH_SURV_LIFT) continue;
       if (!best || h.survival > best.survival ||
           (h.survival === best.survival && h.similarity > best.similarity)) {
@@ -521,7 +598,8 @@
       }
     }
     if (!best) {
-      return 'hnsw: ' + hits.length + ' similar crash map(s), none beat survival';
+      return 'hnsw: ' + hits.length + ' similar crash map(s), none beat survival' +
+        (otherMode ? ' (' + otherMode + ' from another collision mode)' : '');
     }
     if (!applyCps(best.cps)) return 'hnsw: apply failed';
     state.hnswApplies++;
@@ -535,11 +613,14 @@
     const b = window.__rvBridge;
     if (!b || typeof b.archiveCrashMap !== 'function') return;
     if (window.rvDisabled) return;
+    // Deaths on the map: car contacts are not on it.
     let nDeaths = 0;
     const xy = genData.popDeathXY;
+    const causes = genData.popDeathCauses;
     const N = genData.popN | 0;
     if (xy) {
       for (let i = 0; i < N; i++) {
+        if (causes && causes[i] === 5) continue;
         if (Number.isFinite(xy[i * 2]) && Number.isFinite(xy[i * 2 + 1])) nDeaths++;
       }
     }
@@ -554,6 +635,7 @@
         causes: causesOf(genData),
         bottleneck: bottleneck,
         geometrySig: geometrySignature(),
+        collisions: collisionMode(genData),
       });
     } catch (e) {
       console.warn('[adaptiveGates] archiveCrashMap failed', e);
@@ -579,7 +661,20 @@
     }
 
     const cpLen = cps.length;
-    const rates = reachRates(popCp, cpLen, N);
+    const rates = reachRates(popCp, cpLen, N, genData.popDeathCauses);
+    // Shares of all N cars (contact deaths as failures): pruning needs many
+    // cars behind it, not a Kaplan-Meier estimate that a few survivors of a
+    // pile-up can carry (tryRemove, findRedundant). Without contact deaths
+    // these are the same array.
+    const shares = reachRates(popCp, cpLen, N);
+    const mode = collisionMode(genData);
+    // Survival is not comparable across collision modes: a change of mode
+    // starts the survival trend again.
+    if (state.mode !== mode) {
+      state.mode = mode;
+      state.lastSurvival = null;
+      state.badStreak = 0;
+    }
     const survival = (genData.popStillAlive | 0) / N;
     const { gate: bot1, drop } = findBottleneck(rates);
     state.lastBottleneck = bot1;
@@ -597,7 +692,7 @@
         state.lastStatus = 'on · ' + hnswMsg;
         state.lastSurvival = survival;
         const nowCps = currentCps() || cps;
-        maybeRemember(survival, genData.fitness || 0, nowCps, crash);
+        maybeRemember(mode, survival, genData.fitness || 0, nowCps, crash);
         archiveCrashToBridge(crashVec, survival, genData.fitness || 0, nowCps, genData, bot1);
         return true;
       }
@@ -618,17 +713,17 @@
     // Healthy population clearing the course — prefer pruning fluff over fidgeting.
     if (rates[cpLen] > 0.55 && drop < 0.08) {
       const next = cloneCps(cps);
-      const op = tryRemove(next, rates);
+      const op = tryRemove(next, rates, shares);
       if (op && applyCps(next)) {
         state.lastStatus = 'on · ' + op.msg;
         state.lastSurvival = survival;
-        maybeRemember(survival, genData.fitness || 0, next, crash);
+        maybeRemember(mode, survival, genData.fitness || 0, next, crash);
         return true;
       }
       state.lastStatus = 'on · no bottleneck (population clearing gates)' +
         (crash ? ' · heat n=' + crash.n : '');
       state.lastSurvival = survival;
-      maybeRemember(survival, genData.fitness || 0, cps, crash);
+      maybeRemember(mode, survival, genData.fitness || 0, cps, crash);
       return false;
     }
 
@@ -650,7 +745,7 @@
       state.topoCooldown = TOPO_EVERY;
       if (applyCps(restored)) {
         state.lastStatus = 'on · survival dipped — restored baseline gates';
-        maybeRemember(survival, genData.fitness || 0, restored, crash);
+        maybeRemember(mode, survival, genData.fitness || 0, restored, crash);
         return true;
       }
     }
@@ -661,7 +756,7 @@
     // After a nudge on a mild cliff, also consider pruning elsewhere.
     if (op && op.kind === 'nudge' && drop < 0.12 && next.length > MIN_GATES) {
       const pruned = cloneCps(next);
-      const rm = tryRemove(pruned, rates);
+      const rm = tryRemove(pruned, rates, shares);
       if (rm) {
         op = rm;
         for (let i = next.length - 1; i >= 0; i--) next.pop();
@@ -687,15 +782,16 @@
       ' · n/a/r ' + state.nudgeCount + '/' + state.addCount + '/' + state.removeCount +
       (state._hnswNote ? ' · ' + state._hnswNote : '') +
       (crashVec ? ' · map archived' : '');
-    maybeRemember(survival, genData.fitness || 0, next, crash);
+    maybeRemember(mode, survival, genData.fitness || 0, next, crash);
     if (crashVec) {
       archiveCrashToBridge(crashVec, survival, genData.fitness || 0, next, genData, bot1);
     }
     return true;
   }
 
-  function maybeRemember(survival, fitness, cps, crash) {
-    const key = state.trackKey || trackKey();
+  function maybeRemember(mode, survival, fitness, cps, crash) {
+    if (mode === 'unknown') return;
+    const key = memoryKey(mode);
     let mem = loadMemory(key) || { best: null, ring: [] };
     const entry = {
       survival: +survival.toFixed(4),
@@ -718,7 +814,9 @@
   }
 
   function restoreBestIfAny() {
-    const key = trackKey();
+    const mode = collisionMode(null);
+    if (mode === 'unknown') return false;
+    const key = memoryKey(mode, trackKey());
     const mem = loadMemory(key);
     if (!mem || !mem.best || !mem.best.cps || !mem.best.cps.length) return false;
     // Memory is geometry-keyed; still reject if wall sig diverged.
@@ -776,6 +874,28 @@
     return ok;
   }
 
+  /**
+   * Solid cars was switched (main.js setCarCollisions), before the new
+   * mode's first generation. While training with adaptive gates on, go back
+   * to the baseline gates, then to the new mode's best remembered layout, so
+   * a layout adapted in one collision mode does not carry into the other.
+   * The survival trend restarts in any case.
+   */
+  function onCollisionsChange() {
+    state.mode = collisionMode(null);
+    state.lastSurvival = null;
+    state.badStreak = 0;
+    if (!state.enabled) return false;
+    // Only while training: in phases 1-3 the gates may be being edited.
+    if (typeof phase !== 'undefined' && phase !== 4) return false;
+    resetToBaseline();
+    if (!restoreBestIfAny()) {
+      state.lastStatus = 'on · Solid cars ' + (state.mode === 'off' ? 'off' : 'on') +
+        ' · baseline gates (' + ((state.baseline && state.baseline.length) || 0) + ')';
+    }
+    return true;
+  }
+
   function onGenEnd(genData) {
     if (!state.enabled) return;
     // Detect track switches that happened without onTrackChange (defensive).
@@ -822,12 +942,14 @@
     isEnabled: function () { return !!state.enabled; },
     onGenEnd: onGenEnd,
     onTrackChange: onTrackChange,
+    onCollisionsChange: onCollisionsChange,
     resetToBaseline: resetToBaseline,
     captureBaseline: captureBaseline,
     getStatus: getStatus,
     geometrySignature: geometrySignature,
     _state: state,
     _crashCentroid: crashCentroid,   // for tests
+    _reachRates: reachRates,         // for tests
   };
 
   if (state.enabled) {

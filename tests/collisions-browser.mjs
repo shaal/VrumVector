@@ -1,10 +1,12 @@
-// Car collisions (tasks C2 and C3) in the real app: ?collide=1 and the
+// Car collisions (tasks C2 to C4) in the real app: ?collide=1 and the
 // Experiments toggle, both sim-worker.js instances (live and A/B baseline)
 // running in collision mode with rays that see cars, cause 5 in the metrics,
-// and the learning context. With MEASURE=1 it also measures the real
+// the learning context, and vector memory in collision mode (C4: no SONA
+// steps, crash maps without contact deaths and tagged with the mode, and
+// contact statistics on archived drivers). With MEASURE=1 it also measures the real
 // worker's step cost at N = 500 on Rectangle and Triangle: collisions off,
-// on with rays that see walls only (seeCars: false, which the test adds to
-// the begin message; the app never sends it), and on with rays that see
+// on with rays that see walls only (carCollisions.seeCars = false, which the
+// UI never sets; the context is then 'solid/k8'), and on with rays that see
 // cars, and writes test-results/collisions/step-cost.json.
 //
 //   node tests/collisions-browser.mjs            (MEASURE=1 for the step cost, PORT=8897 for another port)
@@ -35,8 +37,6 @@ const spyOnWorkers = () => {
       const post = this.postMessage.bind(this);
       this.postMessage = (message, transfer) => {
         if (message && message.type === 'begin') {
-          // Measuring only: the lesion switch (rays that see walls only).
-          if (message.collisions && window.__collisionsExtra) message = {...message, collisions: {...message.collisions, ...window.__collisionsExtra}};
           record.begins.push({N: message.N, collisions: message.collisions ?? null, context: message.learningContext?.collisions ?? null});
         }
         return post(message, transfer);
@@ -57,6 +57,9 @@ const spyOnWorkers = () => {
           const causes = Array.from(m.popDeathCauses);
           record.genEnds.push({runSerial: m.runSerial, N: m.popN, collisions: m.collisions ?? null, context: m.learningContext?.collisions ?? null,
             contact: causes.filter(c => c === 5).length, alive: m.popStillAlive, fitness: m.fitness, lastSnapshot: record.lastSnapshot,
+            // Deaths a crash map counts (C4): a position, and not a car contact.
+            mapDeaths: causes.filter((c, i) => c !== 5 && Number.isFinite(m.popDeathXY[i * 2])).length,
+            deathXY: Array.from(m.popDeathXY), causes,
             frames: m.frameCount, ...(record.runs[m.runSerial] || {simMs: 0, steps: 0})});
         }
       });
@@ -95,9 +98,9 @@ try {
   await page.evaluate(() => { setN(96); setSeconds(4); setSimSpeed(20); pauseGame(); });
   await waitGenEnds(0, 1);
   let [live] = await workers();
-  assert.deepEqual(live.begins[0], {N: 96, collisions: {heatSize: 8}, context: 'solid/k8'});
+  assert.deepEqual(live.begins[0], {N: 96, collisions: {heatSize: 8}, context: 'solid/k8/rays'});
   let gen = live.genEnds[0];
-  assert.equal(gen.context, 'solid/k8', 'the result carries its learning context');
+  assert.equal(gen.context, 'solid/k8/rays', 'the result carries its learning context');
   assert.equal(gen.collisions.heatSize, 8); assert.equal(gen.collisions.heats, 12);
   assert.ok(gen.contact > 0, 'some cars crashed into heat-mates: ' + JSON.stringify(gen));
   assert.equal(gen.collisions.contactDeaths, gen.contact, 'every contact death is cause 5');
@@ -109,7 +112,7 @@ try {
   assert.ok(gen.collisions.sensed > 0 && gen.collisions.carReadings > 0, 'rays read cars: ' + JSON.stringify(gen.collisions));
   assert.equal(gen.lastSnapshot.kinds.length, 7);
   assert.ok(live.carRaySnapshots > 0, 'some snapshot shows the best car\'s rays reading a car');
-  t = await toggle(); assert.equal(t.context, 'solid/k8');
+  t = await toggle(); assert.equal(t.context, 'solid/k8/rays');
   // The metrics HUD counts cause 5 on its own, not as alive.
   const row = await page.evaluate(() => __metricsLog[__metricsLog.length - 1]);
   assert.equal(row.dcContact, gen.contact);
@@ -117,12 +120,73 @@ try {
   assert.equal(row.dcHeadOn + row.dcSide + row.dcSlide + row.dcStalled + row.dcAlive + row.dcContact + row.dcOther, 96);
   assert.match(await page.evaluate(() => document.getElementById('metrics-hud').textContent), /contact \d+/);
 
+  mark('C4: vector memory in collision mode');
+  // Crash maps: every collision-mode map is tagged with the mode and counts
+  // no contact death; archived drivers carry the contact statistics; SONA
+  // records no step. Normal driving is checked after the toggle below.
+  await page.waitForFunction(() => { try { return window.__rvBridge.info().sona.ready; } catch (_) { return false; } }, null, {timeout: 60000});
+  const sona = () => page.evaluate(() => { const i = window.__rvBridge.info(); return {open: i.sona.trajectoryOpen, steps: i.sona.trajectorySteps, trajectories: i.sona.trajectories, lora: i.lora.rewardCount}; });
+  // The stored crash map of a genEnd is the map of its deaths less the contacts.
+  const mapOf = g => page.evaluate(([xy, causes, N]) => {
+    const b = window.__rvBridge, vec = window.CrashMapCodec.encodeDeathMap(Float32Array.from(xy), N, canvas.width, canvas.height, Int8Array.from(causes));
+    const all = window.CrashMapCodec.encodeDeathMap(Float32Array.from(xy), N, canvas.width, canvas.height);
+    const hit = vec && b.recommendCrashLayouts(vec, 1)[0];
+    let same = 0; for (let i = 0; i < vec.length; i++) same += vec[i] * all[i];
+    return hit ? {similarity: hit.similarity, collisions: hit.collisions, nDeaths: hit.nDeaths, cosineWithContacts: same} : null;
+  }, [g.deathXY, g.causes, g.N]);
+  const memory = () => page.evaluate(() => {
+    const b = window.__rvBridge, xy = new Float32Array(20).fill(400);
+    const maps = b.crashMapCount() ? b.recommendCrashLayouts(b.encodeCrashMap(xy, 10), b.crashMapCount()) : [];
+    const brains = (b.exportSnapshot().brains || []).map(e => e.meta).filter(m => m && m.learningContext);
+    return {maps: maps.map(h => ({collisions: h.collisions, nDeaths: h.nDeaths})),
+      drivers: brains.map(m => ({collisions: m.learningContext.collisions, driving: m.driving}))};
+  });
+  const sonaBefore = await sona();
+  [live] = await workers();
+  await waitGenEnds(0, live.genEnds.length + 2);
+  // No step, no trajectory learned, and no trajectory open (an empty one
+  // is closed without learning, so normal driving opens a fresh one).
+  assert.deepEqual(await sona(), {open: false, steps: 0, trajectories: sonaBefore.trajectories, lora: sonaBefore.lora}, 'SONA and the LoRA reward learn nothing in collision mode: ' + JSON.stringify(sonaBefore));
+  [live] = await workers();
+  let mem = await memory();
+  const solidMaps = mem.maps.filter(h => h.collisions === 'solid/k8/rays');
+  const expectMaps = live.genEnds.filter(g => g.context === 'solid/k8/rays' && g.mapDeaths >= 3);
+  assert.equal(solidMaps.length, expectMaps.length, 'one tagged map per collision generation: ' + JSON.stringify(mem.maps));
+  assert.ok(solidMaps.length >= 2, 'maps from at least two collision generations: ' + JSON.stringify(mem.maps));
+  assert.equal(mem.maps.length, solidMaps.length, 'no untagged map yet');
+  console.log('  C4:', JSON.stringify({sona: sonaBefore, maps: solidMaps, contactDeaths: live.genEnds.map(g => g.contact), drivers: mem.drivers.length}));
+  // A trajectory with steps from normal driving (as restored after a reload)
+  // is pending in collision mode: the memory review pauses, and the next
+  // collision generation learns it as normal driving and closes it.
+  const review = await page.evaluate(() => {
+    const b = window.__rvBridge, v = new Float32Array(512), off = {collisions: 'off'}; v[3] = 1;
+    b.beginPhase4Trajectory(v, off); b.addPhase4Step(v, null, 1, off);
+    return {done: window.DriverLearning.consolidate(), steps: b.info().sona.trajectorySteps};
+  });
+  assert.deepEqual(review, {done: false, steps: 1}, 'no review in collision mode');
+  [live] = await workers();
+  await waitGenEnds(0, live.genEnds.length + 1);
+  const settled = await sona();
+  // The agent counts a trajectory per processTask: the one step, then the track.
+  assert.deepEqual([settled.open, settled.steps, settled.trajectories], [false, 0, sonaBefore.trajectories + 2], 'the normal steps were learned once, then the trajectory closed: ' + JSON.stringify(settled));
+  assert.deepEqual(solidMaps.map(h => h.nDeaths).sort((a, b) => a - b), expectMaps.map(g => g.mapDeaths).sort((a, b) => a - b), 'maps count no contact death');
+  // The stored vector is the map without the contact deaths (the passive archive, adaptive gates off).
+  const lastMap = await mapOf(expectMaps.at(-1));
+  assert.ok(lastMap.similarity > 0.9999 && lastMap.collisions === 'solid/k8/rays' && lastMap.nDeaths === expectMaps.at(-1).mapDeaths, JSON.stringify(lastMap));
+  assert.ok(lastMap.cosineWithContacts < 0.9999, 'the contacts would change the map: ' + JSON.stringify(lastMap));
+  const solidDrivers = mem.drivers.filter(d => d.collisions === 'solid/k8/rays');
+  assert.ok(solidDrivers.length > 0, 'a collision-mode driver was archived: ' + JSON.stringify(mem.drivers));
+  for (const d of solidDrivers) {
+    assert.equal(typeof d.driving.carContact, 'boolean', JSON.stringify(d));
+    assert.ok(d.driving.nearCarRate >= 0 && d.driving.nearCarRate <= 1, JSON.stringify(d));
+  }
+
   mark('the A/B baseline worker runs in the same mode');
   await page.evaluate(() => window.__abSetEnabled(true));
   await waitGenEnds(1, 1);
   const [, baseline] = await workers();
-  assert.deepEqual(baseline.begins[0], {N: 96, collisions: {heatSize: 8}, context: 'solid/k8'});
-  assert.equal(baseline.genEnds[0].context, 'solid/k8');
+  assert.deepEqual(baseline.begins[0], {N: 96, collisions: {heatSize: 8}, context: 'solid/k8/rays'});
+  assert.equal(baseline.genEnds[0].context, 'solid/k8/rays');
   assert.ok(baseline.genEnds[0].collisions && baseline.genEnds[0].collisions.heats === 12, 'baseline genEnd: ' + JSON.stringify(baseline.genEnds[0]));
   assert.equal(baseline.genEnds[0].collisions.contactDeaths, baseline.genEnds[0].contact);
   assert.ok(baseline.genEnds[0].collisions.seeCars === true && baseline.genEnds[0].collisions.carReadings > 0, 'the baseline\'s rays read cars too');
@@ -145,6 +209,30 @@ try {
   assert.equal(gen.lastSnapshot.flags, null, 'no car flags with collisions off');
   assert.equal(gen.lastSnapshot.kinds, null, 'no ray kinds with collisions off');
   assert.equal(await page.evaluate(() => __metricsLog[__metricsLog.length - 1].dcContact), 0);
+  // C4: normal driving records SONA steps again, its crash map is untagged,
+  // and its drivers carry no contact statistics.
+  await waitGenEnds(0, live.genEnds.length + 1);
+  const sonaNormal = await sona();
+  assert.ok(sonaNormal.open && sonaNormal.steps > 0, 'SONA records normal driving: ' + JSON.stringify(sonaNormal));
+  // A collision-mode brain (as from a peer tab) archived in this normal tab
+  // adds no step and leaves this tab's trajectory alone.
+  const peer = await page.evaluate(() => {
+    const b = window.__rvBridge, info = () => { const s = b.info().sona; return [s.trajectoryOpen, s.trajectorySteps, s.trajectories]; };
+    const before = info();
+    b.archiveBrain(window.__rvUnflatten(new Float32Array(244).fill(0.01)), 1, window.currentTrackVec, 0, [], undefined, undefined,
+      {context: {...window.DriverLearning.context, collisions: 'solid/k8/rays'}, styleScore: 0});
+    return {before, after: info()};
+  });
+  assert.deepEqual(peer.after, peer.before, 'a peer\'s collision brain leaves this tab\'s SONA alone: ' + JSON.stringify(peer));
+  assert.ok(sonaNormal.lora > sonaBefore.lora, 'the LoRA adapter is rewarded in normal driving: ' + JSON.stringify([sonaBefore, sonaNormal]));
+  const normalMap = await mapOf(live.genEnds.at(-1));
+  assert.ok(normalMap.similarity > 0.9999 && normalMap.collisions === 'off', JSON.stringify(normalMap));
+  mem = await memory();
+  assert.ok(mem.maps.some(h => h.collisions === 'off'), 'a normal-driving map: ' + JSON.stringify(mem.maps));
+  assert.ok(mem.drivers.some(x => x.collisions === 'off'), 'a normal driver was archived');
+  for (const d of mem.drivers.filter(x => x.collisions === 'off')) {
+    assert.equal('carContact' in (d.driving || {}), false); assert.equal('nearCarRate' in (d.driving || {}), false);
+  }
   // The mode is not a saved physics setting.
   assert.equal(await page.evaluate(() => Object.keys(localStorage).filter(k => /collide|collision/i.test(k)).length), 0);
 
@@ -154,7 +242,13 @@ try {
   assert.deepEqual([t.checked, t.on], [true, true]);
   await page.waitForFunction(() => window.__simWorkers[0].begins.at(-1).collisions !== null);
   [live] = await workers();
-  assert.deepEqual(live.begins.at(-1), {N: 96, collisions: {heatSize: 8}, context: 'solid/k8'});
+  assert.deepEqual(live.begins.at(-1), {N: 96, collisions: {heatSize: 8}, context: 'solid/k8/rays'});
+  // C4: the change of context reviewed normal driving's trajectory and opened
+  // a new one; the first collision generation closes it, empty, unlearned.
+  await waitGenEnds(0, live.genEnds.length + 1);
+  const sonaBack = await sona();
+  assert.deepEqual([sonaBack.open, sonaBack.steps], [false, 0], 'no trajectory stays open into collision mode: ' + JSON.stringify(sonaBack));
+  assert.ok(sonaBack.trajectories > sonaNormal.trajectories, 'normal driving was reviewed on the way in: ' + JSON.stringify([sonaNormal, sonaBack]));
 
   mark('while paused, a change of mode starts the new generation paused; the console keeps the toggle in step');
   await page.evaluate(() => { if (!pause) pauseGame(); });
@@ -168,7 +262,7 @@ try {
   assert.equal(await page.evaluate(() => pause), true, 'still paused');
   await page.evaluate(() => window.setCarCollisions(true));
   t = await toggle();
-  assert.deepEqual([t.checked, t.context], [true, 'solid/k8']);
+  assert.deepEqual([t.checked, t.context], [true, 'solid/k8/rays']);
   await page.evaluate(() => pauseGame());
 
   mark('the A/B baseline copies the primary generation, even when the mode changes where no generation starts');
@@ -177,8 +271,22 @@ try {
   await page.evaluate(() => window.__abSetEnabled(true));   // a fresh baseline worker
   await page.waitForFunction(n => window.__simWorkers.length > n && window.__simWorkers.at(-1).begins.length > 0, spawned);
   const b = (await workers()).at(-1).begins.at(-1);
-  assert.deepEqual([b.collisions, b.context], [{heatSize: 8}, 'solid/k8'], 'the primary generation still runs solid cars');
+  assert.deepEqual([b.collisions, b.context], [{heatSize: 8}, 'solid/k8/rays'], 'the primary generation still runs solid cars');
   await page.evaluate(() => { window.__abSetEnabled(false); phase = 4; });
+
+  mark('C4: rays that see walls only (carCollisions.seeCars = false, benchmarks only) are labelled solid/k8');
+  await page.evaluate(() => {
+    window.carCollisions.seeCars = false;   // the stage above turned Solid cars off
+    if (!window.carCollisionsEnabled()) window.setCarCollisions(true); else restartDriverLearning();
+    if (pause) pauseGame();
+  });
+  await page.waitForFunction(() => window.__simWorkers[0].begins.at(-1).context === 'solid/k8');
+  [live] = await workers();
+  assert.deepEqual(live.begins.at(-1), {N: 96, collisions: {heatSize: 8, seeCars: false}, context: 'solid/k8'});
+  await waitGenEnds(0, live.genEnds.length + 1);
+  [live] = await workers();
+  assert.deepEqual([live.genEnds.at(-1).context, live.genEnds.at(-1).collisions.seeCars], ['solid/k8', false]);
+  await page.evaluate(() => { window.carCollisions.seeCars = undefined; restartDriverLearning(); if (!pause) pauseGame(); });
 
   let report = null;
   if (process.env.MEASURE === '1') {
@@ -201,7 +309,7 @@ try {
           await page.evaluate(([name, heats, speed, seeCars]) => {
             window.__switchTrackInMemory(name);
             window.carCollisions.heatSize = heats || 8;
-            window.__collisionsExtra = seeCars ? null : {seeCars: false};
+            window.carCollisions.seeCars = seeCars ? undefined : false;
             if (window.carCollisionsEnabled() !== !!heats) window.setCarCollisions(!!heats);
             setN(500); setSeconds(15); setSimSpeed(speed);
             restartDriverLearning();
@@ -225,7 +333,7 @@ try {
         }
       }
     }
-    await page.evaluate(() => { window.carCollisions.heatSize = 8; window.__collisionsExtra = null; });
+    await page.evaluate(() => { window.carCollisions.heatSize = 8; window.carCollisions.seeCars = undefined; });
     await writeFile(`${out}/step-cost.json`, JSON.stringify(report, null, 2) + '\n');
   }
 

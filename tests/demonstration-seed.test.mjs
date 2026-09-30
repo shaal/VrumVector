@@ -22,14 +22,16 @@ test('the offer rule: the same walls, physics, driving style, and Solid cars mod
   assert.equal(typeof key,'string');
   assert.equal(offerKey({...context,seconds:45}),key,'another round length is the same context for a clone');
   assert.equal(offerKey({...context,version:7}),key);
-  for(const other of [{track:'walls-b'},{maxSpeed:10},{traction:.4},{profile:'wild'},{collisions:'solid/k8'},{collisions:{heatSize:4}}])
+  for(const other of [{track:'walls-b'},{maxSpeed:10},{traction:.4},{profile:'wild'},{collisions:'solid/k8'},{collisions:'solid/k8/rays'},{collisions:{heatSize:4}}])
     assert.notEqual(offerKey({...context,...other}),key,JSON.stringify(other));
   // A recording made before the recorder saved the mode counts as off.
   const {collisions,...old}=context;
   assert.equal(offerKey(old),key);
   assert.equal(offerKey({...context,collisions:null}),key);
   // The saved label and the settings it came from are the same mode.
-  assert.equal(offerKey({...context,collisions:{heatSize:8}}),offerKey({...context,collisions:'solid/k8'}));
+  assert.equal(offerKey({...context,collisions:{heatSize:8}}),offerKey({...context,collisions:'solid/k8/rays'}));
+  // C4: a recording from C2 (rays saw walls only) is another mode.
+  assert.notEqual(offerKey({...context,collisions:'solid/k8'}),offerKey({...context,collisions:'solid/k8/rays'}));
   assert.equal(sameOffer(context,{...context,seconds:5}),true);
   assert.equal(sameOffer(context,{...context,collisions:'solid/k8'}),false);
   // No track key, no offer.
@@ -46,7 +48,7 @@ function record(id,ctx,{n=400,seed=id}={}){
 
 test('the dataset uses only the recordings of this context, and skips a bad one',()=>{
   const here=[record(1,context),record(3,{...context,seconds:40})];
-  const elsewhere=[record(2,{...context,track:'walls-b'}),record(4,{...context,collisions:'solid/k8'}),record(5,{...context,profile:'calm'})];
+  const elsewhere=[record(2,{...context,track:'walls-b'}),record(4,{...context,collisions:'solid/k8/rays'}),record(5,{...context,profile:'calm'})];
   const bad={...record(6,context),keys:new Uint8Array(3)};
   const {dataset,used,skipped}=cloneDataset([here[0],elsewhere[0],bad,here[1],...elsewhere.slice(1),null,'junk'],context);
   assert.deepEqual(used.map(r=>r.id),[1,3]);

@@ -159,6 +159,8 @@ class DriverLearning {
   consolidate(){
     const bridge=window.__rvBridge;
     if(!bridge||window.rvDisabled)return false;
+    // SONA learns from normal driving only (car-collisions C4).
+    if(this.context&&this.context.collisions!=='off')return false;
     try{
       if(!bridge.info().sona?.trajectorySteps)return false;
       bridge.endPhase4Trajectory(this.coach.incumbent?.fitness||0);
@@ -228,6 +230,9 @@ let demoCount=null,demoStorage='unknown',demoNotice='';
 const point=p=>({x:p.x,y:p.y});
 // The Solid cars mode (main.js), as the learning context labels it.
 const collisionMode=()=>collisionsLabel(typeof collisionConfig==='function'?collisionConfig():null);
+// The mode the next generation runs in, before any generation has (adaptive
+// gates read it to pick their remembered layouts).
+learning.collisionMode=collisionMode;
 export const demonstrations=window.DemonstrationRecorder=new DemonstrationRecorder({store:demoStore,
   environment:{
     // PlayerAssist hides this panel outside training and in the A/B view.
@@ -446,7 +451,7 @@ export function attachLearningControls(host){
     const demo=learning.demonstrationFor(learning.context);if(!demo)return;
     learning.setDemonstrationSeeding(!demo.seeding);
   };
-  root.querySelector('[data-learning-review]').onclick=()=>{const done=learning.consolidate();if(!done)root.querySelector('[data-learning-consolidation]').textContent='Complete a generation with Vector Memory on to review new memories.';};
+  root.querySelector('[data-learning-review]').onclick=()=>{const done=learning.consolidate();if(!done)root.querySelector('[data-learning-consolidation]').textContent=learning.context&&learning.context.collisions!=='off'?'Memory reviews pause while Solid cars is on. They learn from normal driving only.':'Complete a generation with Vector Memory on to review new memories.';};
   root.addEventListener('toggle',()=>{
     if(root.open){const panel=document.getElementById('live-panel');if(panel&&!panel.hidden)panel.querySelector('[data-live-close]').click();refreshDemoCount();learning.render();}
   });

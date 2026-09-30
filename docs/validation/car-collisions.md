@@ -5,8 +5,9 @@ This page records what each task measured. C1 built the shared collision
 core and the `Car.update()` split. C2 wired the core into all four
 simulators, behind an experiment that is off by default, and changed who
 crashes ([C2](#c2-the-four-simulators)). C3 made the rays see the solid
-cars of their heat ([C3](#c3-rays-see-cars)). With the experiment off,
-training behaves exactly as before.
+cars of their heat ([C3](#c3-rays-see-cars)). C4 keeps vector memory from
+mixing the modes ([C4](#c4-learning-context-and-vector-memory)). With the
+experiment off, training behaves exactly as before.
 
 ## C1: the shared core
 
@@ -618,10 +619,10 @@ harness's timing check at a load average of 75.
 
 - **Walls and cars look the same to the network** (D3). Separate car inputs
   are C7.
-- **The learning context does not change.** C3 runs keep the label
+- **The learning context did not change in C3.** C3 runs kept the label
   `'solid/k8'`, as C2 runs (rays saw walls only), so C2 collision-mode
-  champions are exact matches in C3. C2 shipped as an experiment the same
-  week; C4 owns `matchContext` and can split the label if it matters.
+  champions were exact matches in C3. C4 split the label
+  ([C4](#c4-learning-context-and-vector-memory)).
 - **Stale readings.** The rays see cars when the car senses. With the sensor
   stride (up to 4 in collision mode), a reading can be up to 3 steps old,
   as for walls.
@@ -629,3 +630,190 @@ harness's timing check at a load average of 75.
 - **The lesion switches are per car index.** In the live worker car 0 is
   the elite; the trial worker does not promise that. C6's lesion test needs
   per-car contact data for the blind car.
+
+## C4: learning context and vector memory
+
+Vector memory keeps collision-mode driving apart from normal driving. What
+C2 did not do already: the label split, the factor for another mode, the
+contact statistics on archived drivers, crash maps and adaptive gates per
+mode, and SONA.
+
+### The label
+
+- **Rays that see cars are `'solid/k8/rays'`** (C3, the app's only
+  collision mode). **`'solid/k8'` is rays that see walls only:** every C2
+  run, and the `seeCars: false` lesion. A C2 champion never learned to see
+  cars, so it is no longer an exact match for C3 driving.
+- `collisionsLabel({heatSize, seeCars})` gives the label: `/rays` unless
+  `seeCars` is `false`. `blind` does not change it (a lesion of some cars
+  only). `collisionSettings` gives the settings back: `'solid/k8'` runs
+  with `seeCars: false`, so a transfer check in that mode runs C2's mode.
+- **Benchmarks run C2's mode with `carCollisions.seeCars = false`**
+  (main.js; the UI never sets it). The workers get `seeCars: false`, and
+  the context is `'solid/k8'`. The step-cost harness (`MEASURE=1`) uses it,
+  so its walls-only generations are no longer labelled `'solid/k8/rays'`.
+- **Data from C3 until C4 is mislabelled.** Between #41 (C3) and C4, rays
+  saw cars but runs were saved as `'solid/k8'`. Those champions, transfer
+  verdicts, and "Use my driving" recordings now count as the walls-only
+  mode: never exact, factor .9 below. Recordings from that window are not
+  offered with Solid cars on until you record again (the player's car takes
+  no part in collisions, so the recording itself is the same). Collision
+  mode was an experiment, off by default, for those hours.
+- **Other state saved in collision mode before C4 reads as normal driving:**
+  a pending SONA trajectory (C2 and C3 recorded steps in collision mode; it
+  is learned as normal driving at the next review), layouts that adaptive
+  gates remembered under the normal key, and crash maps archived without
+  adaptive gates (no cause histogram, so no way to tell).
+
+### How much another mode counts
+
+`matchContext` multiplies its factor by `collisionModeFactor`:
+
+| Memory \ query | Same mode | Two Solid cars modes (heat size, or rays) | Normal driving and Solid cars |
+|---|---|---|---|
+| Factor | 1 | .9 | .8 |
+
+- **Provisional, not measured.** It is a retrieval weight, not a reward,
+  and it only reorders an archive that mixes modes: with memories from one
+  mode only, every candidate gets the same factor, and training is as
+  before. The transfer check (T5) measures, per context, whether memories
+  from other contexts help, and its guard stops that recall where they
+  hurt. C6 needs its own ablation for the factor (a mixed archive, factor 1
+  against .8); arm 5 (seeds from collision-mode memories) does not measure
+  it.
+- A legacy memory (no context) is normal driving: .8 of its factor in
+  collision mode.
+- The label says where a memory is from: "from normal driving", "from
+  Solid cars", "other Solid cars mode", or "from another car mode" (a label
+  this build does not know).
+- **Ranking.** `evaluationFor` now prefers, in collision mode, a row from
+  another track in the same mode (factor 1) over a row from this track in
+  normal driving (.8 + .1 for the track), as it already preferred another
+  track in the same physics over this track in other physics.
+
+### Archived drivers
+
+`meta.driving` adds `carContact` (a contact crashed the driver) and
+`nearCarRate` (clamped to 0..1) when `DriverProfiles.summarize` has them:
+collision mode, and rays that see cars. The cross-tab wire carries both.
+Normal-mode drivers have exactly their old fields.
+
+### Crash maps and adaptive gates
+
+- **Contact deaths are not on the map.** `encodeDeathMap` (and the bridge's
+  copy) take the causes and skip cause 5; `nDeaths` counts the deaths on the
+  map. The adaptive-gates archive still stores the cause histogram, with
+  `contact`. Without causes, or without contact deaths, the map is the same
+  as before.
+- **Maps carry the mode** (`meta.collisions`; normal driving stays
+  untagged). `crashRecall` reads an untagged map as normal driving, unless
+  its cause histogram counts contacts (a collision-mode map from before C4):
+  then `'unknown'`, which matches no mode.
+- **Adaptive gates apply a recalled layout only from the same mode.** The
+  status says how many similar enough maps were from another mode. Mode
+  `'unknown'` recalls and remembers nothing.
+- **Remembered layouts** (localStorage) are kept per mode: normal driving
+  keeps its old key, and collision mode adds `|<mode>`. Turning adaptive
+  gates on restores the best layout of the mode the next generation runs
+  in, also before the first generation (`DriverLearning.collisionMode()`,
+  from main.js's setting).
+- **Switching Solid cars while training with adaptive gates on switches
+  the layout** (`AdaptiveGates.onCollisionsChange`, from `setCarCollisions`,
+  before the new mode's first generation): back to the baseline gates, then
+  to the new mode's best remembered layout, if any. In phases 1 to 3 the
+  gates are left alone (they may be being edited).
+- **Reach rates leave contact deaths out.** A car killed by a contact
+  leaves the count from the gate it was trying for (a Kaplan-Meier
+  estimate): gate k's rate is the previous rate times the cars that reached
+  it over the cars at risk. From the first gate with fewer than 5 cars at
+  risk, the rates are reached / N again, with contacts as failures, so a
+  gate that nobody reached reads 0, never "passed", and is never pruned.
+  Without contact deaths the rates are reached / N exactly, as before.
+  Past the floor, contact deaths count again, so the switch itself can show
+  a drop that can place the bottleneck and add a gate (40 contact deaths
+  before gate 2 of 50 cars: gate 4 drops .32 although all 4 cars at risk
+  passed it). C6 looks at it.
+- **Pruning counts contact deaths, as before C4.** "Removed redundant
+  gate" tests shares of all N cars (reached / N) and the pass ratio with
+  contact deaths counted; the contact-free ratio can only make it stricter.
+  So fewer than a fifth of the cars, such as the survivors of a pile-up at
+  the start or in mid-course, never prune a gate, and a stretch that loses
+  3% or more of its cars to contacts is never pruned: pruning is rare in
+  collision mode. "Population clearing gates" uses the contact-free rates,
+  so contact deaths alone do not make adaptive gates move a gate.
+- **Normal driving is unchanged.** In review, `adaptiveGates.js` and the
+  file before C4 ran side by side on the same 23 993 normal-mode generations (70 seeds,
+  with enable, disable, reset, wall and gate changes between them): the
+  layouts, status, state, localStorage, and every archived map and its
+  meta were identical (about 1 000 prunes, 1 000 inserts, and 4 300
+  recalled layouts).
+- **A change of mode restarts the survival trend** (`lastSurvival`,
+  `badStreak`): survival in collision mode is not comparable with normal
+  driving.
+
+### SONA
+
+SONA's patterns, and the LoRA adapter's reward, are keyed by track only. In
+collision mode:
+
+- no SONA step is recorded, and no trajectory begins or ends. (Before a
+  generation has a collision-mode context, when Solid cars is switched on
+  outside training or before Start, a trajectory can open; the first
+  collision generation settles it.)
+- the pending trajectory is settled first (`settleTrajectory`): an empty
+  one closes without learning; one with steps from normal driving (restored
+  after a reload, say) is learned as normal driving, with its best step
+  reward as the final fitness. When the mode changes, the memory review
+  learns normal driving's trajectory and opens a new, empty one, which the
+  first collision generation closes. Normal driving then opens a fresh
+  trajectory on its own track at its next generation;
+- the memory review (every 8 generations, and the button) pauses, with its
+  own message;
+- the LoRA adapter gets no reward, when either the archived brain or this
+  tab is in collision mode ("this tab" is its learning context, which
+  follows a Solid cars switch when the next generation starts). It still
+  adapts the recall query;
+- a collision-mode brain from a peer tab adds no step in a normal tab, and
+  leaves that tab's trajectory alone.
+
+### Evidence
+
+`npm run test:learning`, `npm run test:crash-maps`, and
+`npm run test:collisions:browser`:
+
+| Claim | How the test checks it |
+|---|---|
+| The label | Settings to label and back for every heat size and both sights; `blind` keeps the label; C2's label keys apart; a transfer check in `'solid/k8'` posts `seeCars: false`; the offer rule for recordings |
+| The factor | 1, .9, and .8 for each pair of modes, `'unknown'`, and legacy memories; it multiplies style and physics; the labels; `evaluationFor` prefers the row from this mode |
+| Crash maps | With causes, the map equals the map of the non-contact deaths; without causes, or without contacts, it is unchanged; untagged maps with contact causes are `'unknown'` |
+| Adaptive gates | In a small page: a better layout from another mode is refused, one from this mode is applied; the archive meta carries the mode and 10 of 20 deaths, and its vector is the map of the 10 wall deaths; remembered layouts per mode; restore before the first generation reads the next mode (4 cases); a switch of Solid cars goes to the new mode's layout, or the baseline, and leaves the layout alone with adaptive gates off or outside training; the survival trend restarts; a generation with solid cars and no context is `'unknown'`, and recalls and remembers nothing |
+| Reach rates | Bit-identical to reached / N without contact deaths; 10 of 15 at risk, not 10 of 20; the floor at exactly 5 cars; rates never rise over 300 random populations; in a real `onGenEnd` the bottleneck is gate 3 (reached / N would say gate 1); 48 cars killed by contact at gate 3 make gate 4 the bottleneck over 4 generations, and no gate is pruned; 6 survivors of a 494-car pile-up at the start (the gates look clear, and nothing moves), 19 of 100 cars past gate 1, and 5 survivors of an 85-car pile-up after gate 2 prune nothing |
+| Cross-tab wire | `carContact` and `nearCarRate` pass; a string `carContact` is dropped, and a rate above 1 is clamped to 1 |
+| The app | In Chromium, collision mode: every crash map is tagged `'solid/k8/rays'` and counts no contact death (one map per generation), and the stored vector is the map without the contacts; archived drivers carry `carContact` and `nearCarRate`; SONA has no open trajectory, no step, and no new trajectory, and the LoRA adapter no reward; with a normal step pending, the memory review pauses, and the next collision generation learns the step once and closes the trajectory. In a normal tab, a collision-mode brain (as from a peer tab) leaves the trajectory alone. Normal driving: an untagged map, drivers without the new fields, a SONA trajectory with steps, LoRA rewards. Back to collision mode: normal driving's trajectory was reviewed, and no trajectory stays open. `carCollisions.seeCars = false`: the workers get `seeCars: false`, and the context and results are `'solid/k8'` |
+| Mutations | Review ran 18 changes to the C4 code against the Node tests (11 survived), and read the browser test. After the added tests: 12 of those 13 Node mutants are killed, 5 of 7 mutants of the second-round fixes, and the 4 browser mutants run (review pause, LoRA reward, passive map without causes, a peer's collision brain settling this tab's SONA) at their checks. Not killed: the `badStreak` reset on a change of mode (it matters only when the new mode's first generation takes the "clearing gates" branch or applies a recalled layout); `main.js` labelling a generation without a learning context `'unknown'` (no test sends one); two guards that another guard already covers (`shares[1]` in `tryRemove`, `'unknown'` in the restore) |
+
+`test:cloning`, `test:gnn`, `test:graphics`, `test:multiplayer`, and every
+browser test (`learning`, `demonstration`, `cloning`, `auto-train`) pass.
+On a loaded machine (load average 10 to 40) the browser tests often failed
+at start-up or at a page reload, before any C4 code ran, and `main`
+(71ace0f) failed the same way, including `learning-browser`'s blocked-LoRA
+reload. The cause is the test server: `python3 -m http.server` keeps a
+listen queue of 5 connections, and a page load's burst of module requests
+overflows it (`ERR_CONNECTION_RESET` on module files). With the same
+server and a queue of 256 (a local copy of the tests only), every browser
+test passes in full on this code, `learning-browser` included.
+
+### Limits
+
+- **The factor is a guess until C6 measures it** (above).
+- **Recall looks at the 5 most similar crash maps, then filters by mode**
+  (as by track). When one mode has many more maps on a track, the other
+  mode's layouts are rarely reached.
+- **With adaptive gates off, or outside training, a Solid cars switch keeps
+  the current gates**, adapted or not: they are then the track's gates. If
+  adaptive gates are turned on later in the new mode with nothing
+  remembered there, they adapt from those gates.
+- **`carCollisions.seeCars` (benchmarks only) is not a Solid cars switch**:
+  changing it does not switch adaptive-gate layouts, and it stays set when
+  Solid cars is toggled later.
+
