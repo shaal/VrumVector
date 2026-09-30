@@ -15,6 +15,14 @@
 // runs another copy of the core instead, e.g. C1's from git:
 //   git show 79e59c9:AI-Car-Racer/collisions.js > /tmp/c1-core.js
 //
+// Rays see cars (task C3): every run is made twice, with the rays seeing the
+// solid cars of their heat and with rays that see walls only (seeCars: false,
+// the C2 traffic). The scripted drivers steer by their rays, so they now
+// steer around cars too. It reports how often a ray read a car, the
+// perception pass's time, and the car-sensing part alone (seeCars run again,
+// natively, on the same rays and cars after each perception pass), and the
+// worst case: every car of every heat within reach of every ray.
+//
 //   node scripts/benchmark-collisions.mjs [output.json] [--core file.js] [--seeds 1,2]
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
@@ -45,12 +53,12 @@ function autopilot(c, top) {
 const percentile = (xs, p) => { const s = [...xs].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
 const round = x => Math.round(x * 1000) / 1000;
 
-function run(track, seed) {
+function run(track, seed, seeCars) {
   const sim = new Simulation({track, seed}), s = sim.spawn, gate = sim.road.checkPointList[0];
   const random = seededRandom(seed + ':brains'), flat = new Float32Array(N * FLAT);
   for (let i = 0; i < flat.length; i++) flat[i] = random() * 2 - 1;
   const row = C.startRow({x: s.x, y: s.y, heading: s.angle, gate, count: C.rowSize(N, K), road: sim.road});
-  const state = C.createState(N, {heatSize: K}, row), H = state.heats;
+  const state = C.createState(N, {heatSize: K, seeCars}, row), H = state.heats;
   sim.begin(flat);
   const cars = sim.cars, tops = new Float64Array(N), live = new Uint8Array(N);
   cars.forEach((c, i) => {
@@ -58,7 +66,11 @@ function run(track, seed) {
     c.x = p.x; c.y = p.y; c.angle = p.angle; c.polygon = Car.polygonAt(p.x, p.y, p.angle, 30, 50);
     if (i % 3 === 1) { c.useBrain = false; tops[i] = 4 + 5 * random(); }
   });
-  const b = sim.road.borders, g = sim.road.checkPointList, contactMs = [], carMs = [], alive = [];
+  // The rays of the cars (in the simulator's vm) read this state; a core
+  // from before C3 has no rays to connect.
+  const sight = !!C.attachRays;
+  if (sight) C.attachRays(cars, state);
+  const b = sim.road.borders, g = sim.road.checkPointList, contactMs = [], carMs = [], perceptionMs = [], sightMs = [], alive = [];
   const heading = new Float64Array(N), sinceTurn = new Int32Array(N).fill(1 << 20), wasLive = new Uint8Array(N);
   const who = {single: 0, both: 0, straightCrashedByTurner: 0, turnerAhead: 0, alongCrashedByAcross: 0};
   for (let f = 1; f <= STEPS; f++) {
@@ -73,16 +85,28 @@ function run(track, seed) {
     const t2 = performance.now();
     for (let i = 0; i < N; i++) if (live[i]) cars[i].updatePerception(b, g);
     const t3 = performance.now();
-    contactMs.push(t2 - t1); carMs.push((t1 - t0) + (t3 - t2));
+    contactMs.push(t2 - t1); carMs.push((t1 - t0) + (t3 - t2)); perceptionMs.push(t3 - t2);
+    if (sight && seeCars) {
+      // The car-sensing part alone: seeCars again on the same rays and cars.
+      // Nothing is nearer now, so it writes no reading; the counters are put back.
+      const {sensed, carTests, carReadings} = state.stats;
+      const t4 = performance.now();
+      for (let i = 0; i < N; i++) if (live[i]) C.seeCars(cars[i].sensor);
+      sightMs.push(performance.now() - t4);
+      Object.assign(state.stats, {sensed, carTests, carReadings});
+    }
     if (f % 60 === 0) alive.push(cars.filter(c => !c.damaged).length);
     for (let i = 0; i < N; i++) sinceTurn[i] = cars[i].angle !== heading[i] ? 0 : sinceTurn[i] + 1;
     tally(cars, state, wasLive, sinceTurn, who, b);
   }
   const mean = xs => xs.reduce((a, x) => a + x, 0) / xs.length, st = state.stats;
-  return {track, seed, N, K, heats: H, steps: STEPS, rowFitted: row.fitted,
+  return {track, seed, seeCars: sight && seeCars, N, K, heats: H, steps: STEPS, rowFitted: row.fitted,
     contactMsPerStep: {mean: round(mean(contactMs)), p95: round(percentile(contactMs, .95)), max: round(Math.max(...contactMs))},
     firstSecondContactMsPerStep: round(mean(contactMs.slice(0, 60))),
-    carsMsPerStep: round(mean(carMs)),
+    carsMsPerStep: round(mean(carMs)), perceptionMsPerStep: round(mean(perceptionMs)),
+    ...(sightMs.length ? {carSightMsPerStep: {mean: round(mean(sightMs)), p95: round(percentile(sightMs, .95)), firstSecond: round(mean(sightMs.slice(0, 60)))},
+      sensedPerStep: round(st.sensed / st.steps), carTestsPerStep: round(st.carTests / st.steps),
+      carReadingShare: round(st.carReadings / Math.max(1, 7 * st.sensed)), carReadings: st.carReadings} : {}),
     pairTestsPerStep: round(st.pairTests / st.steps), narrowTestsPerStep: round(st.narrowTests / st.steps),
     contacts: st.contacts, sweptContacts: st.sweptContacts, deepContacts: st.deepContacts ?? null, contactCrashes: cars.filter(c => c.contactCrash).length,
     whoCrashed: {...who, cutInShare: round(who.straightCrashedByTurner / Math.max(1, who.single)), turnerAheadShare: round(who.turnerAhead / Math.max(1, who.single)),
@@ -145,6 +169,24 @@ function pile() {
   const rest = times.slice(100);
   return {N, K, walls: walls.length, pairsPerStep: state.stats.pairTests / state.stats.steps, msPerStep: round(rest.reduce((a, x) => a + x, 0) / rest.length)};
 }
+// Worst case for the rays: every car of every heat on one spot, all solid,
+// so every ray of every car tests every heat-mate's three edges.
+function worstCaseSight() {
+  const sim = new Simulation({track: 'Rectangle', seed: 'sight-pile'}), random = seededRandom('sight-pile');
+  sim.begin(new Float32Array(N * FLAT));
+  const cars = sim.cars, state = C.createState(N, {heatSize: K});
+  cars.forEach(c => { c.x = 1600 + 60 * (random() - .5); c.y = 900 + 60 * (random() - .5); c.angle = 2 * Math.PI * random(); c.polygon = Car.polygonAt(c.x, c.y, c.angle, 30, 50); });
+  C.attachRays(cars, state);
+  for (const c of cars) c.sensor.update([]);
+  const times = [];
+  for (let k = 0; k < 300; k++) {
+    const t0 = performance.now();
+    for (const c of cars) C.seeCars(c.sensor);
+    times.push(performance.now() - t0);
+  }
+  const rest = times.slice(50), carRays = cars.reduce((a, c) => a + c.sensor.readings.filter(r => r && r.kind === 'car').length, 0);
+  return {N, K, msPerStep: round(rest.reduce((a, x) => a + x, 0) / rest.length), carTestsPerStep: round(state.stats.carTests / 300), carRayShare: round(carRays / (7 * N))};
+}
 function contactTest() {
   const a = Car.polygonAt(0, 0, 0, 30, 50), b = Car.polygonAt(10, 10, .5, 30, 50);
   let hits = 0;
@@ -155,13 +197,16 @@ function contactTest() {
 }
 
 const report = {node: process.version, date: new Date().toISOString().slice(0, 10), core: coreFile || 'AI-Car-Racer/collisions.js',
-  runs: seeds.flatMap(seed => ['Rectangle', 'Triangle'].map(track => run(track, 'collisions-bench-' + seed))),
-  worstCasePile: pile(), trianglesOverlap: contactTest()};
+  runs: seeds.flatMap(seed => ['Rectangle', 'Triangle'].flatMap(track => [true, false].map(seeCars => run(track, 'collisions-bench-' + seed, seeCars)))),
+  worstCasePile: pile(), ...(C.seeCars ? {worstCaseSight: worstCaseSight()} : {}), trianglesOverlap: contactTest()};
 await mkdir(dirname(output), {recursive: true});
 await writeFile(output, JSON.stringify(report, null, 2) + '\n');
-console.table(report.runs.map(r => ({track: r.track, seed: r.seed, contactMs: r.contactMsPerStep.mean, p95: r.contactMsPerStep.p95,
+console.table(report.runs.map(r => ({track: r.track, seed: r.seed, seeCars: r.seeCars, contactMs: r.contactMsPerStep.mean, p95: r.contactMsPerStep.p95,
   max: r.contactMsPerStep.max, carsMs: r.carsMsPerStep, pairs: r.pairTestsPerStep, narrow: r.narrowTestsPerStep, contacts: r.contacts, swept: r.sweptContacts, deep: r.deepContacts, crashes: r.contactCrashes})));
-console.table(report.runs.map(r => ({track: r.track, seed: r.seed, ...r.whoCrashed})));
+console.table(report.runs.filter(r => r.seeCars).map(r => ({track: r.track, seed: r.seed, perceptionMs: r.perceptionMsPerStep, sightMs: r.carSightMsPerStep.mean,
+  sightP95: r.carSightMsPerStep.p95, sightFirstSecond: r.carSightMsPerStep.firstSecond, sensed: r.sensedPerStep, carTests: r.carTestsPerStep, carShare: r.carReadingShare})));
+console.table(report.runs.map(r => ({track: r.track, seed: r.seed, seeCars: r.seeCars, ...r.whoCrashed})));
 console.log('worst case (every heat-mate pair touching):', report.worstCasePile);
+if (report.worstCaseSight) console.log('worst case for the rays (every heat-mate within reach):', report.worstCaseSight);
 console.log('trianglesOverlap:', report.trianglesOverlap);
 console.log('report:', output);

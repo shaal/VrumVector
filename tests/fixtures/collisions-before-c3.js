@@ -39,10 +39,6 @@
 //     that starts moving after being parked, that turns without moving, or
 //     that had no room in the start row, is a ghost until it overlaps no live
 //     heat-mate.
-//   - Rays see cars (decision D3, task C3). A car's 7 rays also hit the solid
-//     cars of its heat, never its own body. A car looks like three short
-//     walls (its outline), a ray keeps its nearest hit, wall or car, and the
-//     network still reads 1 - offset. So the network keeps its 10 inputs.
 //
 // resolveContacts runs once per step, after every car has moved and before
 // any car senses. It marks every crash first and applies them after, so the
@@ -567,11 +563,9 @@
   // --- per-step contact pass ---------------------------------------------------
 
   // Per-generation state for N cars. options: {heatSize, stallFrames,
-  // stallSpeed, flow, seeCars, blind}. flow ({x, y}, optional) is a fixed
-  // road direction for contacts judged without walls (tests). seeCars: false
-  // hides every car from every ray (collisions as in C2); blind (car indices)
-  // hides cars from the rays of those cars only (see config). `row` (a
-  // startRow result with at least rowSize(N, K) poses)
+  // stallSpeed, flow}. flow ({x, y}, optional) is a fixed road direction for
+  // contacts judged without walls (tests). `row` (a startRow result with at
+  // least rowSize(N, K) poses)
   // marks the cars that start as ghosts. After resolveContacts, status[i]
   // (STATUS) and mark[i] (1 = crashed by a contact this step, 2 = made a
   // ghost by the too-deep guard) describe car i
@@ -592,9 +586,6 @@
     }
     const state = {
       N: n, heatSize: size, heats, stallFrames, stallSpeed, flow: fixedFlow,
-      seeCars: options.seeCars !== false,   // rays see solid heat-mates (seeCars, attachRays)
-      cars: null,                     // the cars whose rays attachRays connected
-      blind: new Uint8Array(n),       // 1 = this car's rays do not see cars (a lesion)
       slot: new Int32Array(n),        // start slot per car (slotOf)
       stall: new Uint16Array(n),      // consecutive steps below stallSpeed
       ghost: new Uint8Array(n),       // 1 = not solid until clear of live heat-mates
@@ -605,23 +596,12 @@
       blocked: new Uint8Array(n),     // scratch: ghost overlaps a live heat-mate
       turned: new Uint8Array(n),      // scratch: the heading changed in this step
       reach2: new Float64Array(n),    // scratch: squared bounding radius per car
-      // sensed: calls of seeCars that looked for cars; carTests: rays that
-      // came within a car's bounding circle (their edges were tested);
-      // carReadings: rays whose nearest hit was a car.
-      stats: {steps: 0, pairTests: 0, narrowTests: 0, contacts: 0, sweptContacts: 0, deepContacts: 0, crashes: 0,
-        sensed: 0, carTests: 0, carReadings: 0},
+      stats: {steps: 0, pairTests: 0, narrowTests: 0, contacts: 0, sweptContacts: 0, deepContacts: 0, crashes: 0},
     };
     for (let i = 0; i < n; i++) {
       state.slot[i] = slotOf(i, n, heats);
       if (row && row.poses[state.slot[i]].ghost) state.ghost[i] = 1;
       state.status[i] = state.ghost[i] ? GHOST : SOLID;   // at spawn, before any pass
-    }
-    const blind = options.blind;
-    if (blind && typeof blind.length === 'number') {
-      for (let k = 0; k < blind.length; k++) {
-        const i = blind[k];
-        if (Number.isInteger(i) && i >= 0 && i < n) state.blind[i] = 1;
-      }
     }
     return state;
   }
@@ -735,127 +715,19 @@
     return crashes;
   }
 
-  // Is car i solid after the last contact pass? (The rays and the display
+  // Is car i solid after the last contact pass? (C3's rays and the display
   // read this.)
   function isSolid(state, i) {
     return state.status[i] === SOLID;
   }
 
-  // --- rays see cars (task C3) ---------------------------------------------------
-  //
-  // Sensor.update() calls seeCars(sensor) right after its wall readings. In
-  // collision mode that is the perception pass, so the rays use the
-  // positions and the solid status after the contact pass. The rays of car
-  // i then also hit every car of its heat that is solid (isSolid): not a
-  // ghost, a parked car, or a wreck, and never car i itself. A car is its
-  // outline, three short walls, and each edge is tested exactly as a wall is
-  // (the arithmetic of utils.js getIntersection): a ray hits an edge it
-  // crosses or touches, corners included, and a ray that runs along an edge
-  // hits its corners. A ray keeps its nearest hit; a car must be strictly
-  // nearer than the wall to replace it. The reading is then {x, y, offset,
-  // kind: 'car'} (a wall's has kind 'wall'), and the network reads 1 - offset
-  // as for a wall. A ray that starts inside a car (only a ghost sits that
-  // deep in another car) reads the edge where it leaves. The sensing car's
-  // own status does not matter: a ghost sees solid cars too. Returns the
-  // number of rays that now read a car.
-  //
-  // Scratch per ray: its start and end, the nearest offset so far, and the
-  // car that gave it (-1: none).
-  let rayEnds = new Float64Array(4 * 16), rayBest = new Float64Array(16), rayCar = new Int32Array(16);
-  const REACH_SLACK = 1e-9;   // relative: rounding in the bounding-circle test never drops a hit
-  function seeCars(sensor) {
-    const state = sensor.sight, i = sensor.sightIndex;
-    if (!state || !state.seeCars || state.blind[i] === 1) return 0;
-    const cars = state.cars, n = state.N, H = state.heats, status = state.status;
-    const rays = sensor.rays, readings = sensor.readings, nr = rays.length;
-    if (nr > rayBest.length) {
-      rayEnds = new Float64Array(4 * nr); rayBest = new Float64Array(nr); rayCar = new Int32Array(nr);
-    }
-    const E = rayEnds;
-    let loX = INF, hiX = -INF, loY = INF, hiY = -INF;
-    for (let r = 0; r < nr; r++) {
-      const A = rays[r][0], B = rays[r][1], w = readings[r];
-      E[4 * r] = A.x; E[4 * r + 1] = A.y; E[4 * r + 2] = B.x; E[4 * r + 3] = B.y;
-      rayBest[r] = w ? w.offset : INF; rayCar[r] = -1;
-      if (A.x < loX) loX = A.x;
-      if (A.x > hiX) hiX = A.x;
-      if (B.x < loX) loX = B.x;
-      if (B.x > hiX) hiX = B.x;
-      if (A.y < loY) loY = A.y;
-      if (A.y > hiY) hiY = A.y;
-      if (B.y < loY) loY = B.y;
-      if (B.y > hiY) hiY = B.y;
-    }
-    let tests = 0, hits = 0;
-    for (let j = i % H; j < n; j += H) {
-      if (j === i || status[j] !== SOLID) continue;
-      const c = cars[j], p = c.polygon, cx = c.x, cy = c.y;
-      // Every vertex lies within reach (r2) of (cx, cy), so the outline does
-      // too: a ray that stays farther away cannot touch it. First against
-      // the box around all rays, then ray by ray.
-      let r2 = 0;
-      for (let v = 0; v < 3; v++) {
-        const vx = p[v].x - cx, vy = p[v].y - cy, d2 = vx * vx + vy * vy;
-        if (d2 > r2) r2 = d2;
-      }
-      r2 += r2 * REACH_SLACK + REACH_SLACK;
-      const ox = cx < loX ? loX - cx : cx > hiX ? cx - hiX : 0, oy = cy < loY ? loY - cy : cy > hiY ? cy - hiY : 0;
-      if (ox * ox > r2 || oy * oy > r2) continue;
-      for (let r = 0; r < nr; r++) {
-        const ax = E[4 * r], ay = E[4 * r + 1], bx = E[4 * r + 2], by = E[4 * r + 3];
-        const dx = bx - ax, dy = by - ay, dd = dx * dx + dy * dy;
-        let s = dd > 0 ? ((cx - ax) * dx + (cy - ay) * dy) / dd : 0;
-        if (s < 0) s = 0; else if (s > 1) s = 1;
-        const ex = cx - ax - s * dx, ey = cy - ay - s * dy;
-        if (ex * ex + ey * ey > r2) continue;
-        tests++;
-        for (let e = 0; e < 3; e++) {
-          // getIntersection(A, B, C, D) with A-B the ray and C-D the edge.
-          const C = p[e], D = p[e === 2 ? 0 : e + 1];
-          const tTop = (D.x - C.x) * (ay - C.y) - (D.y - C.y) * (ax - C.x);
-          const uTop = (C.y - ay) * (ax - bx) - (C.x - ax) * (ay - by);
-          const bottom = (D.y - C.y) * (bx - ax) - (D.x - C.x) * (by - ay);
-          if (bottom === 0) continue;
-          const t = tTop / bottom, u = uTop / bottom;
-          if (t >= 0 && t <= 1 && u >= 0 && u <= 1 && t < rayBest[r]) { rayBest[r] = t; rayCar[r] = j; }
-        }
-      }
-    }
-    for (let r = 0; r < nr; r++) {
-      if (rayCar[r] < 0) continue;
-      const t = rayBest[r], ax = E[4 * r], ay = E[4 * r + 1];
-      readings[r] = {x: ax + (E[4 * r + 2] - ax) * t, y: ay + (E[4 * r + 3] - ay) * t, offset: t, kind: 'car'};
-      hits++;
-    }
-    const stats = state.stats;
-    stats.sensed++; stats.carTests += tests; stats.carReadings += hits;
-    return hits;
-  }
-  // Connect every car's rays to the state, so that they see the solid cars
-  // of their heat (seeCars). step() does it once per generation; call it
-  // when you run the passes by hand. With seeCars off it connects no ray,
-  // so the rays see walls only, exactly as before C3. Either way every car
-  // is marked solidCars (collision mode), so its driving summary says
-  // whether a contact crashed it (DriverProfiles.summarize, carContact).
-  function attachRays(cars, state) {
-    if (!cars || cars.length !== state.N) throw new RangeError('CarCollisions: cars.length does not match the state');
-    state.cars = cars;
-    for (let i = 0; i < state.N; i++) {
-      cars[i].solidCars = true;
-      const s = cars[i].sensor;
-      if (s && state.seeCars) { s.sight = state; s.sightIndex = i; }
-    }
-  }
-
   // One collision-mode step: every car moves, contacts resolve, then every
   // car that was simulated senses. Returns the number of contact crashes.
   // Collisions off keeps calling car.update(), which is the same without the
-  // middle pass. The first step of a generation connects the rays
-  // (attachRays).
+  // middle pass.
   function step(cars, state, borders, checkPointList) {
     const n = state.N, live = state.live;
     if (!cars || cars.length !== n) throw new RangeError('CarCollisions: cars.length does not match the state');
-    if (state.cars !== cars) attachRays(cars, state);
     for (let i = 0; i < n; i++) live[i] = cars[i].updatePhysics(borders, checkPointList) ? 1 : 0;
     const crashes = resolveContacts(cars, state, borders);
     for (let i = 0; i < n; i++) if (live[i]) cars[i].updatePerception(borders, checkPointList);
@@ -866,23 +738,13 @@
 
   // Collision mode from a begin or trial message: null when off, or a frozen
   // {heatSize}. true, or an object without enabled: false, turns it on; a
-  // missing or odd heat size is the default K. Two lesion switches, for
-  // tests and benchmarks (the app never sends them): seeCars: false hides
-  // every car from every ray (solid cars as in C2, rays see walls only), and
-  // blind: [i, ...] hides cars from the rays of those cars only, e.g. [0] for
-  // the elite. The result carries them only when they are set.
+  // missing or odd heat size is the default K.
   function config(value) {
     if (value === true) value = {};
     if (!value || typeof value !== 'object' || value.enabled === false) return null;
     let k = Number(value.heatSize ?? DEFAULTS.heatSize);
     k = k === INF ? INF : k >= 1 ? Math.min(65536, Math.floor(k)) : DEFAULTS.heatSize;
-    const out = {heatSize: k};
-    if (value.seeCars === false) out.seeCars = false;
-    if (Array.isArray(value.blind)) {
-      const blind = [...new Set(value.blind.filter(i => Number.isInteger(i) && i >= 0 && i < 1e7))].sort((a, b) => a - b);
-      if (blind.length) out.blind = Object.freeze(blind);
-    }
-    return Object.freeze(out);
+    return Object.freeze({heatSize: k});
   }
   // One generation of N cars in collision mode `cfg` (from config()): the
   // start row across gate 0 of road.checkPointList, and the state. start:
@@ -892,7 +754,7 @@
     const gates = road && road.checkPointList, K = cfg.heatSize;
     const row = startRow({x: start.x, y: start.y, heading: start.heading || 0,
       gate: gates && gates.length ? gates[0] : null, count: rowSize(N, K), road});
-    return {row, state: createState(N, {heatSize: K, seeCars: cfg.seeCars, blind: cfg.blind}, row)};
+    return {row, state: createState(N, {heatSize: K}, row)};
   }
   // In collision mode the sensor stride is at most this (the stride the
   // workers use at 20x): at 100x a car would otherwise travel about 240 px
@@ -914,7 +776,7 @@
     heatSize, heatCount, heatOf, slotOf, rowSize,
     trianglesOverlap, sweptTouch, strikeOutcome,
     poseClear, startClear, startRow, spawnPose,
-    createState, resolveContacts, isSolid, seeCars, attachRays, step,
+    createState, resolveContacts, isSolid, step,
     config, generation, flags, STRIDE_CAP,
   });
 })(globalThis);

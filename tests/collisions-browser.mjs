@@ -1,11 +1,13 @@
-// Car collisions (task C2) in the real app: ?collide=1 and the Experiments
-// toggle, both sim-worker.js instances (live and A/B baseline) running in
-// collision mode, cause 5 in the metrics, and the learning context. With
-// MEASURE=1 it also measures the real worker's step cost at N = 500 on
-// Rectangle and Triangle, collisions off and on, and writes
-// test-results/collisions/step-cost.json.
+// Car collisions (tasks C2 and C3) in the real app: ?collide=1 and the
+// Experiments toggle, both sim-worker.js instances (live and A/B baseline)
+// running in collision mode with rays that see cars, cause 5 in the metrics,
+// and the learning context. With MEASURE=1 it also measures the real
+// worker's step cost at N = 500 on Rectangle and Triangle: collisions off,
+// on with rays that see walls only (seeCars: false, which the test adds to
+// the begin message; the app never sends it), and on with rays that see
+// cars, and writes test-results/collisions/step-cost.json.
 //
-//   node tests/collisions-browser.mjs            (MEASURE=1 for the step cost)
+//   node tests/collisions-browser.mjs            (MEASURE=1 for the step cost, PORT=8897 for another port)
 import assert from 'node:assert/strict';
 import {mkdir, writeFile} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
@@ -14,7 +16,7 @@ import {chromium} from 'playwright';
 import {waitForServer} from './helpers/server-ready.mjs';
 
 const out = 'test-results/collisions'; await mkdir(out, {recursive: true});
-const PORT = 8895, origin = `http://127.0.0.1:${PORT}`;
+const PORT = Number(process.env.PORT) || 8895, origin = `http://127.0.0.1:${PORT}`;
 const server = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1'], {stdio: 'ignore'});
 let browser, page, stage = 'boot';
 const errors = [];
@@ -32,7 +34,11 @@ const spyOnWorkers = () => {
       window.__simWorkers.push(record);
       const post = this.postMessage.bind(this);
       this.postMessage = (message, transfer) => {
-        if (message && message.type === 'begin') record.begins.push({N: message.N, collisions: message.collisions ?? null, context: message.learningContext?.collisions ?? null});
+        if (message && message.type === 'begin') {
+          // Measuring only: the lesion switch (rays that see walls only).
+          if (message.collisions && window.__collisionsExtra) message = {...message, collisions: {...message.collisions, ...window.__collisionsExtra}};
+          record.begins.push({N: message.N, collisions: message.collisions ?? null, context: message.learningContext?.collisions ?? null});
+        }
         return post(message, transfer);
       };
       this.addEventListener('message', event => {
@@ -42,7 +48,9 @@ const spyOnWorkers = () => {
           // Stepping time per generation (runSerial), for the step cost.
           const run = record.runs[m.runSerial] ||= {simMs: 0, steps: 0};
           run.simMs += m.simMs; run.steps += m.steps;
-          record.lastSnapshot = {N: m.N, collisions: m.collisions ?? null, flags: m.carFlags ? Array.from(m.carFlags) : null};
+          record.lastSnapshot = {N: m.N, collisions: m.collisions ?? null, flags: m.carFlags ? Array.from(m.carFlags) : null,
+            kinds: m.bestReadingKinds ? Array.from(m.bestReadingKinds) : null};
+          if (m.bestReadingKinds && m.bestReadingKinds.includes(1)) record.carRaySnapshots = (record.carRaySnapshots || 0) + 1;
         }
         if (m.type === 'genEnd') {
           // The worker posts its last snapshot just before genEnd.
@@ -96,6 +104,11 @@ try {
   assert.deepEqual(gen.lastSnapshot.collisions, {heatSize: 8, heats: 12});
   assert.equal(gen.lastSnapshot.flags.length, 96);
   assert.equal(gen.lastSnapshot.flags.filter(f => f & 4).length, gen.contact, 'the last snapshot flags the same contact deaths');
+  // Rays see cars (C3): the rays read heat-mates, and snapshots say which of the best car's rays did.
+  assert.equal(gen.collisions.seeCars, true);
+  assert.ok(gen.collisions.sensed > 0 && gen.collisions.carReadings > 0, 'rays read cars: ' + JSON.stringify(gen.collisions));
+  assert.equal(gen.lastSnapshot.kinds.length, 7);
+  assert.ok(live.carRaySnapshots > 0, 'some snapshot shows the best car\'s rays reading a car');
   t = await toggle(); assert.equal(t.context, 'solid/k8');
   // The metrics HUD counts cause 5 on its own, not as alive.
   const row = await page.evaluate(() => __metricsLog[__metricsLog.length - 1]);
@@ -112,6 +125,7 @@ try {
   assert.equal(baseline.genEnds[0].context, 'solid/k8');
   assert.ok(baseline.genEnds[0].collisions && baseline.genEnds[0].collisions.heats === 12, 'baseline genEnd: ' + JSON.stringify(baseline.genEnds[0]));
   assert.equal(baseline.genEnds[0].collisions.contactDeaths, baseline.genEnds[0].contact);
+  assert.ok(baseline.genEnds[0].collisions.seeCars === true && baseline.genEnds[0].collisions.carReadings > 0, 'the baseline\'s rays read cars too');
   await page.evaluate(() => window.__abSetEnabled(false));
 
   mark('turning the toggle off starts a normal generation with a normal context');
@@ -129,6 +143,7 @@ try {
   gen = live.genEnds.at(-1);
   assert.deepEqual([gen.collisions, gen.context, gen.contact], [null, 'off', 0]);
   assert.equal(gen.lastSnapshot.flags, null, 'no car flags with collisions off');
+  assert.equal(gen.lastSnapshot.kinds, null, 'no ray kinds with collisions off');
   assert.equal(await page.evaluate(() => __metricsLog[__metricsLog.length - 1].dcContact), 0);
   // The mode is not a saved physics setting.
   assert.equal(await page.evaluate(() => Object.keys(localStorage).filter(k => /collide|collision/i.test(k)).length), 0);
@@ -169,10 +184,11 @@ try {
   if (process.env.MEASURE === '1') {
     mark('step cost at N = 500 in the real worker');
     report = {date: new Date().toISOString(), machine: `${os.cpus()[0]?.model || 'unknown'} (${os.cpus().length} threads)`, browser: browser.version(), runs: []};
-    // Three modes: collisions off; on in heats of 8; and on in heats of 1,
-    // where no car can touch another, so it costs only the three passes and
-    // (at 100x) the stride cap. 2x: the stride is 1 in every mode. 100x: 16
-    // off, 4 (the cap) on. At 2x and 100x the worker times almost every step
+    // Three modes: collisions off; on in heats of 8 with rays that see walls
+    // only (C2); and on in heats of 8 with rays that see cars (C3). 2x: the
+    // stride is 1 in every mode. 100x: 16 off, 4 (the cap) on. (C2 also
+    // measured heats of 1, where no car can touch another: the three passes
+    // alone.) At 2x and 100x the worker times almost every step
     // (it posts a snapshot for each tick with steps, and a 100x tick runs
     // many steps); at 20x it posts every second tick, which times one stride
     // phase more than the others, so 20x is not measured. Each run skips the
@@ -181,31 +197,35 @@ try {
     // over the steps those snapshots report.
     for (const track of ['Rectangle', 'Triangle']) {
       for (const speed of [2, 100]) {
-        for (const heats of [0, 8, 1]) {
-          await page.evaluate(([name, heats, speed]) => {
+        for (const [heats, seeCars] of [[0, false], [8, false], [8, true]]) {
+          await page.evaluate(([name, heats, speed, seeCars]) => {
             window.__switchTrackInMemory(name);
             window.carCollisions.heatSize = heats || 8;
+            window.__collisionsExtra = seeCars ? null : {seeCars: false};
             if (window.carCollisionsEnabled() !== !!heats) window.setCarCollisions(!!heats);
             setN(500); setSeconds(15); setSimSpeed(speed);
             restartDriverLearning();
-          }, [track, heats, speed]);
+          }, [track, heats, speed, seeCars]);
           await page.waitForFunction(() => window.__simWorkers[0].begins.at(-1).N === 500);
           const start = (await workers())[0].genEnds.length;
           await waitGenEnds(0, start + 3, 300000);
           const gens = (await workers())[0].genEnds.slice(start + 1, start + 3);
           for (const g of gens) {
             assert.equal(g.N, 500); assert.equal(g.collisions ? g.collisions.heatSize : 0, heats);
+            if (heats) assert.equal(g.collisions.seeCars, seeCars);
             assert.ok(g.steps > 0.95 * g.frames, 'almost every step was timed: ' + g.steps + ' of ' + g.frames);
           }
           const simMs = gens.reduce((a, g) => a + g.simMs, 0), steps = gens.reduce((a, g) => a + g.steps, 0);
-          report.runs.push({track, simSpeed: speed, collisions: heats ? 'heats of ' + heats : 'off', msPerStep: +(simMs / steps).toFixed(3),
+          const sensed = gens.reduce((a, g) => a + (g.collisions?.sensed || 0), 0), carReadings = gens.reduce((a, g) => a + (g.collisions?.carReadings || 0), 0);
+          report.runs.push({track, simSpeed: speed, collisions: heats ? `heats of ${heats}, rays see ${seeCars ? 'cars' : 'walls only'}` : 'off', msPerStep: +(simMs / steps).toFixed(3),
             stepsTimed: steps, steps: gens.reduce((a, g) => a + g.frames, 0),
-            contactDeathsPerGeneration: gens.map(g => g.contact), stillAlive: gens.map(g => g.alive), fitness: gens.map(g => g.fitness)});
+            contactDeathsPerGeneration: gens.map(g => g.contact), stillAlive: gens.map(g => g.alive), fitness: gens.map(g => g.fitness),
+            ...(heats && seeCars ? {sensedPerStep: +(sensed / gens.reduce((a, g) => a + g.frames, 0)).toFixed(1), carReadingShare: +(carReadings / Math.max(1, 7 * sensed)).toFixed(4)} : {})});
           console.log(JSON.stringify(report.runs.at(-1)));
         }
       }
     }
-    await page.evaluate(() => { window.carCollisions.heatSize = 8; });
+    await page.evaluate(() => { window.carCollisions.heatSize = 8; window.__collisionsExtra = null; });
     await writeFile(`${out}/step-cost.json`, JSON.stringify(report, null, 2) + '\n');
   }
 

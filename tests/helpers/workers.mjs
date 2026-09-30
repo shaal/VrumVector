@@ -13,20 +13,28 @@ export const closeChannels = () => { for (const c of channels.splice(0)) { c.por
 
 // script: the worker's path under AI-Car-Racer/ (e.g. 'sim-worker.js'), and
 // importScripts and import() resolve from there. source (optional) replaces
-// the script's text, e.g. with a saved copy for before/after checks. random
-// (optional) replaces Math.random inside the worker.
-export function loadWorker(script, {source = null, random = null} = {}) {
+// the script's text, e.g. with a saved copy for before/after checks; scripts
+// ({'sensor.js': source, ...}, paths under AI-Car-Racer/) replaces files the
+// worker loads with importScripts. random (optional) replaces Math.random
+// inside the worker.
+export function loadWorker(script, {source = null, random = null, scripts = {}} = {}) {
   const url = new URL(script, APP), posted = [];
   const math = Object.create(Math);
   if (random) math.random = random;
   const scope = {performance, MessageChannel: TrackedChannel, console, Math: math, postMessage: m => posted.push(m)};
   scope.self = scope; scope.globalThis = scope;
   const context = vm.createContext(scope);
+  const unused = new Set(Object.keys(scripts));
   scope.importScripts = (...files) => {
-    for (const f of files) vm.runInContext(readFileSync(new URL(f, url), 'utf8'), context, {filename: f});
+    for (const f of files) {
+      const name = new URL(f, url).href.slice(APP.href.length);
+      unused.delete(name);
+      vm.runInContext(scripts[name] ?? readFileSync(new URL(f, url), 'utf8'), context, {filename: f});
+    }
   };
   vm.runInContext(source ?? readFileSync(url, 'utf8'), context, {
     filename: fileURLToPath(url), importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER});
+  if (unused.size) throw new Error('loadWorker: the worker never loaded ' + [...unused].join(', '));
   const send = data => scope.onmessage({data});
   // Resolves with the first message matching `test` posted after `from`.
   const waitFor = (test, {from = 0, timeout = 60000} = {}) => new Promise((resolve, reject) => {

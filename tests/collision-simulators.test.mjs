@@ -2,8 +2,10 @@
 // C2): the live worker and the A/B baseline worker (sim-worker.js, one file
 // run twice by main.js), the transfer-trial worker (learning/trial-worker.js),
 // and the Node simulator (tests/helpers/simulation.mjs). With collisions off,
-// each must stay bit-identical to its code before C2; with collisions on, they
-// must agree with each other and be deterministic.
+// each must stay bit-identical to its code before C2 and C3 (C3 changed the
+// sensor and the driving statistics, so the "before" runs load those files
+// from before C3); with collisions on, they must agree with each other and be
+// deterministic. tests/rays-see-cars.test.mjs covers C3's rays.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -19,6 +21,7 @@ const plainSettings = s => (s ? {heatSize: s.heatSize} : s);
 
 const fixture = name => readFileSync(new URL('./fixtures/' + name, import.meta.url), 'utf8');
 const SIM_BEFORE = fixture('sim-worker-before-c2.js'), TRIAL_BEFORE = fixture('trial-worker-before-c2.js');
+const BEFORE_C3 = {'sensor.js': fixture('sensor-before-c3.js'), 'driver/profiles.js': fixture('profiles-before-c3.js')};
 const ON = {heatSize: 8};
 function brains(n, seed) {
   const r = seededRandom(seed), flat = new Float32Array(n * 244);
@@ -28,8 +31,8 @@ function brains(n, seed) {
 
 // One generation in sim-worker.js (or its copy from before C2). Returns the
 // genEnd message, the last snapshot, and the worker.
-async function liveGeneration({source = null, track = 'Rectangle', N = 40, seconds = 2, simSpeed = 100, collisions, jitter, seed = 'live'} = {}) {
-  const sim = new Simulation({track}), w = loadWorker('sim-worker.js', {source, random: seededRandom(seed + ':random')});
+async function liveGeneration({source = null, scripts = {}, track = 'Rectangle', N = 40, seconds = 2, simSpeed = 100, collisions, jitter, seed = 'live'} = {}) {
+  const sim = new Simulation({track}), w = loadWorker('sim-worker.js', {source, scripts, random: seededRandom(seed + ':random')});
   try {
     w.send({type: 'init', canvasW: 3200, canvasH: 1800, borders: sim.road.borders, checkPointList: sim.road.checkPointList});
     w.send({type: 'setSimSpeed', v: simSpeed});
@@ -49,11 +52,11 @@ const outcome = ({end, last}) => {
   return plain({end, snapshot});
 };
 
-test('collisions off: sim-worker.js is bit-identical to the worker before C2 (Rectangle, Triangle)', async () => {
+test('collisions off: sim-worker.js is bit-identical to the worker before C2 and C3 (Rectangle, Triangle)', async () => {
   for (const track of ['Rectangle', 'Triangle']) {
     for (const [label, options] of [['no field', {}], ['null', {collisions: null}], ['enabled: false', {collisions: {enabled: false, heatSize: 8}}],
       ['pose jitter', {collisions: null, jitter: {radiusPx: 400, angleDeg: 30, maxAttempts: 8}}], ['stride 1', {simSpeed: 2, seconds: 1}]]) {
-      const before = await liveGeneration({...options, track, source: SIM_BEFORE, seed: 'off-' + track});
+      const before = await liveGeneration({...options, track, source: SIM_BEFORE, scripts: BEFORE_C3, seed: 'off-' + track});
       const after = await liveGeneration({...options, track, seed: 'off-' + track});
       assert.deepEqual(outcome(after), outcome(before), `${track}, ${label}`);
       assert.equal(after.end.collisions, undefined, 'no collision summary when off');
@@ -128,8 +131,8 @@ test('collisions on: the live worker and the Node simulator agree car by car', a
 });
 
 // The trial worker, driven through its own onmessage.
-async function trial({source = null, collisions, track = 'Rectangle', seed = 'trial'} = {}) {
-  const sim = new Simulation({track}), w = loadWorker('learning/trial-worker.js', {source});
+async function trial({source = null, scripts = {}, collisions, track = 'Rectangle', seed = 'trial'} = {}) {
+  const sim = new Simulation({track}), w = loadWorker('learning/trial-worker.js', {source, scripts});
   const message = {type: 'trial', id: 1, key: 'collision-trial:' + seed, arm: 'memory', profile: 'balanced', maxSpeed: 15, traction: .5, seconds: 3, exploration: 1,
     track: {canvasW: 3200, canvasH: 1800, borders: sim.road.borders, checkPointList: sim.road.checkPointList,
       startInfo: {x: sim.spawn.x, y: sim.spawn.y, heading: sim.spawn.angle}},
@@ -140,9 +143,9 @@ async function trial({source = null, collisions, track = 'Rectangle', seed = 'tr
   return (await w.waitFor(m => m.type === 'result' || m.type === 'error')).valueOf();
 }
 
-test('collisions off: the trial worker is bit-identical to the one before C2; on, it repeats and differs', async () => {
+test('collisions off: the trial worker is bit-identical to the one before C2 and C3; on, it repeats and differs', async () => {
   for (const track of ['Rectangle', 'Triangle']) {
-    const before = await trial({source: TRIAL_BEFORE, track}), after = await trial({track}), nulled = await trial({track, collisions: null});
+    const before = await trial({source: TRIAL_BEFORE, scripts: BEFORE_C3, track}), after = await trial({track}), nulled = await trial({track, collisions: null});
     assert.equal(after.type, 'result', after.message);
     assert.deepEqual(plain(after), plain(before), track);
     assert.deepEqual(plain(nulled), plain(before), track + ': collisions null');
@@ -192,14 +195,15 @@ test('the transfer check runs its trials in the context\'s collision mode', asyn
   assert.equal(posted.length, 0);
 });
 
-test('collisions off: the Node simulator matches the trial worker\'s simulator from before C2', () => {
+test('collisions off: the Node simulator matches the trial worker\'s simulator from before C2 and C3', () => {
   for (const track of ['Rectangle', 'Triangle']) {
-    const sim = new Simulation({track}), w = loadWorker('learning/trial-worker.js', {source: TRIAL_BEFORE}), flat = brains(40, 'node-off-' + track);
+    const sim = new Simulation({track}), w = loadWorker('learning/trial-worker.js', {source: TRIAL_BEFORE, scripts: BEFORE_C3}), flat = brains(40, 'node-off-' + track);
     w.scope.road = w.scope.buildRoad({canvasW: 3200, canvasH: 1800, borders: sim.road.borders, checkPointList: sim.road.checkPointList});
     const before = w.scope.simulator({startInfo: {x: sim.spawn.x, y: sim.spawn.y, heading: sim.spawn.angle}, maxSpeed: 15, seconds: 3, profile: 'balanced'})(flat);
     sim.begin(flat);
     const node = sim.run(3), gates = sim.road.checkPointList.length;
     for (const key of ['fitness', 'popN', 'popStillAlive', 'styleScore']) assert.equal(node[key], before[key], `${track}: ${key}`);
+    assert.deepEqual(plain(node.driving), plain(before.driving), track + ': the elite\'s driving summary');
     assert.deepEqual(Array.from(node.vector), Array.from(before.vector), track + ': the same elite');
     assert.equal(sim.cars.reduce((sum, c) => sum + c.checkPointsCount + c.laps * gates, 0) / sim.cars.length, before.meanProgress);
   }

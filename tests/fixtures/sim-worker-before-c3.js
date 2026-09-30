@@ -27,9 +27,7 @@
 // across gate 0 (pose jitter is ignored), every step runs
 // CarCollisions.step() (every car moves, contacts resolve, every car senses),
 // the sensor stride is capped at CarCollisions.STRIDE_CAP, snapshots carry
-// per-car flags, and a car crashed by a contact has death cause 5. The rays
-// also hit the solid cars of their heat (task C3), and snapshots then say
-// which of the best car's rays read a car (bestReadingKinds).
+// per-car flags, and a car crashed by a contact has death cause 5.
 //
 // The worker keeps an identity-stable bestEpoch counter that increments each
 // time it promotes a new `bestCar`. Main uses that to refresh the dynamics-
@@ -571,23 +569,16 @@ function postSnapshot(simMs, steps) {
     }
 
     // Collision mode: per-car flags (CarCollisions.flags: 1 solid, 2 ghost or
-    // parked, 4 crashed by a contact), the heat count (car i is in heat
-    // i mod heats), and what each of the best car's rays reads (1 a car, 0 a
-    // wall or nothing), for the display (task C5).
-    let carFlags = null, collisions = null, bestReadingKinds = null;
+    // parked, 4 crashed by a contact) and the heat count (car i is in heat
+    // i mod heats), for the display (task C5).
+    let carFlags = null, collisions = null;
     if (collision) {
         carFlags = CarCollisions.flags(cars, collision.state, new Uint8Array(N));
         collisions = {heatSize: collision.state.heatSize, heats: collision.state.heats};
-        if (bestReadings) {
-            const readings = self.bestCar.sensor.readings;
-            bestReadingKinds = new Uint8Array(bestReadings.length / 3);
-            for (let i = 0; i < bestReadingKinds.length; i++) bestReadingKinds[i] = readings[i] && readings[i].kind === 'car' ? 1 : 0;
-        }
     }
 
     const transfer = [positions.buffer];
     if (carFlags)     transfer.push(carFlags.buffer);
-    if (bestReadingKinds) transfer.push(bestReadingKinds.buffer);
     if (bestRays)     transfer.push(bestRays.buffer);
     if (bestReadings) transfer.push(bestReadings.buffer);
     if (bestInputs)              transfer.push(bestInputs.buffer);
@@ -604,7 +595,7 @@ function postSnapshot(simMs, steps) {
         bestCheckpoints, bestLaps, bestLapTimes,
         bestInputs, bestOutputActivations,
         simMs, steps,
-        ...(collision ? {collisions, carFlags, bestReadingKinds} : {})
+        ...(collision ? {collisions, carFlags} : {})
     }, transfer);
 }
 
@@ -728,16 +719,14 @@ function endGen() {
     pause = true;
 }
 
-// What collision mode did this generation (genEnd.collisions). sensed:
-// times a car's rays looked for cars; carReadings: rays that read a car
-// then (each look has 7 rays).
+// What collision mode did this generation (genEnd.collisions).
 function collisionSummary() {
     const st = collision.state, stats = st.stats;
     let contactDeaths = 0;
     for (let i = 0; i < cars.length; i++) if (cars[i].contactCrash) contactDeaths++;
     return {heatSize: st.heatSize, heats: st.heats, rowFitted: collision.row.fitted, rowPitch: collision.row.pitch,
         steps: stats.steps, pairTests: stats.pairTests, contacts: stats.contacts, sweptContacts: stats.sweptContacts,
-        deepContacts: stats.deepContacts, contactDeaths, seeCars: st.seeCars, sensed: stats.sensed, carReadings: stats.carReadings};
+        deepContacts: stats.deepContacts, contactDeaths};
 }
 
 // Ready signal so main can sync init before posting begin().

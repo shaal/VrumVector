@@ -11,8 +11,11 @@ import {Simulation, presets} from './helpers/simulation.mjs';
 import {seededRandom} from '../AI-Car-Racer/graphics/state.js';
 import {runTrialArm} from '../AI-Car-Racer/learning/trial.js';
 
-// car.js exactly as it was before the split, for the before/after checks.
+// car.js exactly as it was before the split, for the before/after checks,
+// and the sensor and driving statistics from before rays saw cars (C3).
 const carBeforeSplit = readFileSync(new URL('./fixtures/car-before-split.js', import.meta.url), 'utf8');
+const beforeC3 = {'sensor.js': readFileSync(new URL('./fixtures/sensor-before-c3.js', import.meta.url), 'utf8'),
+  'driver/profiles.js': readFileSync(new URL('./fixtures/profiles-before-c3.js', import.meta.url), 'utf8')};
 const FLAT = 244;
 const plain = new Simulation();
 const C = plain.scope.CarCollisions;
@@ -651,7 +654,8 @@ test('contacts are marked first and applied after: a chain crashes the same cars
     assert.equal(cars.middle.damaged && cars.middle.contactCrash, true, order.join());
     assert.equal(cars.front.damaged, false, order.join());
     assert.equal(cars.front.contactCrash, undefined);
-    assert.deepEqual({...state.stats}, {steps: 1, pairTests: 3, narrowTests: 2, contacts: 2, sweptContacts: 0, deepContacts: 0, crashes: 2});
+    assert.deepEqual({...state.stats}, {steps: 1, pairTests: 3, narrowTests: 2, contacts: 2, sweptContacts: 0, deepContacts: 0, crashes: 2,
+      sensed: 0, carTests: 0, carReadings: 0});
     // After the pass, status and mark describe the result.
     const at = k => list.indexOf(cars[k]);
     assert.deepEqual([at('rear'), at('middle'), at('front')].map(i => [state.status[i], state.mark[i], C.isSolid(state, i)]),
@@ -1190,14 +1194,34 @@ const steppers = {
     const live = cars.map(c => c.updatePhysics(b, g));
     for (let i = 0; i < cars.length; i++) if (live[i]) cars[i].updatePerception(b, g);
   },
-  // The core's own step() with heats of one car: no pair can touch.
+  // The core's own step() with heats of one car: no pair can touch. Its rays
+  // see walls only, as before C3.
   coreStep: sim => {
+    const state = sim.scope.CarCollisions.createState(sim.cars.length, {heatSize: 1, seeCars: false});
+    return (cars, b, g) => sim.scope.CarCollisions.step(cars, state, b, g);
+  },
+  // The same with rays that see cars: with no heat-mates, none is ever seen.
+  coreStepSeeing: sim => {
     const state = sim.scope.CarCollisions.createState(sim.cars.length, {heatSize: 1});
     return (cars, b, g) => sim.scope.CarCollisions.step(cars, state, b, g);
   },
 };
-function lockstep({track, seed, profile = 'balanced', N = 40, pilots = 8, top = 6, frames = 900, stride = 1, stepper}) {
-  const before = new Simulation({track, seed, profile, carScript: carBeforeSplit}), after = new Simulation({track, seed, profile});
+// The car statistics that collision mode adds (task C3): carContact (false,
+// no car can touch another), and with rays that see cars the car counts (all
+// zero when no car was ever seen). Removed so the rest compares exactly.
+function withoutCarStats(value, seeing) {
+  const stats = value.stats, driving = value.driving;
+  if (stats && seeing) { assert.deepEqual([stats.nearCars, stats.carSight], [0, 0]); delete stats.nearCars; delete stats.carSight; }
+  if (driving) {
+    assert.deepEqual([driving.carContact, driving.nearCarRate, driving.carSightRate], seeing ? [false, 0, 0] : [false, undefined, undefined]);
+    delete driving.carContact; delete driving.nearCarRate; delete driving.carSightRate;
+  }
+  return value;
+}
+// The "before" side is car.js before the split, with the sensor and the
+// driving statistics from before C3; the "after" side is today's code.
+function lockstep({track, seed, profile = 'balanced', N = 40, pilots = 8, top = 6, frames = 900, stride = 1, stepper, seeing = false}) {
+  const before = new Simulation({track, seed, profile, carScript: carBeforeSplit, scripts: beforeC3}), after = new Simulation({track, seed, profile});
   const flat = brains(N, seed + ':brains');
   let laps = 0, crashes = 0;
   for (const sim of [before, after]) {
@@ -1216,8 +1240,11 @@ function lockstep({track, seed, profile = 'balanced', N = 40, pilots = 8, top = 
     }
     sameNumbers(snapshot(before.cars), snapshot(after.cars), `${track} frame ${f}`);
   }
-  sameJSON(finals(after.cars), finals(before.cars), track + ' final state');
+  const fin = finals(after.cars), core = stepper === steppers.coreStep || seeing;
+  if (core) fin.forEach(v => withoutCarStats(v, seeing));
+  sameJSON(fin, finals(before.cars), track + ' final state');
   const [x, y] = [after.run(0), before.run(0)];
+  if (core) withoutCarStats(x, seeing);
   sameJSON({...x, vector: [...x.vector]}, {...y, vector: [...y.vector]}, track + ' run result');
   for (const c of after.cars) { laps = Math.max(laps, c.laps); if (c.damaged) crashes++; }
   return {laps, crashes};
@@ -1233,6 +1260,7 @@ test('collisions off: the split update() is bit-identical to car.js before the s
 test('collisions off: moving every car and then sensing every car gives the same results', () => {
   for (const track of ['Rectangle', 'Triangle']) lockstep({track, seed: 'three-pass', stepper: steppers.threePass});
   for (const track of ['Rectangle', 'Triangle']) lockstep({track, seed: 'core-step', stepper: steppers.coreStep});
+  for (const track of ['Rectangle', 'Triangle']) lockstep({track, seed: 'core-step-seeing', stepper: steppers.coreStepSeeing, seeing: true});
 });
 
 test('collisions off: identical with laps, the sensor stride, and a driving style', () => {
@@ -1244,7 +1272,7 @@ test('collisions off: identical with laps, the sensor stride, and a driving styl
 
 test('collisions off: identical for a player car that crashes, respawns, and is then driven by the AI', () => {
   const [before, after] = [carBeforeSplit, null].map(carScript => {
-    const sim = new Simulation({track: 'Rectangle', seed: 'player', carScript});
+    const sim = new Simulation({track: 'Rectangle', seed: 'player', carScript, scripts: carScript ? beforeC3 : {}});
     Object.assign(sim.scope, {document: new EventTarget(), window: new EventTarget(), AbortController});
     const s = sim.spawn, car = new sim.scope.CarClass(s.x, s.y, 30, 50, 'KEYS', 15, s.angle);
     return {sim, car};
@@ -1289,7 +1317,7 @@ test('collisions off: a short genetic run is identical before and after the spli
   const context = {profile: 'balanced', track: 'split', maxSpeed: 15, traction: .5, seconds: 8};
   for (const track of ['Rectangle', 'Triangle']) {
     const arm = carScript => {
-      const sim = new Simulation({track, seed: 'ga-' + track, carScript}), ends = [];
+      const sim = new Simulation({track, seed: 'ga-' + track, carScript, scripts: carScript ? beforeC3 : {}}), ends = [];
       const result = runTrialArm({simulate: flat => { sim.begin(flat); const out = sim.run(8); ends.push(snapshot(sim.cars)); return out; },
         context, seeds: [], random: seededRandom('ga-pop-' + track), generations: 4, population: 24});
       return {result, ends};
