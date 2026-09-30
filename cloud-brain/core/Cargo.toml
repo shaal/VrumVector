@@ -1,0 +1,22 @@
+[package]
+name = "vectorvroom-brain-core"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "The cloud brain service without the Workers runtime: the wire format (CB1), ranking, feedback, caps and eviction. Tested natively."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+# float_roundtrip: every number reads as the nearest double, as JSON.parse
+# does (docs/validation/cloud-brain.md, CB1).
+serde_json = { version = "1", features = ["float_roundtrip"] }
+base64 = "0.22"
+sha2 = "0.10"
+# Fetched by scripts/build-cloud-brain.sh (upstream 5356a84e2).
+ruvector-core = { path = "../.work/ruvector/crates/ruvector-core", default-features = false, features = ["memory-only"] }
+
+# The wasm32-unknown-unknown fallback (docs/plan/cloud-brain.md, D1): its
+# random numbers come from JavaScript (ruvector-core's uuid and rand ask).
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+uuid = { version = "1", features = ["js"] }

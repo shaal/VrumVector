@@ -1,0 +1,25 @@
+{
+ "description": "Rows the service refuses alone: a brain it does not hold, a second row for one brain and context, a new context with none to replace.",
+ "route": "contribute-response",
+ "body": "{\"protocol\":1,\"accepted\":[],\"rejected\":[],\"feedbackAccepted\":1,\"feedbackRejected\":[{\"index\":1,\"reason\":\"feedback-unknown\"},{\"index\":2,\"reason\":\"feedback-duplicate\"},{\"index\":3,\"reason\":\"feedback-full\"}]}",
+ "expect": {
+  "ok": true,
+  "accepted": [],
+  "rejected": [],
+  "feedbackAccepted": 1,
+  "feedbackRejected": [
+   {
+    "index": 1,
+    "reason": "feedback-unknown"
+   },
+   {
+    "index": 2,
+    "reason": "feedback-duplicate"
+   },
+   {
+    "index": 3,
+    "reason": "feedback-full"
+   }
+  ]
+ }
+}

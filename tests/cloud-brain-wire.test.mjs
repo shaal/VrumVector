@@ -74,7 +74,7 @@ test('the fixtures on disk are what the generator makes', async () => {
     assert.deepEqual(Object.keys(onDisk).sort(), Object.keys(made[kind]).sort(), kind);
     for (const name of Object.keys(onDisk)) assert.deepEqual(onDisk[name], JSON.parse(JSON.stringify(made[kind][name])), `${kind}/${name}`);
   }
-  for (const table of ['contexts', 'meta']) assert.deepEqual(await readJson(`${table}.json`), JSON.parse(JSON.stringify(made[table])), table);
+  for (const table of ['contexts', 'meta', 'match']) assert.deepEqual(await readJson(`${table}.json`), JSON.parse(JSON.stringify(made[table])), table);
 });
 
 test('every fixture gives its expected result', async () => {
@@ -219,7 +219,7 @@ test('real brains pass: a genetic population, and the clone bound', () => {
 });
 
 test('hostile input never throws, and every refusal has a known reason', async () => {
-  const known = new Set([...Object.values(REASONS), ...wire.SERVICE_ERRORS]);
+  const known = new Set([...Object.values(REASONS), ...wire.SERVICE_ERRORS, ...wire.SERVICE_ITEM_REASONS]);
   const fixtures = Object.values(await load('valid')).concat(Object.values(await load('invalid')));
   const bodies = fixtures.filter(f => 'body' in f).map(f => f.body);
   let seed = 7;

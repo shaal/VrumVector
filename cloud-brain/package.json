@@ -3,7 +3,7 @@
   "private": true,
   "description": "Tooling for the cloud brain Worker. Its own pins: the Emscripten build needs a newer workerd than multiplayer/ uses (docs/plan/cloud-brain.md, D10).",
   "scripts": {
-    "dev": "wrangler dev --port 8879",
+    "dev": "wrangler dev --port 8879 --var ALLOW_LOCAL:true",
     "build": "bash build.sh"
   },
   "devDependencies": {
