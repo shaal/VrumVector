@@ -1395,7 +1395,10 @@ export function brainVector(id) { return _brainMirror.get(id)?.vector || null; }
  * close, CLOUD_SAME_TRACK_SIM; else without one), tagged source 'cloud'; and
  * the shared brain's offspring feedback for this context replaces the
  * replica's own. Past CLOUD_REPLICA_MAX pulled brains, only feedback is
- * refreshed. Returns how many brains were new.
+ * refreshed. A pulled brain's fitness is the service's trusted fitness
+ * (CB4: 0 until others' offspring corroborate its claim): a later pull
+ * brings the new value, until this tab measures the brain itself (archives
+ * it again). Returns how many brains were new.
  */
 export function acceptCloudPool(pool, trackVec, context = null) {
   requireReady();
@@ -1414,13 +1417,27 @@ export function acceptCloudPool(pool, trackVec, context = null) {
       if (!id && (held < CLOUD_REPLICA_MAX || (onTrack && held < 2 * CLOUD_REPLICA_MAX))) {
         const learning = m.learning ? { context: m.learning.context, styleScore: m.learning.styleScore, driving: m.learning.driving, source: 'cloud' } : { source: 'cloud' };
         id = archiveBrain(unflatten(entry.vector), entry.fitness, onTrack ? track : null, m.generation || 0, [], m.fastestLap, undefined, learning);
+        // What the service served, on the brain and on its evaluation (the
+        // brain archived here again drops the first; the second stays for
+        // the context it was pulled in, and keeps being refreshed).
+        const pulled = _brainMirror.get(id).meta;
+        pulled.cloudFitness = entry.fitness;
+        for (const row of pulled.evaluations || []) row.cloudFitness = entry.fitness;
         added++;
         held++;
-      } else if (id && onTrack && !_brainMirror.get(id)?.meta?.trackId) {
+      } else if (id) {
+        const held_ = _brainMirror.get(id);
+        let meta = held_.meta;
+        // What was served and not measured here since takes the service's
+        // trusted fitness now: the brain, or the evaluation it was pulled in.
+        const stale = value => Number.isFinite(value?.cloudFitness) && Number.isFinite(entry.fitness) && value.cloudFitness !== entry.fitness;
+        const refresh = value => ({ ...value, fitness: entry.fitness, cloudFitness: entry.fitness });
+        if (stale(meta)) meta = refresh(meta);
+        if (Array.isArray(meta.evaluations) && meta.evaluations.some(stale)) meta = { ...meta, evaluations: meta.evaluations.map(row => (stale(row) ? refresh(row) : row)) };
         // Held without a track (an earlier pull found it elsewhere): now it
         // was found on this one, so it is filed here.
-        const held_ = _brainMirror.get(id);
-        _brainMirror.set(id, { vector: held_.vector, meta: { ...held_.meta, trackId: upsertTrack(track) } });
+        if (onTrack && !meta.trackId) meta = { ...meta, trackId: upsertTrack(track) };
+        if (meta !== held_.meta) _brainMirror.set(id, { vector: held_.vector, meta });
       }
       const fb = entry.feedback;
       if (ctx && id && fb && fb.count > 0) {
@@ -1578,7 +1595,11 @@ export function observeOffspring(outcomes,context){
     const parent=_brainMirror.get(outcome.id);if(!parent)continue;
     const key=observationKey(outcome.id,context),previous=_observations.get(key);
     const parentMeta=evaluationFor(parent.meta,context);
-    const exact=matchContext(parentMeta,context).exact;
+    // A brain pulled from the shared brain and not measured here in this
+    // context (the brain's mark, or its evaluation's) carries the service's
+    // trusted fitness (0 until corroborated, CB4), not a measurement: it is
+    // not a baseline, and its first outcome only sets one.
+    const exact=!Number.isFinite(parentMeta?.cloudFitness)&&matchContext(parentMeta,context).exact;
     // A transfer first establishes a local baseline. Checkpoints on an
     // unrelated track are not evidence of improvement in these conditions.
     const baseline=exact?Number(parentMeta.fitness):previous?.baseline;

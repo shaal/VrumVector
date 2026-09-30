@@ -5,11 +5,16 @@
 //! built by the object, never at module scope).
 //!
 //! The front door (`fetch`) answers what needs no brain: the breaker
-//! (DISABLE_BRAIN), origins and CORS, the body limit, and unknown routes.
-//! The object (`SharedBrain`) parses, holds the brain and its SQLite store.
-//! The service logic is the `brain` crate (core/), tested natively.
+//! (DISABLE_BRAIN), origins and CORS, the per-address rate limits (the Rate
+//! Limiting binding: the address is a key, never stored), the body limit,
+//! and unknown routes. The object (`SharedBrain`) parses, holds the brain
+//! and its SQLite store, and counts each contributor's daily quota. The
+//! service logic is the `brain` crate (core/), tested natively.
 
-use brain::brain::{contributor_id, Brain, BrainRow, Config, FeedbackRow, Loaded, Result as StoreResult, Store, StoreError, StoredBrain, TrackRow};
+use brain::brain::{
+    contributor_id, parse_slots, resolve_ids, slots_text, Brain, BrainRow, Config, FeedbackRow, Limited, Loaded, Page, Result as StoreResult,
+    Slot, Store, StoreError, StoredBrain, TrackRow, Usage,
+};
 use brain::wire::{self, error_body, Reason};
 use futures_util::StreamExt;
 use serde::Serialize;
@@ -29,6 +34,9 @@ struct Health {
     ok: bool,
     protocol: u32,
     brain: bool,
+    /// Every per-address rate limiter is bound (CB4): without them the
+    /// front door lets every request through (CB5's health check asks).
+    limits: bool,
     build: Build,
 }
 
@@ -47,8 +55,33 @@ fn build() -> Build {
     }
 }
 
+/// A variable as text. `wrangler dev --var` passes strings; `vars` in
+/// wrangler.jsonc keep their JSON type, so a number or a boolean is read too.
+fn var_text(env: &Env, name: &str) -> Option<String> {
+    let value = js_sys::Reflect::get(env, &wasm_bindgen::JsValue::from(name)).ok()?;
+    if let Some(text) = value.as_string() {
+        return Some(text.trim().to_string());
+    }
+    if let Some(number) = value.as_f64() {
+        return Some(number.to_string());
+    }
+    value.as_bool().map(|b| b.to_string())
+}
+
 fn flag(env: &Env, name: &str) -> bool {
-    env.var(name).map(|v| v.to_string() == "true").unwrap_or(false)
+    var_text(env, name).as_deref() == Some("true")
+}
+
+/// A whole-number variable, or `default` (said in the log when it is set
+/// but is not one).
+fn number(env: &Env, name: &str, default: u64) -> u64 {
+    match var_text(env, name) {
+        None => default,
+        Some(text) => text.parse().unwrap_or_else(|_| {
+            console_error!("cloud brain: {name}={text:?} is not a whole number; using {default}");
+            default
+        }),
+    }
 }
 
 /// The origins multiplayer allows (multiplayer/worker.js), and with
@@ -82,6 +115,8 @@ fn with_cors(response: Response, origin: Option<&str>) -> Result<Response> {
         headers.set(&name, &value)?;
     }
     headers.set("Access-Control-Allow-Origin", origin)?;
+    // A 429's Retry-After, readable by the page.
+    headers.set("Access-Control-Expose-Headers", "Retry-After")?;
     headers.set("Vary", "Origin")?;
     Ok(response.with_headers(headers))
 }
@@ -95,6 +130,55 @@ fn json_response(body: String, status: u16) -> Result<Response> {
 fn error_response(reason: Reason) -> Result<Response> {
     json_response(error_body(reason), reason.status())
 }
+
+/// 429 `rate-limited`, and when to try again.
+fn limited_response(retry_after: u64) -> Result<Response> {
+    let mut response = error_response(Reason::RateLimited)?;
+    response.headers_mut().set("Retry-After", &retry_after.to_string())?;
+    Ok(response)
+}
+
+/// The address a request is counted under: the one Cloudflare saw
+/// (`CF-Connecting-IP`), an IPv6 one by its /64 (one host holds a whole /64).
+fn address_key(req: &Request) -> String {
+    let raw = req.headers().get("CF-Connecting-IP").ok().flatten().unwrap_or_default();
+    match raw.trim().parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V6(v6)) => match v6.to_ipv4_mapped() {
+            Some(v4) => v4.to_string(),
+            None => {
+                let s = v6.segments();
+                format!("{:x}:{:x}:{:x}:{:x}::/64", s[0], s[1], s[2], s[3])
+            }
+        },
+        Ok(std::net::IpAddr::V4(v4)) => v4.to_string(),
+        Err(_) => raw,
+    }
+}
+
+/// The per-address limits (wrangler.jsonc `ratelimits`, 60-second windows):
+/// contributions, forgets, and recalls, stats and health checks. The key
+/// is `address_key`, used for this count and never stored. Without the
+/// binding (a misconfiguration: /health says `limits: false`) or when it
+/// fails, the request goes on: the per-token quotas in the object still hold.
+async fn over_rate_limit(env: &Env, binding: &str, req: &Request) -> bool {
+    let address = address_key(req);
+    let limiter = match env.rate_limiter(binding) {
+        Ok(limiter) => limiter,
+        Err(e) => {
+            console_error!("cloud brain: no rate limiter {binding}: {e}");
+            return false;
+        }
+    };
+    match limiter.limit(address).await {
+        Ok(outcome) => !outcome.success,
+        Err(e) => {
+            console_error!("cloud brain: rate limiter {binding}: {e}");
+            false
+        }
+    }
+}
+/// The window the limits count in (seconds): a refused page may try again after it.
+const RATE_WINDOW_S: u64 = 60;
 
 /// The body, at most `limit` bytes: a larger Content-Length is refused before
 /// reading, and a body without one is read only up to the limit.
@@ -121,6 +205,10 @@ async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let path = url.path().to_string();
     let stub = || env.durable_object("BRAIN")?.get_by_name(BRAIN_NAME);
     if (req.method() == Method::Get && path == "/health") || (cfg!(feature = "spike") && path.starts_with("/spike/")) {
+        // It reaches the object: counted with the reads.
+        if over_rate_limit(&env, "READ_LIMIT", &req).await {
+            return limited_response(RATE_WINDOW_S);
+        }
         return stub()?.fetch_with_request(req).await;
     }
     if !path.starts_with("/v1/") {
@@ -145,17 +233,29 @@ async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
         headers.set("Access-Control-Max-Age", "86400")?;
         return with_cors(response, cors);
     }
+    let limiter = match (&method, path.as_str()) {
+        (Method::Post, "/v1/contribute") => "WRITE_LIMIT",
+        // A forget can read every feedback record: a few a minute.
+        (Method::Post, "/v1/forget") => "FORGET_LIMIT",
+        (Method::Post, "/v1/recall") | (Method::Get, "/v1/stats") => "READ_LIMIT",
+        _ => return with_cors(Response::error("Not found", 404)?, cors),
+    };
+    if over_rate_limit(&env, limiter, &req).await {
+        return with_cors(limited_response(RATE_WINDOW_S)?, cors);
+    }
     let forwarded = match (method, path.as_str()) {
-        (Method::Post, "/v1/recall" | "/v1/contribute") => match capped_body(&mut req, wire::limits::REQUEST_BYTES).await? {
-            None => return with_cors(error_response(Reason::BodyTooLarge)?, cors),
-            Some(body) => {
+        (Method::Post, "/v1/recall" | "/v1/contribute" | "/v1/forget") => match capped_body(&mut req, wire::limits::REQUEST_BYTES).await {
+            Ok(None) => return with_cors(error_response(Reason::BodyTooLarge)?, cors),
+            Ok(Some(body)) => {
                 let mut init = RequestInit::new();
                 init.with_method(Method::Post).with_body(Some(js_sys::Uint8Array::from(body.as_slice()).into()));
-                match stub() {
-                    Ok(stub) => stub.fetch_with_request(Request::new_with_init(url.as_str(), &init)?).await,
-                    Err(e) => Err(e),
+                match (stub(), Request::new_with_init(url.as_str(), &init)) {
+                    (Ok(stub), Ok(inner)) => stub.fetch_with_request(inner).await,
+                    (Err(e), _) | (_, Err(e)) => Err(e),
                 }
             }
+            // The body could not be read (the page went away mid-send).
+            Err(e) => Err(e),
         },
         (Method::Get, "/v1/stats") => match stub() {
             Ok(stub) => stub.fetch_with_request(req).await,
@@ -163,8 +263,8 @@ async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
         },
         _ => return with_cors(Response::error("Not found", 404)?, cors),
     };
-    // The object threw (a panic, a reset, an overload): the page still gets
-    // an answer it can read.
+    // The object threw (a panic, a reset, an overload), or the body could
+    // not be read: the page still gets an answer it can read.
     let response = forwarded.or_else(|e| {
         console_error!("cloud brain: the object failed: {e}");
         error_response(Reason::ServerError)
@@ -181,6 +281,8 @@ pub struct SharedBrain {
     /// answers `server-error` rather than serving from a half-made database.
     init_error: Option<String>,
     disabled: bool,
+    /// Every rate limiter is bound (reported by /health).
+    limits: bool,
     /// Built on the first request that needs it, from SQLite, with no await
     /// in between: no other request runs until it is built (the effect of
     /// blockConcurrencyWhile). A request takes it out and puts it back only
@@ -188,6 +290,9 @@ pub struct SharedBrain {
     /// and the next request rebuilds it from what SQLite holds (so the
     /// assertion of unwind safety holds).
     brain: AssertUnwindSafe<RefCell<Option<Brain>>>,
+    /// Sizes, trust and quotas (the quotas can be set with QUOTA_REQUESTS,
+    /// QUOTA_BRAINS and QUOTA_FEEDBACK).
+    config: Config,
     /// The spike routes also need the variable CLOUD_BRAIN_SPIKE=1 (the spike
     /// test passes it to `wrangler dev`), so a spike build that reaches a
     /// deploy by mistake still serves them to nobody.
@@ -211,6 +316,18 @@ const MIGRATIONS: &[&[&str]] = &[
         "CREATE TABLE IF NOT EXISTS contribution_minutes (minute INTEGER PRIMARY KEY, count INTEGER NOT NULL)",
         "CREATE TABLE IF NOT EXISTS contributors (id TEXT PRIMARY KEY, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL)",
         "CREATE INDEX IF NOT EXISTS contributors_last_seen ON contributors (last_seen)",
+    ],
+    // 2 (CB4): feedback per contributor, daily quotas, forget. Nothing was
+    // deployed at schema 1, so its feedback (one weight for everyone) and
+    // its contributors (no quota counts) start over; each statement can
+    // run again (a migration cut short runs before any request).
+    &[
+        "DELETE FROM feedback",
+        "DROP TABLE IF EXISTS contributors",
+        "CREATE TABLE IF NOT EXISTS contributors (id TEXT PRIMARY KEY, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL, \
+         day INTEGER NOT NULL, requests INTEGER NOT NULL, brains INTEGER NOT NULL, feedback INTEGER NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS contributors_last_seen ON contributors (last_seen)",
+        "CREATE INDEX IF NOT EXISTS brains_contributor ON brains (contributor)",
     ],
 ];
 
@@ -247,13 +364,21 @@ impl DurableObject for SharedBrain {
         // Schema before any request.
         let init_error = init_schema(&state).err().map(|e| e.to_string());
         let spike_enabled = env.var("CLOUD_BRAIN_SPIKE").map(|v| v.to_string() == "1").unwrap_or(false);
-        Self { state, init_error, disabled: flag(&env, "DISABLE_BRAIN"), brain: AssertUnwindSafe(RefCell::new(None)), spike_enabled }
+        let d = Config::default().quota;
+        let quota = Usage {
+            requests: number(&env, "QUOTA_REQUESTS", d.requests),
+            brains: number(&env, "QUOTA_BRAINS", d.brains),
+            feedback: number(&env, "QUOTA_FEEDBACK", d.feedback),
+        };
+        let config = Config { quota, ..Config::default() };
+        let limits = ["WRITE_LIMIT", "READ_LIMIT", "FORGET_LIMIT"].iter().all(|name| env.rate_limiter(name).is_ok());
+        Self { state, init_error, disabled: flag(&env, "DISABLE_BRAIN"), limits, brain: AssertUnwindSafe(RefCell::new(None)), config, spike_enabled }
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
         let url = req.url()?;
         if let (Method::Get, "/health") = (req.method(), url.path()) {
-            return Response::from_json(&Health { ok: self.init_error.is_none(), protocol: wire::PROTOCOL, brain: !self.disabled, build: build() });
+            return Response::from_json(&Health { ok: self.init_error.is_none(), protocol: wire::PROTOCOL, brain: !self.disabled, limits: self.limits, build: build() });
         }
         #[cfg(feature = "spike")]
         if self.spike_enabled && url.path().starts_with("/spike/") {
@@ -267,6 +392,7 @@ impl DurableObject for SharedBrain {
         let route = match (method, path.as_str()) {
             (Method::Post, "/v1/contribute") => Route::Contribute,
             (Method::Post, "/v1/recall") => Route::Recall,
+            (Method::Post, "/v1/forget") => Route::Forget,
             (Method::Get, "/v1/stats") => Route::Stats,
             // Before any body is read or the brain built.
             _ => return Response::error("Not found", 404),
@@ -282,6 +408,7 @@ impl DurableObject for SharedBrain {
         let job = match route {
             Route::Contribute => wire::parse_contribute(&body).map(Job::Contribute),
             Route::Recall => wire::parse_recall(&body).map(Job::Recall),
+            Route::Forget => wire::parse_forget(&body).map(Job::Forget),
             Route::Stats => Ok(Job::Stats),
         };
         let job = match job {
@@ -292,7 +419,7 @@ impl DurableObject for SharedBrain {
         let mut store = SqlStore(self.state.storage().sql());
         let result = match self.brain.take() {
             Some(brain) => Ok(brain),
-            None => Brain::open(Config::default(), &mut store, now),
+            None => Brain::open(self.config.clone(), &mut store, now),
         }
         .and_then(|mut brain| {
             let answer = run(&mut brain, &mut store, job, now)?;
@@ -300,7 +427,8 @@ impl DurableObject for SharedBrain {
             Ok(answer)
         });
         match result {
-            Ok(answer) => json_response(answer, 200),
+            Ok(Answer::Json(answer)) => json_response(answer, 200),
+            Ok(Answer::Limited(Limited { retry_after })) => limited_response(retry_after),
             Err(error) => {
                 // The store may hold part of this request: the brain is
                 // rebuilt from it on the next request.
@@ -315,6 +443,7 @@ impl DurableObject for SharedBrain {
 enum Route {
     Contribute,
     Recall,
+    Forget,
     Stats,
 }
 
@@ -322,19 +451,31 @@ enum Route {
 enum Job {
     Contribute(wire::Contribution),
     Recall(wire::Recall),
+    /// The token.
+    Forget(String),
     Stats,
 }
 
-/// A job against the brain: its answer as JSON, or the store's error (the
-/// brain is then rebuilt).
-fn run(brain: &mut Brain, store: &mut SqlStore, job: Job, now: u64) -> StoreResult<String> {
-    let json = |value: &dyn erased::Json| value.to_json();
+enum Answer {
+    Json(String),
+    /// Past the contributor's daily quota.
+    Limited(Limited),
+}
+
+/// A job against the brain: its answer, or the store's error (the brain is
+/// then rebuilt).
+fn run(brain: &mut Brain, store: &mut SqlStore, job: Job, now: u64) -> StoreResult<Answer> {
+    let json = |value: &dyn erased::Json| value.to_json().map(Answer::Json);
     match job {
         Job::Contribute(c) => {
             let contributor = contributor_id(&c.token);
-            json(&brain.contribute(c, &contributor, now, store)?)
+            match brain.contribute(c, &contributor, now, store)? {
+                Ok(answer) => json(&answer),
+                Err(limited) => Ok(Answer::Limited(limited)),
+            }
         }
         Job::Recall(r) => json(&brain.recall(&r, store)?),
+        Job::Forget(token) => json(&brain.forget(&contributor_id(&token), store)?),
         Job::Stats => json(&brain.stats(now, store)?),
     }
 }
@@ -407,14 +548,6 @@ impl SqlStore {
     }
 }
 
-/// Contributor ids in a feedback row: comma-separated 8-digit hex.
-fn ids_text(ids: &[u32]) -> String {
-    ids.iter().map(|id| format!("{id:08x}")).collect::<Vec<_>>().join(",")
-}
-fn ids(text: &str) -> Vec<u32> {
-    text.split(',').filter_map(|id| u32::from_str_radix(id, 16).ok()).collect()
-}
-
 impl Store for SqlStore {
     fn load(&self, since_minute: u64, sink: &mut dyn FnMut(Loaded) -> StoreResult<()>) -> StoreResult<()> {
         self.each("SELECT id, vector, created FROM tracks", vec![], |r| match (text(&r[0]), blob(&r[1]), int(&r[2])) {
@@ -430,16 +563,16 @@ impl Store for SqlStore {
             }
         })?;
         // The context JSON stays in SQLite: memory keys feedback by its hash.
-        self.each("SELECT brain, context_key, weight, count, baseline, contributors, updated FROM feedback ORDER BY brain, updated DESC", vec![], |r| {
-            match (text(&r[0]), text(&r[1]), real(&r[2]), int(&r[3]), text(&r[5]), int(&r[6])) {
-                (Some(brain), Some(context_key), Some(weight), Some(count), Some(contributors), Some(updated)) => sink(Loaded::Feedback(FeedbackRow {
+        // Slots that do not read come as none, so the rebuild deletes the row.
+        self.each("SELECT brain, context_key, weight, count, contributors, updated FROM feedback ORDER BY brain, updated DESC, context_key", vec![], |r| {
+            match (text(&r[0]), text(&r[1]), real(&r[2]), int(&r[3]), text(&r[4]), int(&r[5])) {
+                (Some(brain), Some(context_key), Some(weight), Some(count), Some(slots), Some(updated)) => sink(Loaded::Feedback(FeedbackRow {
                     brain,
                     context_key,
-                    context: String::new(),
+                    context: None,
                     weight,
                     count,
-                    baseline: real(&r[4]),
-                    contributors: ids(&contributors),
+                    slots: parse_slots(&slots).unwrap_or_default(),
                     updated,
                 })),
                 _ => Ok(()),
@@ -481,16 +614,26 @@ impl Store for SqlStore {
         self.run("DELETE FROM feedback WHERE brain = ?", vec![id.into()])
     }
     fn put_feedback(&mut self, row: &FeedbackRow) -> StoreResult<()> {
+        // A slot the brain knows by its tag alone keeps the id stored for it.
+        let slots = if row.slots.iter().any(|s| s.id.is_empty()) {
+            resolve_ids(&row.slots, &self.feedback_slots(&row.brain, &row.context_key)?.unwrap_or_default())?
+        } else {
+            row.slots.clone()
+        };
+        // Without a context (forget rewriting a row), the stored one stays.
+        // (`baseline`, schema 1's one baseline for everyone, is left empty:
+        // each slot has its own.)
         self.run(
-            "INSERT OR REPLACE INTO feedback (brain, context_key, context, weight, count, baseline, contributors, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO feedback (brain, context_key, context, weight, count, baseline, contributors, updated) VALUES (?, ?, ?, ?, ?, NULL, ?, ?) \
+             ON CONFLICT (brain, context_key) DO UPDATE SET context = CASE WHEN excluded.context = '' THEN context ELSE excluded.context END, \
+             weight = excluded.weight, count = excluded.count, baseline = NULL, contributors = excluded.contributors, updated = excluded.updated",
             vec![
                 row.brain.as_str().into(),
                 row.context_key.as_str().into(),
-                row.context.as_str().into(),
+                row.context.as_deref().unwrap_or("").into(),
                 row.weight.into(),
                 (row.count as i64).into(),
-                row.baseline.map_or(SqlStorageValue::Null, Into::into),
-                ids_text(&row.contributors).into(),
+                slots_text(&slots).into(),
                 (row.updated as i64).into(),
             ],
         )
@@ -498,16 +641,77 @@ impl Store for SqlStore {
     fn delete_feedback(&mut self, brain: &str, context_key: &str) -> StoreResult<()> {
         self.run("DELETE FROM feedback WHERE brain = ? AND context_key = ?", vec![brain.into(), context_key.into()])
     }
-    fn count_contribution(&mut self, minute: u64, prune_minute: u64, contributor: &str, at: u64) -> StoreResult<()> {
+    fn records_of(&self, contributor: &str, after: Option<&(String, String)>, limit: usize) -> StoreResult<Page> {
+        // In key order from `after` (the primary key's): each record is read
+        // once over all the pages. The text search finds the candidates; the
+        // slots, read, decide.
+        let (query, mut bindings): (&str, Vec<SqlStorageValue>) = match after {
+            None => ("SELECT brain, context_key, contributors FROM feedback WHERE instr(contributors, ?) > 0 ORDER BY brain, context_key LIMIT ?", vec![]),
+            Some((brain, key)) => (
+                "SELECT brain, context_key, contributors FROM feedback WHERE (brain, context_key) > (?, ?) AND instr(contributors, ?) > 0 \
+                 ORDER BY brain, context_key LIMIT ?",
+                vec![brain.as_str().into(), key.as_str().into()],
+            ),
+        };
+        bindings.push(contributor.into());
+        bindings.push((limit as i64).into());
+        let (mut records, mut read, mut last) = (Vec::new(), 0, None);
+        self.each(query, bindings, |r| {
+            read += 1;
+            if let (Some(brain), Some(key)) = (text(&r[0]), text(&r[1])) {
+                if let Some(slots) = text(&r[2]).and_then(|t| parse_slots(&t)).filter(|slots| slots.iter().any(|s| s.id == contributor)) {
+                    records.push((brain.clone(), key.clone(), slots));
+                }
+                last = Some((brain, key));
+            }
+            Ok(())
+        })?;
+        // A full page may have more after it.
+        Ok((records, if read == limit { last } else { None }))
+    }
+    fn feedback_slots(&self, brain: &str, context_key: &str) -> StoreResult<Option<Vec<Slot>>> {
+        let mut held = None;
+        self.each("SELECT contributors FROM feedback WHERE brain = ? AND context_key = ?", vec![brain.into(), context_key.into()], |r| {
+            held = text(&r[0]).and_then(|t| parse_slots(&t));
+            Ok(())
+        })?;
+        Ok(held)
+    }
+    fn count_contribution(&mut self, minute: u64, prune_minute: u64) -> StoreResult<()> {
         self.run(
             "INSERT INTO contribution_minutes (minute, count) VALUES (?, 1) ON CONFLICT (minute) DO UPDATE SET count = count + 1",
             vec![(minute as i64).into()],
         )?;
-        self.run("DELETE FROM contribution_minutes WHERE minute <= ?", vec![(prune_minute as i64).into()])?;
+        self.run("DELETE FROM contribution_minutes WHERE minute <= ?", vec![(prune_minute as i64).into()])
+    }
+    fn usage(&self, contributor: &str, day: u64) -> StoreResult<Usage> {
+        let mut used = Usage::default();
+        self.each("SELECT requests, brains, feedback FROM contributors WHERE id = ? AND day = ?", vec![contributor.into(), (day as i64).into()], |r| {
+            used = Usage { requests: int(&r[0]).unwrap_or(0), brains: int(&r[1]).unwrap_or(0), feedback: int(&r[2]).unwrap_or(0) };
+            Ok(())
+        })?;
+        Ok(used)
+    }
+    fn count_usage(&mut self, contributor: &str, day: u64, add: Usage, at: u64, prune_before: u64) -> StoreResult<()> {
+        // SET reads the row as it was: a row of another day starts over.
         self.run(
-            "INSERT INTO contributors (id, first_seen, last_seen) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET last_seen = excluded.last_seen",
-            vec![contributor.into(), (at as i64).into(), (at as i64).into()],
-        )
+            "INSERT INTO contributors (id, first_seen, last_seen, day, requests, brains, feedback) VALUES (?, ?, ?, ?, ?, ?, ?) \
+             ON CONFLICT (id) DO UPDATE SET \
+             requests = CASE WHEN day = excluded.day THEN requests + excluded.requests ELSE excluded.requests END, \
+             brains = CASE WHEN day = excluded.day THEN brains + excluded.brains ELSE excluded.brains END, \
+             feedback = CASE WHEN day = excluded.day THEN feedback + excluded.feedback ELSE excluded.feedback END, \
+             day = excluded.day, last_seen = excluded.last_seen",
+            vec![
+                contributor.into(),
+                (at as i64).into(),
+                (at as i64).into(),
+                (day as i64).into(),
+                (add.requests as i64).into(),
+                (add.brains as i64).into(),
+                (add.feedback as i64).into(),
+            ],
+        )?;
+        self.run("DELETE FROM contributors WHERE last_seen < ?", vec![(prune_before as i64).into()])
     }
     fn contributors_since(&self, since: u64) -> StoreResult<usize> {
         let mut count = 0;
@@ -530,6 +734,17 @@ impl Store for SqlStore {
             })?;
         }
         Ok(ids.iter().map(|id| found.remove(*id)).collect())
+    }
+    fn delete_brains_of(&mut self, contributor: &str) -> StoreResult<Vec<String>> {
+        let mut ids = Vec::new();
+        self.each("SELECT id FROM brains WHERE contributor = ? ORDER BY id", vec![contributor.into()], |r| {
+            ids.extend(text(&r[0]));
+            Ok(())
+        })?;
+        // Their feedback first: the brains alone would still be valid.
+        self.run("DELETE FROM feedback WHERE brain IN (SELECT id FROM brains WHERE contributor = ?)", vec![contributor.into()])?;
+        self.run("DELETE FROM brains WHERE contributor = ?", vec![contributor.into()])?;
+        Ok(ids)
     }
 }
 
