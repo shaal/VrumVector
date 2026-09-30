@@ -15,10 +15,13 @@
 // (for some) the values read: cleaned meta and contexts, fitness values,
 // feedback rows, track indices, and vector fingerprints (`brain_` + the
 // first 128 bits of SHA-256 of the decoded vector's bytes, as for a brain id). contexts.json and meta.json are lists of
-// {in, out}: wireContext(in) and cleanBrainMeta(in).
+// {in, out}: wireContext(in) and cleanBrainMeta(in). match.json (CB2) lists
+// {memory, query, factor}: matchContext's factor, which the service's
+// ranking uses too (memory null: a brain without a context).
 import {mkdir, writeFile, rm} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
-import {encodeF32, brainId, httpStatus, PROTOCOL, BRAIN_SCHEMA, LIMITS, DIMS, REASONS} from '../AI-Car-Racer/cloud/wire.js';
+import {encodeF32, brainId, httpStatus, wireContext, PROTOCOL, BRAIN_SCHEMA, LIMITS, DIMS, REASONS} from '../AI-Car-Racer/cloud/wire.js';
+import {matchContext} from '../AI-Car-Racer/learning/policy.js';
 
 function stream(seed) {
   let s = BigInt(seed) || 1n;
@@ -572,6 +575,9 @@ export async function fixtures() {
     json({protocol: PROTOCOL, accepted: [], rejected: [], feedbackAccepted: '5', feedbackRejected: []}), REASONS.shape);
   invalid['contribute-response-index-string'] = refused('A refused index given as a string ("3").', 'contribute-response',
     json({protocol: PROTOCOL, accepted: [], rejected: [{index: '3', reason: REASONS.brainFitness}], feedbackAccepted: 0, feedbackRejected: []}), REASONS.shape);
+  valid['contribute-response-feedback-unknown'] = {description: 'Rows the service refuses alone: a brain it does not hold, a second row for one brain and context, a new context with none to replace.', route: 'contribute-response',
+    body: json({protocol: PROTOCOL, accepted: [], rejected: [], feedbackAccepted: 1, feedbackRejected: [{index: 1, reason: 'feedback-unknown'}, {index: 2, reason: 'feedback-duplicate'}, {index: 3, reason: 'feedback-full'}]}),
+    expect: {ok: true, accepted: [], rejected: [], feedbackAccepted: 1, feedbackRejected: [{index: 1, reason: 'feedback-unknown'}, {index: 2, reason: 'feedback-duplicate'}, {index: 3, reason: 'feedback-full'}]}};
   valid['stats-response-max-safe'] = {description: 'A count of 2^53 - 1.', route: 'stats-response',
     body: json({protocol: PROTOCOL, ...statsAnswer, brains: Number.MAX_SAFE_INTEGER}), expect: {ok: true, ...statsAnswer, brains: Number.MAX_SAFE_INTEGER}};
   invalid['stats-response-missing'] = refused('No contributions24h.', 'stats-response',
@@ -651,7 +657,22 @@ export async function fixtures() {
     // (JSON.parse: an own __proto__ key, as a body carries it.)
     [JSON.parse('{"script":"<script>","__proto__":{"polluted":true},"constructor":1,"generation":2}'), {generation: 2}],
   ].map(([input, out]) => ({in: input, out}));
-  return {valid, invalid, contexts, meta};
+  // The context match the service ranks with: every difference alone, some
+  // together, and memories without a context.
+  const base = {profile: 'balanced', track: 'g1', maxSpeed: 15, traction: 0.5, seconds: 20, collisions: 'off'};
+  const variants = [{}, {profile: 'wild'}, {profile: 'careful'}, {track: 'other'}, {maxSpeed: 22}, {traction: 0.2}, {seconds: 45},
+    {collisions: 'solid/k8/rays'}, {collisions: 'solid/k8'}, {collisions: 'solid/kall/rays'}, {collisions: 'unknown'}, {collisions: 'ghost'},
+    {profile: 'wild', maxSpeed: 22, seconds: 45, collisions: 'solid/k8'}];
+  const match = [];
+  for (const q of variants) {
+    const query = wireContext({...base, ...q});
+    match.push({memory: null, query, factor: matchContext({}, query).factor});
+    for (const m of variants) {
+      const memory = wireContext({...base, ...m});
+      match.push({memory, query, factor: matchContext({learningContext: memory}, query).factor});
+    }
+  }
+  return {valid, invalid, contexts, meta, match};
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -663,7 +684,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     for (const [name, fixture] of Object.entries(all[kind])) await writeFile(`${root}${kind}/${name}.json`, JSON.stringify(fixture, null, 1) + '\n');
     console.log(kind, Object.keys(all[kind]).length);
   }
-  for (const table of ['contexts', 'meta']) {
+  for (const table of ['contexts', 'meta', 'match']) {
     await writeFile(`${root}${table}.json`, JSON.stringify(all[table], null, 1) + '\n');
     console.log(table, all[table].length);
   }

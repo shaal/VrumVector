@@ -83,6 +83,11 @@ export const REASONS = Object.freeze({
 });
 // Refusals only the service gives (CB4, CB5): in error answers, never from a parser here.
 export const SERVICE_ERRORS = Object.freeze(['rate-limited', 'disabled', 'server-error']);
+// Items only the service refuses (CB2): a feedback row about a brain the
+// shared brain does not hold (never contributed, or evicted); a second row
+// for the same brain and context in one request (the first counts); a row in
+// a new context for a brain whose 8 contexts cannot be replaced.
+export const SERVICE_ITEM_REASONS = Object.freeze(['feedback-unknown', 'feedback-duplicate', 'feedback-full']);
 /** The HTTP status of an error answer. */
 export function httpStatus(reason) {
   if (reason === REASONS.bodyTooLarge) return 413;
@@ -431,7 +436,7 @@ export async function parseRecallResponse(text) {
   return {ok: true, pool, dropped};
 }
 
-const knownReason = new Set([...Object.values(REASONS), ...SERVICE_ERRORS]);
+const knownReason = new Set([...Object.values(REASONS), ...SERVICE_ERRORS, ...SERVICE_ITEM_REASONS]);
 const reasonList = (v, max) => {
   const items = list(v);
   if (!items || items.length > max) return null;

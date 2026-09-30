@@ -144,8 +144,9 @@ SQLite-backed `#[durable_object] SharedBrain` named `vectorvroom-shared-brain-v1
 — literally one brain. One object is single-threaded, so writes are serialized
 without locks, and its ~1,000 req/s soft limit is far above this game's traffic.
 
-Inside the object: SQLite tables (`brains`, `tracks`, `dynamics`, `feedback`,
-`contributors`, `meta`) are the source of truth; in-memory indexes (ruvector-core
+Inside the object: SQLite tables (`brains` with their dynamics, `tracks`,
+`feedback`, `contributions`, `contributors`, `meta`, `migrations`; CB2) are
+the source of truth; in-memory indexes (ruvector-core
 `memory-only`, a flat index: `hnsw_rs` does not build for Emscripten, and the
 hyperbolic HNSW is too slow to build at this size, CB0) are rebuilt under
 `blockConcurrencyWhile` on first request after a cold start. Caps: 20,000
@@ -155,11 +156,11 @@ Wasm memory never shrinks): in CB0 the object's Wasm memory peaked at 48.6 MiB
 with a `VectorDB` of 20 000 brains (the raw floats are 18.6 MiB; the peak also
 holds Emscripten's 16 MiB starting memory and growth slack). Adding tracks
 (5 000 × 512, 9.8 MiB raw) and dynamics (20 000 × 64, 4.9 MiB raw) comes to
-roughly 65 MiB before slack and the JavaScript heap (an estimate). CB2 measures the real total and may lower the caps or keep
-dynamics out of memory.
-ruvector sources come from upstream `5356a84e2` plus
-`scripts/ruvector-patches/`, fetched by a script into `.work/` like
-`build-learning-wasm.sh` does.
+roughly 65 MiB before slack and the JavaScript heap (an estimate). CB2 measured it: brain weights and meta stay in SQLite (a recall reads the k it returns), and at the caps, with the most feedback the caps keep, the object's Wasm memory peaked at 70.1 MiB, so the caps stand. (Before: CB2 measures the real total and may lower the caps or keep
+dynamics out of memory.)
+ruvector sources come from upstream `5356a84e2`, fetched by
+`scripts/build-cloud-brain.sh` into `cloud-brain/.work/` (CB2: ruvector-core
+needs none of `scripts/ruvector-patches/`; CB6's SONA will).
 
 ### API (v1)
 
@@ -414,7 +415,7 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   - [x] Weight bound 16: "Use my driving" clones reach 6.76 at most (14
     clones), evolved brains 1.00; clones without decay (10 to 97) are
     refused. `cleanLearning` moved to `learning/policy.js` for both wires.
-- [ ] **CB2 — SharedBrain service MVP.** Index: ruvector-core
+- [x] **CB2 — SharedBrain service MVP.** Index: ruvector-core
   `memory-only` (flat; about 8 to 12 ms a search at 20 000 brains in CB0's Node
   probe), not
   `hnsw` (does not build). Keep the 20 000-brain cap: in the object,
@@ -432,6 +433,31 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   keep the index out of module scope (`main()` stays empty); decide whether
   the `spike` routes stay as regression checks. About 8 hours.
   depends: CB0, CB1
+  - [x] `cloud-brain/core` (no `worker`): the CB1 rules in Rust, and the brain
+    (tracks and dynamics in ruvector-core flat indexes, brain weights read
+    from SQLite per recall), ranking v1 as the browser's `_rankSeeds`,
+    feedback as its `observeOffspring`, caps with eviction by
+    feedback-adjusted fitness and age (each track's 3 best and the request's
+    own brains kept), feedback capped at 8 contexts a brain (a new one only
+    replaces a context reported once or not for 7 days) and 8 contributors
+    counted a context, idempotent contributions, stats counted by the minute.
+    `cargo test`: every CB1 request fixture and table, 35 brain tests (also
+    on stable Rust), including a deterministic fuzz of 6 000 edited bodies
+    (cargo-fuzz is CB4's).
+  - [x] The Worker: front door (breaker, origins with `ALLOW_LOCAL`, CORS,
+    Content-Length and streamed body limit, 404s), the object with SQL
+    schema 1 and a `migrations` table, rebuilt from SQLite on first use and
+    after any store error or panic. `feedback-unknown` joins `wire.js` as a
+    service-only item reason. `npm run test:cloud-brain:service`: 8 tests
+    against the built Worker, every CB1 request fixture over HTTP.
+  - [x] Measured at the caps with the largest meta and the most feedback
+    the caps keep (docs/validation/cloud-brain.md#cb2-the-service): 70.1 MiB
+    high-water, recall p50 13 to 18 ms, first recall after a restart 0.7 to
+    1.1 s, a contribution at the cap 53 to 82 ms. The caps stand; memory is bounded by them.
+  - [x] `scripts/build-cloud-brain.sh` fetches ruvector (no ruvector-core
+    patch is needed) and, with `--test`, checks the Worker on
+    `wasm32-unknown-unknown`; no CI job runs it yet (CB5 adds it). The spike routes stay
+    (feature-gated; the load script reads memory through them).
 - [ ] **CB3 — Browser client and the Shared brain switch.**
   `AI-Car-Racer/cloud/client.js` and `cloud/config.json` (`endpoint: null` by
   default); bridge namespace switch (`rv_car_learning_shared`), push hook next to
@@ -447,12 +473,23 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   Shared brain option needs a secure context (`crypto.subtle`); answers are
   read as bytes (`await res.arrayBuffer()`) and given to the `wire.js`
   parsers as they are, never through `res.text()` or `res.json()`.
+  From CB2: a recall pool holds the brains of the 5 nearest tracks, so it can
+  be smaller than k; a `feedback-unknown` row (the brain was evicted), a
+  `feedback-duplicate` or a `feedback-full` one is dropped from the outbox,
+  not resent; resending a contribution is safe
+  (brains are idempotent), but resent feedback counts twice.
   depends: CB1 (fake); CB2 (integration run)
 - [ ] **CB4 — Abuse and trust.** Contributor token and hashed storage, rate
   limits and quotas, robust feedback aggregation with per-contributor caps and a
   2σ filter, quarantine until corroboration, forged-fitness and flood tests,
   native fuzzing of validators, `POST /v1/forget` (the CB1 `forget` fixtures
-  apply from then; CB2 skips them). About 6 hours.
+  apply from then; CB2 skips them over HTTP). About 6 hours.
+  From CB2: `contributors` (first and last seen) and `brains.contributor`
+  exist for quotas and forget (the table gains a row per new token, so
+  quotas and forget must prune it); feedback keeps its contributors per brain and
+  context (at most 8 counted, 8 contexts a brain); a contribution at the 20 000-brain cap costs 53 to 82 ms (every
+  brain is valued to pick what goes), worth caching before quotas raise the
+  rate.
   depends: CB2
 - [ ] **CB5 — Deploy (needs your OK).** `deploy.yml` step like the multiplayer
   one (`vectorvroom-brain`, PR previews `vectorvroom-brain-pr-<n>`) with cached
@@ -460,6 +497,11 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   `cloud-brain.yml` CI; `docs/operations/cloud-brain-operations.md` (usage,
   breaker, limits); first production health check. Needs a token with Workers
   Scripts: Edit and the D2 plan decision. About 4 hours plus the deploy.
+  From CB2: CI runs `bash scripts/build-cloud-brain.sh --test` (native tests,
+  the `wasm32-unknown-unknown` check), the Emscripten build and
+  `npm run test:cloud-brain:service`. For D2: the first recall after a restart
+  (0.7 to 1.1 s locally with the most feedback) and a contribution at the cap (53 to 82 ms) exceed the Free
+  plan's 10 ms CPU a request.
   depends: CB3, CB4
 - [ ] **CB6 — Shared SONA.** Browser posts `WasmEphemeralAgent.exportState()`
   trajectories (bounded, validated); the object runs

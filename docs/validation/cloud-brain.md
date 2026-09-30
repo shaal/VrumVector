@@ -9,8 +9,9 @@ This page records what each task measured and proved. The toolchain spike
 `AI-Car-Racer/cloud/wire.js`, protocol 1. The browser builds requests and
 checks answers with it; the service (CB2, Rust) applies the same rules in the
 same order, and both run the same fixtures (`tests/fixtures/cloud-brain/`:
-50 valid and 104 invalid bodies, plus `contexts.json` (49 rows) and
-`meta.json` (39 rows) for cleaning; made by
+51 valid and 104 invalid bodies, plus `contexts.json` (49 rows) and
+`meta.json` (39 rows) for cleaning, and, since CB2, `match.json` (182 rows:
+the context match the service ranks with); made by
 `node scripts/cloud-brain-fixtures.mjs`). A fixture's body is `body` (text,
 sent as its UTF-8 bytes) or `bodyBase64` (raw bytes, for bodies that are not
 UTF-8). A fixture's `expect` gives the result, and for some fixtures the
@@ -165,7 +166,7 @@ format. (A `POST` with a `text/plain` body is a CORS simple request; a
 | Answer | Shape | Checked by the browser |
 |---|---|---|
 | Recall | `{protocol, brainSchema, pool: [{id, vector, fitness, score, meta, feedback: {weight, count, contributors}}]}` | Up to 64 entries (`shape`; no pool is an empty one); an entry is dropped when it is not an object (`shape`), its vector is bad, its id is not its vector's id (`pool-id`), or its id came earlier (`pool-duplicate`); `fitness` and `score` clamped to ±1e6, `weight` to ±1, counts whole from 0 to 1e6 (else 0); meta cleaned as above |
-| Contribute | `{protocol, accepted: [id], rejected: [{index, reason}], feedbackAccepted, feedbackRejected: [{index, reason}]}` | Up to 16 cloud ids; `rejected` up to 16 items with index 0 to 15, `feedbackRejected` up to 50 with index 0 to 49, reasons known ones (a list absent or null is empty); `feedbackAccepted` an integer from 0 to 50, required; anything else → `shape` |
+| Contribute | `{protocol, accepted: [id], rejected: [{index, reason}], feedbackAccepted, feedbackRejected: [{index, reason}]}` | Up to 16 cloud ids; `rejected` up to 16 items with index 0 to 15, `feedbackRejected` up to 50 with index 0 to 49, reasons known ones, including three only the service gives (CB2): `feedback-unknown`, a row about a brain it does not hold; `feedback-duplicate`, a second row for the same brain and context in one request; `feedback-full`, a new context for a brain whose 8 contexts cannot be replaced (a list absent or null is empty); `feedbackAccepted` an integer from 0 to 50, required; anything else → `shape` |
 | Stats | `{protocol, brains, tracks, contributorsToday, contributions24h}` | All four required, integers from 0 to 2^53 − 1 → else `shape` |
 | Error | `{protocol, error}` | An unknown or unreadable error (another protocol, not JSON, over 256 KiB, not UTF-8) is `server-error` |
 
@@ -214,8 +215,155 @@ every fixture is read as bytes, and a text fixture as text too):
 
 ### Limits
 
-- The service does not exist yet: CB2 implements these rules in Rust and runs
-  the same fixtures.
+- CB2 implements these rules in Rust (`cloud-brain/core/src/wire.rs`) and
+  runs the same fixtures.
 - Rate limits, quotas and trust (quarantine until corroborated) are CB4.
 - The browser keeps its xxHash32 ids locally; CB3 computes cloud ids from
   weights when it contributes and when it records parents.
+
+## CB2: the service
+
+`cloud-brain/`: a Rust Worker for `wasm32-unknown-emscripten` (workers-rs
+0.8.7) with one SQLite Durable Object, `SharedBrain`. The logic is a library
+crate without the Workers runtime (`cloud-brain/core`), tested natively; the
+Worker adds the front door, the object and its SQLite store.
+
+### What it does
+
+- **Front door** (before the object): `GET /health` and, in a spike build,
+  `/spike/*` go to the object; everything else outside `/v1/` is 404 (a
+  `POST /health` never reaches the object).
+  `DISABLE_BRAIN=true` answers every `/v1/` route 503 `disabled`, readable by
+  the page. Origins are multiplayer's (`*.vectorvroom.pages.dev`,
+  `vectorvroom.shaal.dev`, `vv.shaal.dev`), plus `http://localhost:<port>`
+  and `http://127.0.0.1:<port>` with `ALLOW_LOCAL=true`; any other origin
+  (or none) is 403. `OPTIONS` answers the CORS preflight. A body with a
+  `Content-Length` over 64 KB is refused before it is read, and a body
+  without one is read only up to the limit (413 `body-too-large`). Routes:
+  `POST /v1/recall`, `POST /v1/contribute`, `GET /v1/stats`
+  (`POST /v1/forget` comes with CB4). When the object fails (a panic, a
+  reset), the page still gets a readable 500 `server-error` with CORS
+  headers. The object itself serves only those three routes (404 before
+  reading a body), and refuses with `disabled` while the breaker is on.
+- **Parsing**: `core/src/wire.rs`, the CB1 rules in Rust: strict UTF-8
+  (`std::str::from_utf8`), serde_json with `float_roundtrip`, canonical base64
+  (the `base64` crate's standard engine), SHA-256 ids. Every CB1 request
+  fixture gives the browser's result (`cargo test`), including the values read.
+- **The brain** (`core/src/brain.rs`): tracks are one index of 512-float
+  embeddings (ruvector-core `VectorDB`, memory-only, a flat cosine index);
+  a listed track within cosine distance 0.005 of a held one is that track
+  (as the browser dedupes). Dynamics are a second index, 64 floats a brain.
+  Nearest neighbours tie by id, so a rebuild ranks equal distances the same
+  way (the flat index alone orders them as its hash map iterates; when the
+  ties reach past what it was asked for, it is asked for all of them). Brain
+  weights and meta stay in SQLite: a recall reads only the brains it
+  returns, and checks each one's id against its weights. In memory a brain
+  is its fitness, track, and what the context match compares (the collision
+  label as a hash): about the same for every brain, however large its meta.
+- **Recall** ranks as the browser ranks its own memory (`_rankSeeds` with a
+  learning context): the brains of the 5 nearest tracks (every brain when no
+  track is held), each scored
+  (0.5 + 0.5·track similarity) × (0.5 + 0.5·tanh(fitness / 100)) ×
+  (1 + 0.3·dynamics similarity, for the 25 nearest dynamics) ×
+  matchContext factor × (1 + 0.3·feedback weight in the query's context);
+  the best k.
+- **Feedback** follows the browser's `observeOffspring`: in the brain's own
+  context (the same context key, with a track key, as `matchContext`'s exact
+  match needs) the baseline is its fitness; in another context the first
+  row only sets a baseline; one row counts per brain and context in a
+  request (a second is `feedback-duplicate`), as the browser counts one
+  outcome per brain; the weight is an exponential moving average (0.3) of
+  (mean − baseline) / max(1, |baseline|), clamped to ±1. A row about a brain
+  the service does not hold is refused as `feedback-unknown` (a service-only
+  item reason, known to `wire.js`). Feedback is kept for 8 contexts a
+  brain. A new context replaces the least reported one among those reported
+  once or not for 7 days, never one this request reported, so new contexts
+  (however many, from anyone) cannot push out what repeated reports built up;
+  with none to replace, the row is `feedback-full`. At most 8 distinct
+  contributors are counted per brain and context. Memory holds each brain
+  and context in a 64-byte record (about 150 bytes with its map; the
+  context as a 64-bit hash, contributors as 32-bit ones); the context itself
+  stays in SQLite.
+- **Contributions are idempotent**: a brain already held is accepted again
+  and changes nothing (the first contributor keeps it).
+- **Caps**: 20 000 brains and 5 000 tracks. Over 20 000, the least valuable
+  brains go: fitness adjusted by feedback (the count-weighted mean weight),
+  the oldest first among equals; never a brain of this request, nor one of
+  each track's 3 best. A new track over 5 000 replaces the oldest track no
+  brain uses and this request does not list; when there is none, the brain
+  is kept without a track (it can still come through the every-brain
+  fallback).
+- **Stats**: brains, tracks, distinct contributors seen since UTC midnight
+  (from the `contributors` table), contributions in the last 1 440 minutes
+  (counted by the minute: 1 440 counters, however many requests arrive).
+  So memory is bounded by the caps, not by how many requests arrive (CB4
+  adds quotas for their cost; the `contributors` table still gains a row
+  for every new token, which CB4's forget and quotas prune).
+- **Storage**: SQL schema 1 (a `migrations` table records what ran,
+  `meta.sql_schema` the latest; every statement can run again, so a
+  migration cut short finishes at the next start, and a database newer than
+  the build is refused rather than served): `tracks`, `brains` (weights and dynamics as
+  little-endian blobs, meta as cleaned JSON), `feedback` (per brain and
+  context), `contribution_minutes` (24 hours), `contributors` (first and
+  last seen; CB4's quotas). A contributor is 128 bits of SHA-256 of their
+  token; the token is never stored. A rebuild deletes rows that no longer
+  clean (a corrupt meta, a vector of the wrong size, feedback over the cap
+  or about a brain not held), so a brain serves the same live and rebuilt.
+- **Consistency**: the object parses a request before it touches the
+  brain (a refused body never builds it), and builds the brain from SQLite
+  on the first request that needs it, streaming the rows (never a second
+  copy of the store in memory), with no await in between, so no request sees it
+  half built (the effect of `blockConcurrencyWhile`). A request takes the
+  brain out and puts it back only when it succeeds: after a store error or a
+  panic the next request rebuilds it from what SQLite holds. workers-rs 0.8.7
+  has no `transactionSync`, so a request's writes are not one transaction; the
+  store is written in an order that leaves it valid after any prefix (a
+  failed contribution may keep some of its brains; sending it again is safe).
+
+### Measured
+
+`node scripts/cloud-brain-load.mjs` under `wrangler dev` (local workerd;
+Apple M3 Max), the spike build for the memory reading
+([raw](cloud-brain-cb2-load.json)): 20 000 brains, each with dynamics and
+the largest meta a brain can carry (a 180-character track key, a
+40-character collision label, 8 parents), on 5 000 tracks, contributed 16 at
+a time; then the most feedback the caps keep: 8 contexts on every brain,
+each reported by 8 contributors (1 280 000 rows, 50 a request).
+
+| | |
+|---|---|
+| Filling it (1 250 contributions) | 18.0 s; a contribution p50 13.4 ms, p95 22.1 ms |
+| Recall (k 64, with dynamics) | p50 12.8 ms, p95 14.5 ms; with all the feedback p50 17.9 ms; the largest answer 47 240 bytes |
+| The object's Wasm memory (a high-water mark; the limit is 128 MB) | 16.3 MiB empty; 48.6 MiB with the brains; 70.1 MiB with all the feedback, after a rebuild, and after eviction |
+| First recall after a restart (the brain rebuilt from SQLite) | 1 064 ms |
+| 1 008 more brains (eviction) | the count stays 20 000; a contribution p50 82 ms, p95 119 ms |
+
+The table is the last run, on the build this page describes. Latencies vary
+between runs: the run before (the same feedback, before the last review's
+fixes) measured 680 ms for the first recall after a restart and 53 ms for a
+contribution at the cap, and a review on a busier machine measured about
+1.7 times an earlier build's figures. Memory did not vary between runs.
+
+Before the review, memory held each brain's meta and every feedback context
+with all its contributors: the same flood (with 32 contexts and 256
+contributors a context allowed) reached 101 MiB, and an unbounded one passed
+128 MB and failed again at every rebuild. Now memory is bounded by the caps.
+The caps stand at 20 000 brains and 5 000 tracks.
+
+A contribution at the cap costs 40 to 70 ms more (every brain is valued to
+pick what goes), and the first recall after a restart reads every row
+(about 185 000 of them here). On
+the Workers Free plan's 10 ms CPU a request, neither fits (D2). With 5
+nearest tracks and 4 brains a track, these recalls returned 20 brains: a
+pool is as large as the nearest tracks' brains.
+
+### Evidence
+
+| Claim | Test |
+|---|---|
+| The CB1 rules, in Rust | `cargo test` (`core/tests/fixtures.rs`): every request fixture (contribute, recall, forget: 104 bodies, 8 of them as bytes) and the context and meta tables give the browser's results, values read included |
+| The brain | `core/tests/brain.rs`, 35 tests: a round trip bit for bit; idempotent contributions; near tracks as one; ranking by track, fitness, context and dynamics; the every-brain fallback; feedback in the brain's own and another context; the 8-context and 8-contributor caps (after a reopen too); eviction by value, age, and the protected brains, and an evicted brain's feedback gone with it; the track cap (the oldest unused track goes, never one the request lists); one feedback row per brain and context in a request; a context without a track key never exact; a baseline that moves in another context; feedback in another context leaving the ranking alone; the 25 nearest dynamics counted in order; equal distances ranked the same after every rebuild; a contribution at midnight counted today; the score equal to the documented product (so each constant is pinned); the 5 nearest tracks searched, not a sixth; a brain's value weighing each context by its count; 3 000 contributions counted in 3 minute rows; 96 equal distances ranked the same after every rebuild; new contexts refused (`feedback-full`) rather than pushing out a context reported 5 times, which only goes once it is a week old; rows that do not clean deleted at rebuild; a day of minutes the most memory and the store hold; a reopened brain answers byte for byte as before; a store that fails after each of its first 12 writes reopens consistently; stats over a day boundary; 64 entries with the largest meta fit in 256 KiB and hold no -0; the context match equals `matchContext` on 182 pairs (`match.json`); 6 000 edited bodies through parsers and brain without a panic |
+| The Worker | `npm run test:cloud-brain:service` (`tests/cloud-brain.test.mjs`, 8 tests, the built Worker under `wrangler dev`): health; origins (6 refused, 5 allowed), CORS headers, the preflight, 404s; a body over 64 KB refused by length and as a stream, and exactly 64 KB read; every CB1 contribute and recall fixture (101) over HTTP with the status and reason the fixture gives, answers read with `wire.js`'s own parsers; a contribution comes back bit for bit; feedback reaches the pool; stats; the same recall answer byte for byte after a restart; the breaker |
+| Mutations of `brain.rs` | 41 single changes over two rounds (constants, bounds, orders, caps, protections, ties, windows, the context replacement rule, the minute counts, the rebuild's cleanup): all fail a test but two that behave the same (the best of a brain's track similarities, when a brain has one track; `<` for `<=` at the 24-hour edge, which the stats filter repeats) |
+| Both targets | `bash scripts/build-cloud-brain.sh --test`: native tests, then the Worker checked for `wasm32-unknown-unknown` (D1's fallback; `getrandom` gets its JavaScript backend there) |
+| The spike routes | `npm run test:cloud-brain:spike` still passes: they stay, behind the `spike` feature and `CLOUD_BRAIN_SPIKE=1`, and the load script reads memory through them |

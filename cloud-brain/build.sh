@@ -12,6 +12,8 @@ if [[ "$(worker-build --version 2>/dev/null)" != "$WORKER_BUILD" ]]; then
   echo "build.sh: needs worker-build $WORKER_BUILD (cargo install worker-build --version $WORKER_BUILD --locked)" >&2
   exit 1
 fi
+# The ruvector sources the index comes from (fetched once into .work/).
+bash ../scripts/build-cloud-brain.sh --fetch
 args=(--emscripten --release)
 # The spike routes (a panic, a 100 000-brain allocation) must never deploy:
 # CI refuses them unless CLOUD_BRAIN_ALLOW_SPIKE=1 says the build stays local.

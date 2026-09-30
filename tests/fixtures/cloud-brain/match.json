@@ -1,0 +1,3720 @@
+[
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.9
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.45
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.45
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.75
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.75
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.85
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.2295
+ },
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.45
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.45
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.45
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.3375
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.3375
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.3825
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.51
+ },
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.45
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.45
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.45
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.3375
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.3375
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.3825
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.2295
+ },
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.9
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.45
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.45
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.75
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.75
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.85
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.2295
+ },
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.9
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.75
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.3375
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.3375
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.75
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.75
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6375
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.30600000000000005
+ },
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.9
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.75
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.3375
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.3375
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.75
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.75
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6375
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "factor": 0.2295
+ },
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.9
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.85
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.3825
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.3825
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.85
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.6375
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.6375
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.68
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.68
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.68
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.68
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.68
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "factor": 0.27
+ },
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.7200000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.68
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.9
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.9
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "factor": 0.2581875
+ },
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.7200000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.68
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.9
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.9
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.286875
+ },
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.7200000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.68
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.9
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.9
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "factor": 0.2581875
+ },
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.7200000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.68
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "factor": 0.2295
+ },
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.7200000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.36000000000000004
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.6000000000000001
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.68
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.8
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 1
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "factor": 0.2295
+ },
+ {
+  "memory": null,
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.48
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.2295
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.51
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "careful",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.2295
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "other",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.2295
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.30600000000000005
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.2,
+   "seconds": 20,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.2295
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "off"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.27
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.2581875
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.286875
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "solid/kall/rays"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.2581875
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "unknown"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.2295
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "balanced",
+   "track": "g1",
+   "maxSpeed": 15,
+   "traction": 0.5,
+   "seconds": 20,
+   "collisions": "ghost"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 0.2295
+ },
+ {
+  "memory": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "query": {
+   "version": 1,
+   "profile": "wild",
+   "track": "g1",
+   "maxSpeed": 22,
+   "traction": 0.5,
+   "seconds": 45,
+   "collisions": "solid/k8"
+  },
+  "factor": 1
+ }
+]

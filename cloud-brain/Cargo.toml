@@ -6,13 +6,18 @@ publish = false
 description = "One shared vector memory for VectorVroom, as a Rust Worker (docs/plan/cloud-brain.md)."
 
 # Standalone: the beta toolchain and the Emscripten target stay out of any
-# other workspace.
+# other workspace. `core` is the service without `worker` (native tests);
+# .work/ holds the fetched ruvector sources, a workspace of their own.
 [workspace]
+members = ["core"]
+exclude = [".work"]
 
 [dependencies]
 worker = "=0.8.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+brain = { package = "vectorvroom-brain-core", path = "core" }
+futures-util = { version = "0.3", default-features = false }
 
 [features]
 # Spike-only routes (CB0): a SQL round trip, a panic, module memory, and a
