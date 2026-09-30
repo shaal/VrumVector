@@ -1,0 +1,12 @@
+{
+  "name": "vectorvroom-brain",
+  "private": true,
+  "description": "Tooling for the cloud brain Worker. Its own pins: the Emscripten build needs a newer workerd than multiplayer/ uses (docs/plan/cloud-brain.md, D10).",
+  "scripts": {
+    "dev": "wrangler dev --port 8879",
+    "build": "bash build.sh"
+  },
+  "devDependencies": {
+    "wrangler": "4.144.0"
+  }
+}

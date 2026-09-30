@@ -32,6 +32,7 @@ rsync -a \
   --exclude='/.vscode' \
   --exclude='.DS_Store' \
   --exclude='/ruvector' \
+  --exclude='/cloud-brain' \
   --exclude='/docs' \
   --exclude='/scripts' \
   --exclude='/tests' \

@@ -1,0 +1,735 @@
+{
+ "note": "CB0 raw results (docs/validation/cloud-brain-spike.md). Local wrangler dev 4.144.0 on an Apple M3 Max shared with other work; load averages are in each run. Times are local and host-load dependent.",
+ "toolchain": {
+  "rust": "beta-2026-09-27 (1.99.0-beta.8)",
+  "worker-build": "0.8.7",
+  "worker": "0.8.7",
+  "wasm-bindgen": "0.2.129",
+  "emscripten": "6.0.10",
+  "wrangler": "4.144.0"
+ },
+ "coldStartPaired": {
+  "wasm32-unknown-emscripten": [
+   50.1,
+   55.6,
+   47.4,
+   50.2,
+   48.1
+  ],
+  "wasm32-unknown-unknown": [
+   52.6,
+   51,
+   54.4,
+   43.6,
+   41.3
+  ],
+  "median": {
+   "wasm32-unknown-emscripten": 50.1,
+   "wasm32-unknown-unknown": 51
+  },
+  "loadRange": [
+   12.7,
+   23.4
+  ],
+  "method": "5 alternating rounds; first request 3 s after the port accepts connections (COLD_SETTLE_MS), so wrangler has finished loading its runtime"
+ },
+ "finalRuns": {
+  "em": {
+   "date": "2026-09-30T11:37:20.096Z",
+   "machine": "Apple M3 Max (16 threads)",
+   "load": [
+    10.3,
+    17.9,
+    16.3
+   ],
+   "target": "wasm32-unknown-emscripten",
+   "settleMs": 3000,
+   "coldStartMs": [
+    49.9,
+    15.8
+   ],
+   "sqlRoundTrip": true,
+   "index": [
+    {
+     "n": 5000,
+     "run": 0,
+     "ms": 42.8,
+     "memoryMB": 16.3
+    },
+    {
+     "n": 5000,
+     "run": 1,
+     "ms": 14.2,
+     "memoryMB": 16.3
+    },
+    {
+     "n": 5000,
+     "run": 2,
+     "ms": 15.1,
+     "memoryMB": 16.3
+    },
+    {
+     "n": 20000,
+     "run": 0,
+     "ms": 47.2,
+     "memoryMB": 19.5
+    },
+    {
+     "n": 20000,
+     "run": 1,
+     "ms": 47.3,
+     "memoryMB": 19.5
+    },
+    {
+     "n": 20000,
+     "run": 2,
+     "ms": 46.5,
+     "memoryMB": 19.5
+    },
+    {
+     "n": 50000,
+     "run": 0,
+     "ms": 112.4,
+     "memoryMB": 46.8
+    },
+    {
+     "n": 50000,
+     "run": 1,
+     "ms": 120.1,
+     "memoryMB": 46.8
+    },
+    {
+     "n": 50000,
+     "run": 2,
+     "ms": 116.7,
+     "memoryMB": 46.8
+    }
+   ],
+   "memoryAfterMB": 46.8,
+   "panic": {
+    "status": 500,
+    "body": "INTERNAL SERVER ERROR"
+   },
+   "afterPanic": [
+    {
+     "status": 200,
+     "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+    },
+    {
+     "status": 200,
+     "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+    },
+    {
+     "status": 200,
+     "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+    },
+    {
+     "status": 200,
+     "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+    },
+    {
+     "status": 200,
+     "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+    }
+   ],
+   "memoryAfterPanicMB": 46.8,
+   "instanceAfterPanic": "survived",
+   "sqlAfterPanic": {
+    "status": 200,
+    "body": "{\"key\":\"spike\",\"value\":\"round trip\"}"
+   },
+   "persistsAcrossRestart": true
+  },
+  "un": {
+   "date": "2026-09-30T11:37:37.272Z",
+   "machine": "Apple M3 Max (16 threads)",
+   "load": [
+    8.9,
+    17.2,
+    16.1
+   ],
+   "target": "wasm32-unknown-unknown",
+   "settleMs": 3000,
+   "coldStartMs": [
+    47,
+    13
+   ],
+   "sqlRoundTrip": true,
+   "index": [
+    {
+     "n": 5000,
+     "run": 0,
+     "ms": 42.8,
+     "memoryMB": 5.9
+    },
+    {
+     "n": 5000,
+     "run": 1,
+     "ms": 14.6,
+     "memoryMB": 5.9
+    },
+    {
+     "n": 5000,
+     "run": 2,
+     "ms": 13.8,
+     "memoryMB": 5.9
+    },
+    {
+     "n": 20000,
+     "run": 0,
+     "ms": 45.6,
+     "memoryMB": 24.6
+    },
+    {
+     "n": 20000,
+     "run": 1,
+     "ms": 47.2,
+     "memoryMB": 24.6
+    },
+    {
+     "n": 20000,
+     "run": 2,
+     "ms": 45,
+     "memoryMB": 24.6
+    },
+    {
+     "n": 50000,
+     "run": 0,
+     "ms": 109.2,
+     "memoryMB": 71.1
+    },
+    {
+     "n": 50000,
+     "run": 1,
+     "ms": 105.9,
+     "memoryMB": 71.1
+    },
+    {
+     "n": 50000,
+     "run": 2,
+     "ms": 106.7,
+     "memoryMB": 71.1
+    }
+   ],
+   "memoryAfterMB": 71.1,
+   "panic": {
+    "error": "TimeoutError"
+   },
+   "afterPanic": [
+    {
+     "status": 200,
+     "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+    },
+    {
+     "status": 200,
+     "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+    },
+    {
+     "status": 200,
+     "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+    },
+    {
+     "status": 200,
+     "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+    },
+    {
+     "status": 200,
+     "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+    }
+   ],
+   "memoryAfterPanicMB": 1.3,
+   "instanceAfterPanic": "replaced",
+   "sqlAfterPanic": {
+    "status": 200,
+    "body": "{\"key\":\"spike\",\"value\":\"round trip\"}"
+   },
+   "persistsAcrossRestart": true
+  }
+ },
+ "earlierRuns": {
+  "note": "first request timed right after the port opened (wrangler start-up included), load 22 to 30",
+  "runs": {
+   "em1": {
+    "date": "2026-09-30T11:10:17.198Z",
+    "machine": "Apple M3 Max (16 threads)",
+    "load": [
+     26.5,
+     22.7,
+     17.2
+    ],
+    "target": "wasm32-unknown-emscripten",
+    "coldStartMs": [
+     2154.8,
+     1871
+    ],
+    "sqlRoundTrip": true,
+    "index": [
+     {
+      "n": 5000,
+      "run": 0,
+      "ms": 489,
+      "memoryMB": 16.3
+     },
+     {
+      "n": 5000,
+      "run": 1,
+      "ms": 117,
+      "memoryMB": 16.3
+     },
+     {
+      "n": 5000,
+      "run": 2,
+      "ms": 301.3,
+      "memoryMB": 16.3
+     },
+     {
+      "n": 20000,
+      "run": 0,
+      "ms": 519.1,
+      "memoryMB": 19.5
+     },
+     {
+      "n": 20000,
+      "run": 1,
+      "ms": 408.8,
+      "memoryMB": 19.5
+     },
+     {
+      "n": 20000,
+      "run": 2,
+      "ms": 547.1,
+      "memoryMB": 19.5
+     },
+     {
+      "n": 50000,
+      "run": 0,
+      "ms": 1299.4,
+      "memoryMB": 46.8
+     },
+     {
+      "n": 50000,
+      "run": 1,
+      "ms": 1189.7,
+      "memoryMB": 46.8
+     },
+     {
+      "n": 50000,
+      "run": 2,
+      "ms": 1071,
+      "memoryMB": 46.8
+     }
+    ],
+    "memoryAfterMB": 46.8,
+    "panic": {
+     "status": 500,
+     "body": "INTERNAL SERVER ERROR"
+    },
+    "afterPanic": [
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+     }
+    ],
+    "memoryAfterPanicMB": 46.8,
+    "instanceAfterPanic": "survived",
+    "sqlAfterPanic": {
+     "status": 200,
+     "body": "{\"key\":\"spike\",\"value\":\"round trip\"}"
+    },
+    "persistsAcrossRestart": true
+   },
+   "un1": {
+    "date": "2026-09-30T11:12:35.240Z",
+    "machine": "Apple M3 Max (16 threads)",
+    "load": [
+     22.5,
+     23,
+     18.2
+    ],
+    "target": "wasm32-unknown-unknown",
+    "coldStartMs": [
+     2803,
+     4038.7
+    ],
+    "sqlRoundTrip": true,
+    "index": [
+     {
+      "n": 5000,
+      "run": 0,
+      "ms": 495.2,
+      "memoryMB": 5.9
+     },
+     {
+      "n": 5000,
+      "run": 1,
+      "ms": 226.3,
+      "memoryMB": 5.9
+     },
+     {
+      "n": 5000,
+      "run": 2,
+      "ms": 126.7,
+      "memoryMB": 5.9
+     },
+     {
+      "n": 20000,
+      "run": 0,
+      "ms": 401.2,
+      "memoryMB": 24.6
+     },
+     {
+      "n": 20000,
+      "run": 1,
+      "ms": 551.6,
+      "memoryMB": 24.6
+     },
+     {
+      "n": 20000,
+      "run": 2,
+      "ms": 681.2,
+      "memoryMB": 24.6
+     },
+     {
+      "n": 50000,
+      "run": 0,
+      "ms": 1716.7,
+      "memoryMB": 71.1
+     },
+     {
+      "n": 50000,
+      "run": 1,
+      "ms": 1216.3,
+      "memoryMB": 71.1
+     },
+     {
+      "n": 50000,
+      "run": 2,
+      "ms": 1321.5,
+      "memoryMB": 71.1
+     }
+    ],
+    "memoryAfterMB": 71.1,
+    "panic": {
+     "error": "TimeoutError"
+    },
+    "afterPanic": [
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+     }
+    ],
+    "memoryAfterPanicMB": 1.3,
+    "instanceAfterPanic": "replaced",
+    "sqlAfterPanic": {
+     "status": 200,
+     "body": "{\"key\":\"spike\",\"value\":\"round trip\"}"
+    },
+    "persistsAcrossRestart": true
+   },
+   "em2": {
+    "date": "2026-09-30T11:14:49.788Z",
+    "machine": "Apple M3 Max (16 threads)",
+    "load": [
+     29.7,
+     25.4,
+     19.8
+    ],
+    "target": "wasm32-unknown-emscripten",
+    "coldStartMs": [
+     3282.5,
+     1684
+    ],
+    "sqlRoundTrip": true,
+    "index": [
+     {
+      "n": 5000,
+      "run": 0,
+      "ms": 1036.9,
+      "memoryMB": 16.3
+     },
+     {
+      "n": 5000,
+      "run": 1,
+      "ms": 341.4,
+      "memoryMB": 16.3
+     },
+     {
+      "n": 5000,
+      "run": 2,
+      "ms": 308.9,
+      "memoryMB": 16.3
+     },
+     {
+      "n": 20000,
+      "run": 0,
+      "ms": 761.8,
+      "memoryMB": 19.5
+     },
+     {
+      "n": 20000,
+      "run": 1,
+      "ms": 625.7,
+      "memoryMB": 19.5
+     },
+     {
+      "n": 20000,
+      "run": 2,
+      "ms": 725.8,
+      "memoryMB": 19.5
+     },
+     {
+      "n": 50000,
+      "run": 0,
+      "ms": 1883,
+      "memoryMB": 46.8
+     },
+     {
+      "n": 50000,
+      "run": 1,
+      "ms": 1792.5,
+      "memoryMB": 46.8
+     },
+     {
+      "n": 50000,
+      "run": 2,
+      "ms": 1635.9,
+      "memoryMB": 46.8
+     }
+    ],
+    "memoryAfterMB": 46.8,
+    "panic": {
+     "status": 500,
+     "body": "INTERNAL SERVER ERROR"
+    },
+    "afterPanic": [
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-emscripten\",\"ruvector\":null,\"spike\":true}}"
+     }
+    ],
+    "memoryAfterPanicMB": 46.8,
+    "instanceAfterPanic": "survived",
+    "sqlAfterPanic": {
+     "status": 200,
+     "body": "{\"key\":\"spike\",\"value\":\"round trip\"}"
+    },
+    "persistsAcrossRestart": true
+   },
+   "un2": {
+    "date": "2026-09-30T11:15:46.246Z",
+    "machine": "Apple M3 Max (16 threads)",
+    "load": [
+     23.9,
+     24.7,
+     19.9
+    ],
+    "target": "wasm32-unknown-unknown",
+    "coldStartMs": [
+     351.1,
+     423
+    ],
+    "sqlRoundTrip": true,
+    "index": [
+     {
+      "n": 5000,
+      "run": 0,
+      "ms": 61.4,
+      "memoryMB": 5.9
+     },
+     {
+      "n": 5000,
+      "run": 1,
+      "ms": 14.3,
+      "memoryMB": 5.9
+     },
+     {
+      "n": 5000,
+      "run": 2,
+      "ms": 15,
+      "memoryMB": 5.9
+     },
+     {
+      "n": 20000,
+      "run": 0,
+      "ms": 47.4,
+      "memoryMB": 24.6
+     },
+     {
+      "n": 20000,
+      "run": 1,
+      "ms": 46.7,
+      "memoryMB": 24.6
+     },
+     {
+      "n": 20000,
+      "run": 2,
+      "ms": 45.1,
+      "memoryMB": 24.6
+     },
+     {
+      "n": 50000,
+      "run": 0,
+      "ms": 111.2,
+      "memoryMB": 71.1
+     },
+     {
+      "n": 50000,
+      "run": 1,
+      "ms": 110,
+      "memoryMB": 71.1
+     },
+     {
+      "n": 50000,
+      "run": 2,
+      "ms": 109.5,
+      "memoryMB": 71.1
+     }
+    ],
+    "memoryAfterMB": 71.1,
+    "panic": {
+     "error": "TimeoutError"
+    },
+    "afterPanic": [
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+     },
+     {
+      "status": 200,
+      "body": "{\"ok\":true,\"protocol\":1,\"brain\":true,\"build\":{\"target\":\"wasm32-unknown-unknown\",\"ruvector\":null,\"spike\":true}}"
+     }
+    ],
+    "memoryAfterPanicMB": 1.3,
+    "instanceAfterPanic": "replaced",
+    "sqlAfterPanic": {
+     "status": 200,
+     "body": "{\"key\":\"spike\",\"value\":\"round trip\"}"
+    },
+    "persistsAcrossRestart": true
+   }
+  }
+ },
+ "ruvectorInObject": {
+  "script": "scripts/cloud-brain-spike-ruvector.sh",
+  "scriptRun": {
+   "wasmBytes": 348775,
+   "load": 5.9,
+   "n20000": {
+    "ms": [
+     140.7,
+     116.1,
+     113.4
+    ],
+    "moduleBytes": 50987008
+   },
+   "n50000": {
+    "ms": [
+     298.7
+    ],
+    "moduleBytes": 105906176
+   }
+  },
+  "firstRun": {
+   "note": "hand-made copy, no upstream Cargo.lock",
+   "wasmBytes": 338816,
+   "load": 21.5,
+   "n20000": {
+    "ms": [
+     157.7,
+     124.5,
+     122.9
+    ],
+    "moduleBytes": 50987008
+   },
+   "n50000": {
+    "ms": [
+     332.8
+    ],
+    "moduleBytes": 105906176
+   }
+  }
+ },
+ "matrixMarkdown": "| Configuration | wasm32-unknown-emscripten | runs (Node) | wasm32-unknown-unknown |\n|---|---|---|---|\n| `core-memory` | builds, 125 KB | ruvector-core: 20000 inserts 30 ms, 10 searches 121.8 ms, 100 hits | builds |\n| `core-storage` | builds, 700 KB | ruvector-core: 20000 inserts 604 ms, 10 searches 95.6 ms, 100 hits | builds |\n| `core-simd` | builds, 125 KB | ruvector-core: 20000 inserts 23 ms, 10 searches 90.1 ms, 100 hits | builds |\n| `core-hnsw` | fails: error[E0433]: cannot find module or crate `sys` in the crate root in sysctl-0.5.5/src/lib.rs:77:9 | \u2014 | fails: error[E0433]: cannot find module or crate `platform` in this scope in mmap-rs-0.6.1/src/areas.rs:122:21 |\n| `hyperbolic` | builds, 120 KB | hyperbolic-hnsw: 2000 inserts 678 ms, 10 searches 0.8 ms, 50 hits | builds |\n| `sona` | builds, 125 KB | sona: 200 tasks + aggregate 64 ms, accepted 200, session_duration_ms 0 (std clock 1790768139 s since 1970) | builds |\n",
+ "sizesBytes": {
+  "wasm32-unknown-emscripten": {
+   "spike": {
+    "wasm": 369151,
+    "js": 46802
+   },
+   "normal": {
+    "wasm": 324658,
+    "js": 46043
+   }
+  },
+  "wasm32-unknown-unknown": {
+   "spike": {
+    "wasm": 430020,
+    "js": 25082
+   }
+  },
+  "ruvectorInObjectCopy": {
+   "script": 348775,
+   "firstRun": 338816
+  }
+ }
+}

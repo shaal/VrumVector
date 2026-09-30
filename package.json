@@ -31,7 +31,8 @@
     "test:demonstration:browser": "node tests/demonstration-browser.mjs",
     "benchmark:collisions": "node scripts/benchmark-collisions.mjs",
     "test:collisions:browser": "node tests/collisions-browser.mjs",
-    "test:static-server": "node --test tests/static-server.test.mjs"
+    "test:static-server": "node --test tests/static-server.test.mjs",
+    "test:cloud-brain:spike": "node tests/cloud-brain-spike.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

@@ -1,8 +1,10 @@
 # Cloud brain: one shared vector memory on Cloudflare (plan)
 
-**Status:** Planned 2026-09-30. Nothing is built. D3–D10 are taken as
-recommended (2026-09-30, to start work; any of them can still change). CB0 is a
-toolchain spike whose result decides D1 before any product code lands. D2 (the
+**Status:** CB0 is done: the `cloud-brain/` skeleton (a Rust SQLite Durable
+Object built for `wasm32-unknown-emscripten`) runs locally, and D1 is taken
+(Emscripten); results in
+[cloud-brain-spike.md](../validation/cloud-brain-spike.md). D3–D10 are taken as
+recommended (2026-09-30, to start work; any of them can still change). D2 (the
 Cloudflare plan) and the deploy itself wait for your OK before CB5.
 
 **Request (2026-09-30):** "research and implement
@@ -60,11 +62,16 @@ What it costs:
   `worker-build` (needs python3); a newer workerd than ours is likely needed
   (the Minecraft demo pins wrangler 4.141.0; we pin 4.103.0 / miniflare
   4.20260617.1).
-- `panic=abort` only, and no abort re-init hook on this target: a panic can
-  leave the object's Wasm instance dead until the isolate is replaced.
+- Panics: the research read "panic=abort only, no re-init hook". CB0 found
+  that a Rust panic *unwinds* on this target by default (Wasm exception
+  handling): locally the request got a 500 and the same instance kept serving,
+  in-memory state included, so a panic in the middle of an update leaves it
+  half done. Not yet seen on Cloudflare.
 - wasm-bindgen: `wasm32-unknown-unknown` "stays the right default: it has the
   smallest runtime and the fastest cold start". The post gives no size or
-  cold-start numbers; CB0 measures ours.
+  cold-start numbers. CB0 measured ours locally: no clear difference in cold
+  start, and the `wasm32-unknown-unknown` bundle was the larger one (430 020
+  bytes of Wasm against 369 151).
 - One Wasm instance per isolate: the Minecraft notes say one object hosts one
   server at a time. Fine for one global brain; relevant if we ever shard.
 - `wasm-bindgen-test` bodies are compiled, not executed: unit tests run natively
@@ -76,9 +83,11 @@ default features are all marked "not available in WASM" today — `simd`
 `parallel` (rayon). The browser gets by with `memory-only` plus our fork's HNSW
 wrapper. Under Emscripten, `simsimd` and `redb` should build and `std::fs`
 persistence can land in DO SQLite; `hnsw_rs` probably still fails (it pulls
-`mmap-rs` → `nix`), and rayon must stay off (no threads). `ruvector-gnn`'s
+`mmap-rs` → `nix`), and rayon must stay off (no threads). (CB0 measured it:
+`redb` builds and runs, `simsimd` builds but ruvector-core never calls it on
+wasm32, `hnsw_rs` fails; see the spike.) `ruvector-gnn`'s
 default `mmap` feature and SONA's native (non-`wasm`) build become possible;
-SONA needs a one-line `time_compat.rs` cfg fix, because it gates on
+SONA needs a small `time_compat.rs` cfg fix (both of its cfgs), because it gates on
 `target_arch = "wasm32"` and would read the clock as 0 on Emscripten.
 CB0 turns these "should"s into a measured feature matrix.
 
@@ -87,7 +96,9 @@ experiment for this project because it lets the service run ruvector's native
 Rust crates (and later a Rust port of the simulator) with little
 `wasm`-feature forking. The service code stays target-agnostic (no Tokio, no
 Emscripten-only APIs in the MVP), so falling back to `wasm32-unknown-unknown`
-is a build-flag change, not a rewrite.
+is a small change, not a rewrite: that target needs a `cdylib` library instead
+of a bin, and getrandom's JavaScript backend. CB2 keeps it small by putting the
+service logic in a library crate with no `worker` dependency.
 
 ## What "the brain" is today
 
@@ -134,12 +145,19 @@ SQLite-backed `#[durable_object] SharedBrain` named `vectorvroom-shared-brain-v1
 without locks, and its ~1,000 req/s soft limit is far above this game's traffic.
 
 Inside the object: SQLite tables (`brains`, `tracks`, `dynamics`, `feedback`,
-`contributors`, `meta`) are the source of truth; in-memory indexes (ruvector
-HNSW, or the fork's hyperbolic HNSW if `hnsw_rs` will not build) are rebuilt
-under `blockConcurrencyWhile` on first request after a cold start. Caps: 20,000
-brains and 5,000 tracks to start (~30 MB of index in a 128 MB isolate; CB0
-measures), with eviction by (feedback-adjusted fitness, age) that always keeps
-each track's top brains. ruvector sources come from upstream `5356a84e2` plus
+`contributors`, `meta`) are the source of truth; in-memory indexes (ruvector-core
+`memory-only`, a flat index: `hnsw_rs` does not build for Emscripten, and the
+hyperbolic HNSW is too slow to build at this size, CB0) are rebuilt under
+`blockConcurrencyWhile` on first request after a cold start. Caps: 20,000
+brains and 5,000 tracks to start, with eviction by (feedback-adjusted fitness, age) that always keeps
+each track's top brains. Memory is the constraint (128 MB per isolate, and
+Wasm memory never shrinks): in CB0 the object's Wasm memory peaked at 48.6 MiB
+with a `VectorDB` of 20 000 brains (the raw floats are 18.6 MiB; the peak also
+holds Emscripten's 16 MiB starting memory and growth slack). Adding tracks
+(5 000 × 512, 9.8 MiB raw) and dynamics (20 000 × 64, 4.9 MiB raw) comes to
+roughly 65 MiB before slack and the JavaScript heap (an estimate). CB2 measures the real total and may lower the caps or keep
+dynamics out of memory.
+ruvector sources come from upstream `5356a84e2` plus
 `scripts/ruvector-patches/`, fetched by a script into `.work/` like
 `build-learning-wasm.sh` does.
 
@@ -242,8 +260,9 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
 
 ### Local development and CI (no account needed)
 
-- `npm run dev:brain` → `wrangler dev --config cloud-brain/wrangler.jsonc --var
-  ALLOW_LOCAL:true --port 8879` (first build takes minutes: emsdk + ruvector).
+- `cd cloud-brain && npm run dev` → `wrangler dev --port 8879` with
+  `cloud-brain/`'s own wrangler (D10; first build takes minutes: emsdk +
+  ruvector). CB2 adds `ALLOW_LOCAL`.
 - `cargo test` natively for validation, ranking, aggregation, eviction (shared
   JSON fixtures with the browser tests).
 - `tests/cloud-brain.test.mjs`: the built Worker under Miniflare/wrangler dev
@@ -272,11 +291,22 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
 
 ## Decisions
 
-- **D1 — Service build target.** **Open until CB0. Recommended:** Rust on
+- **D1 — Service build target.** **Taken (2026-09-30, by CB0):** Rust on
+  `wasm32-unknown-emscripten`, the target this work was asked to use. It met
+  the bar: it built, ran a SQLite object locally and persisted it, the local
+  cold start was far under 1 s, and ruvector-core's index of 20 000 brains fit
+  in the object's memory ([spike](../validation/cloud-brain-spike.md)). It is
+  not better than `wasm32-unknown-unknown`: the cold start was a tie, speed at
+  moderate load went to that target or was level (under a saturated host,
+  either way), and the panic difference is each target's default. Its costs: an experimental preview, a pinned 1.99
+  beta (the next beta already breaks the build), minutes and about 1.7 GB to
+  provision Emscripten on a clean machine or CI, and a SONA clock patch. Was
+  recommended: Rust on
   `wasm32-unknown-emscripten` via `worker-build --emscripten`, if CB0 passes
   (builds, runs a SQLite DO under `wrangler dev`, cold start under 1 s of
   instantiate, index fits in memory). Alternatives: Rust on
-  `wasm32-unknown-unknown` (stable, smallest, fastest cold start; same code);
+  `wasm32-unknown-unknown` (stable, no Emscripten; same code; CB0 found no
+  cold-start advantage, and its bundle was the larger);
   or a JS Durable Object loading the already-vendored browser wasm (fastest to
   ship, no Rust in CI, no Emscripten).
 - **D2 — Cloudflare plan.** **Open (your call, before CB5). Recommended:** Workers Paid before this is public;
@@ -309,7 +339,7 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
 
 ## Tasks
 
-- [ ] **CB0 — Toolchain spike (local, throwaway code).** `cloud-brain/`
+- [x] **CB0 — Toolchain spike (local, throwaway code).** `cloud-brain/`
   skeleton: bin crate, dated beta `rust-toolchain.toml`, `wrangler.jsonc`
   (`new_module_registry`, SQLite class `SharedBrain`), `worker-build --emscripten
   --release`. Under `wrangler dev`, prove: a `#[durable_object]` SQL round-trip
@@ -320,6 +350,24 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   deliberate panic does to later requests. Also build the same crate for
   `wasm32-unknown-unknown` for comparison. Write the feature matrix to
   `docs/validation/cloud-brain-spike.md`; decide D1. About 4–6 hours. No deploy.
+  - [x] Skeleton: `cloud-brain/` (bin crate, `worker = "=0.8.7"`,
+    `build.sh`, own wrangler 4.144.0), `SharedBrain` SQLite object,
+    `GET /health`; `spike` feature routes.
+  - [x] Toolchain pin: `beta-2026-09-27` (1.99 beta). The 1.100 beta's new
+    Cargo build layout breaks worker-build 0.8.7's snippet copy.
+  - [x] Measured (`npm run test:cloud-brain:spike`): SQL round trip and
+    restart persistence; local cold start a tie (median 50 against 51 ms
+    for the `wasm32-unknown-unknown` copy); compute speed at moderate load
+    level or in the other build's favour (either way under a saturated host); a panic unwinds (500, the instance lives on) where the other target
+    aborts (no answer, a new instance).
+  - [x] Spike routes answer only with `CLOUD_BRAIN_SPIKE=1` (and `build.sh`
+    refuses the feature in CI); the Pages deploys leave `cloud-brain/` out.
+  - [x] ruvector matrix (`scripts/cloud-brain-spike-matrix.sh`; in the object:
+    `scripts/cloud-brain-spike-ruvector.sh`):
+    `memory-only` (also inside the object: 20 000 brains, a 48.6 MiB peak),
+    `storage`, hyperbolic HNSW and SONA build and run;
+    `simd` is unused on wasm32; `hnsw` (hnsw_rs → nix) fails; SONA's clock
+    reads 0 on Emscripten (CB6 patch).
 - [ ] **CB1 — Wire format, validation and shared fixtures (browser side).**
   `AI-Car-Racer/cloud/wire.js`: base64 Float32 encode/decode, limits, meta
   cleaning (reusing `crosstab/wire.js` and `learning/policy.js`), content IDs from
@@ -327,13 +375,23 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   both sides. Measure the largest weights real clones produce (sets the |w|
   bound). `tests/cloud-brain-wire.test.mjs`. About 3 hours.
   depends: — (parallel with CB0)
-- [ ] **CB2 — SharedBrain service MVP.** `health`, `recall`, `contribute`,
+- [ ] **CB2 — SharedBrain service MVP.** Index: ruvector-core
+  `memory-only` (flat; about 8 to 12 ms a search at 20 000 brains in CB0's Node
+  probe), not
+  `hnsw` (does not build). Keep the 20 000-brain cap: in the object,
+  the object's Wasm memory peaked at 48.6 MiB with 20 000 brains and 101 MiB
+  with 50 000, of 128 MB. `health`, `recall`, `contribute`,
   `stats`; SQLite schema v1 and migration table; index rebuild under
   `blockConcurrencyWhile`; ranking v1; caps and eviction; origin allowlist with
   `ALLOW_LOCAL`; `DISABLE_BRAIN`; `scripts/build-cloud-brain.sh` (fetch
-  `5356a84e2`, apply patches into `.work/`); `npm run dev:brain`; `cargo test`
-  on the CB1 fixtures; `tests/cloud-brain.test.mjs` against the built Worker.
-  About 8 hours.
+  `5356a84e2`, apply patches into `.work/`); `cd cloud-brain && npm run dev`;
+  `cargo test` on the CB1 fixtures; `tests/cloud-brain.test.mjs` against the
+  built Worker. From CB0's review: put the service logic in a library crate
+  without `worker` (native `cargo test` and fuzzing on stable, and a cheap
+  `wasm32-unknown-unknown` fallback, checked in CI); the front door handles
+  `DISABLE_BRAIN`, CORS preflight, 404s and body limits before the object;
+  keep the index out of module scope (`main()` stays empty); decide whether
+  the `spike` routes stay as regression checks. About 8 hours.
   depends: CB0, CB1
 - [ ] **CB3 — Browser client and the Shared brain switch.**
   `AI-Car-Racer/cloud/client.js` and `cloud/config.json` (`endpoint: null` by
@@ -361,7 +419,9 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   `FederatedCoordinator::aggregate` with a quality threshold and outlier filter;
   `recall` returns `get_initial_patterns(k)` to warm-start new sessions. Add
   `scripts/ruvector-patches/sona-emscripten-time.patch` (the `time_compat.rs`
-  cfg); an upstream PR only with your OK. A/B: warm-started vs cold SONA,
+  cfgs; CB0 saw the clock read 0); an upstream PR only with your OK. Inside
+  workerd, time stands still during synchronous work even after the patch:
+  durations advance only across requests and I/O (not measured in CB0). A/B: warm-started vs cold SONA,
   Rectangle and Triangle, n ≥ 6 over 2 sessions. About 6 hours.
   depends: CB2 (CB5 for production)
 - [ ] **CB7 — Optional: ruvector-core native persistence.** If CB0 shows
@@ -403,17 +463,21 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
 
 ## Risks
 
-- The toolchain is two days into a public preview: flags and output shape may
+- The toolchain is a public preview (workers-rs 0.8.7, 2026-09-25): flags and output shape may
   change, beta Rust, patched emsdk. Mitigation: pin everything, keep code
   target-agnostic, CB0 exit criteria, D1 fallback.
-- A Rust panic may kill the object's Wasm instance (panic=abort, no re-init hook
-  on Emscripten). Mitigation: panic-free validators, fuzzing, CB0 test of
-  recovery.
+- A Rust panic unwinds (CB0), so the instance survives with whatever
+  in-memory state the panic left. Mitigation: panic-free validators, fuzzing,
+  and updates that change the in-memory index only after SQLite has committed.
 - Cold start: instantiate plus index rebuild may exceed Free's 10 ms CPU.
   Mitigation: Paid plan, or persist a compact index snapshot.
-- `hnsw_rs` probably does not build for Emscripten (`mmap-rs` → `nix`).
-  Mitigation: the fork's hyperbolic HNSW (pure Rust) or ruvector's flat index at
-  20k vectors.
+- `hnsw_rs` does not build for Emscripten (`mmap-rs` → `nix`, CB0).
+  Mitigation: ruvector's flat index (about 8 to 12 ms a search at 20k vectors
+  in CB0's Node probe);
+  the hyperbolic HNSW builds but took 0.5 to 0.7 s for 2 000 small vectors.
+- Memory: 128 MB per isolate; with 20k brains the object's Wasm memory peaked
+  at 48.6 MiB.
+  Mitigation: caps sized from CB2's measured total.
 - Poisoning through forged claims. Mitigation: D7 quarantine, robust
   aggregation, later X1.
 - Quota sharing with multiplayer on the same account. Mitigation: batching,
