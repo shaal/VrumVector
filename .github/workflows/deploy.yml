@@ -62,15 +62,51 @@ jobs:
             deploy --config multiplayer/wrangler.jsonc
             --name=${{ github.event_name == 'pull_request' && format('vectorvroom-live-pr-{0}', github.event.pull_request.number) || 'vectorvroom-live' }}
 
+      # The cloud brain (docs/plan/cloud-brain.md, CB5): a Rust Worker built
+      # for wasm32-unknown-emscripten with its own pinned toolchain and
+      # wrangler (cloud-brain/package.json). Production is vectorvroom-brain;
+      # a PR gets vectorvroom-brain-pr-<n>, with its own Durable Object. It
+      # needs the Workers Paid plan (D2): wrangler.jsonc sets limits.cpu_ms,
+      # which a Free account refuses. The page offers Shared only when the
+      # deployed Worker's /health answers ok with its brain and limits.
+      - uses: ./.github/actions/cloud-brain-toolchain
+        id: brain-toolchain
+        continue-on-error: true
+        with:
+          target-cache: deploy
+
+      - name: Deploy the cloud brain
+        id: brain
+        if: steps.brain-toolchain.outcome == 'success'
+        continue-on-error: true
+        working-directory: cloud-brain
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BRAIN_NAME: ${{ github.event_name == 'pull_request' && format('vectorvroom-brain-pr-{0}', github.event.pull_request.number) || 'vectorvroom-brain' }}
+        run: |
+          npm ci
+          npx wrangler deploy --name "$BRAIN_NAME" 2>&1 | tee deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          if [[ -z "$url" ]]; then echo "::error::No workers.dev URL in the deploy output"; exit 1; fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          node ../scripts/cloud-brain-health.mjs "$url"
+
       - name: Configure live endpoint and stage static site
         env:
           LIVE_ENDPOINT: ${{ steps.live.outputs.deployment-url }}
+          BRAIN_ENDPOINT: ${{ steps.brain.outcome == 'success' && steps.brain.outputs.url || '' }}
         run: |
           node --input-type=module -e '
             import {writeFileSync} from "node:fs";
             const endpoint = process.env.LIVE_ENDPOINT ? new URL(process.env.LIVE_ENDPOINT) : null;
             if (endpoint && endpoint.protocol !== "https:") throw new Error("Invalid multiplayer endpoint");
             writeFileSync("AI-Car-Racer/multiplayer/config.json", JSON.stringify({endpoint:endpoint?.origin ?? null}) + "\n");
+            // The cloud brain: null hides the Shared option (a failed deploy or health check).
+            const brain = process.env.BRAIN_ENDPOINT ? new URL(process.env.BRAIN_ENDPOINT) : null;
+            if (brain && brain.protocol !== "https:") throw new Error("Invalid cloud brain endpoint");
+            writeFileSync("AI-Car-Racer/cloud/config.json", JSON.stringify({endpoint:brain?.origin ?? null}) + "\n");
           '
           mkdir -p .pages-upload
           rsync -a --exclude='.git' --exclude='.github' --exclude='.pages-upload' --exclude='.wrangler' --exclude='node_modules' --exclude='test-results' --exclude='/multiplayer' --exclude='/cloud-brain' --exclude='/tests' --exclude='/scripts' --exclude='/ruvector' ./ .pages-upload/
@@ -97,9 +133,16 @@ jobs:
           echo "- Branch: \`${{ github.head_ref || github.ref_name }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Deployment URL: ${{ steps.deploy.outputs.deployment-url }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Alias URL: ${{ steps.deploy.outputs.pages-deployment-alias-url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Cloud brain: ${{ steps.brain.outputs.url || 'not deployed (Shared hidden)' }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report multiplayer deployment failure
         if: steps.live.outcome == 'failure'
         run: |
           echo "::error::The static preview is deployed, but the live multiplayer service could not deploy. Check the service step above. Cloudflare Workers access is required; an optional CLOUDFLARE_WORKERS_API_TOKEN can be provided separately from the Pages token."
+          exit 1
+
+      - name: Report cloud brain deployment failure
+        if: steps.brain-toolchain.outcome == 'failure' || steps.brain.outcome == 'failure'
+        run: |
+          echo "::error::The static site is deployed with the Shared option hidden: the cloud brain did not deploy or its /health check failed. Check the cloud brain steps above (the Workers Paid plan, CLOUDFLARE_WORKERS_API_TOKEN with Workers Scripts: Edit, docs/operations/cloud-brain-operations.md)."
           exit 1

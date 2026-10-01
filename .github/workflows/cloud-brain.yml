@@ -1,0 +1,40 @@
+name: Cloud brain
+# The shared cloud brain (docs/plan/cloud-brain.md): the service's native
+# tests and the wasm32-unknown-unknown check, the Emscripten build, the
+# Worker under wrangler dev (its own wrangler, no account needed), and the
+# page against it in Chromium. deploy.yml deploys it; the fuzz targets run
+# from the runbook (docs/operations/cloud-brain-operations.md).
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - uses: ./.github/actions/cloud-brain-toolchain
+        with:
+          target-cache: ci
+      - run: bash scripts/build-cloud-brain.sh --test
+      - run: npm ci
+        working-directory: cloud-brain
+      - run: npm run test:cloud-brain
+      - run: npm run test:crash-maps
+      - run: npm run test:cloud-brain:service
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:cloud-brain:browser
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: cloud-brain
+          path: test-results/cloud-brain/
+          retention-days: 14
