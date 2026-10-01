@@ -916,3 +916,63 @@ request fits neither a rebuild nor a useful session (D2).
   verified ones) outlast brains whose claims are quarantined.
 - Any player can send `source: 'cloud'` in a brain's meta (the browser tags
   pulled brains so); the service's own are told by their contributor.
+
+## X3: race the cloud champion
+
+In shared mode, the best brain the shared pool holds for your track can
+race you: a ghost car driven in the page from its weights, next to yours.
+
+### What it does
+
+- **The champion** (`chooseChampion`, AI-Car-Racer/cloud/ghost.js): the
+  fastest verified first lap on this track's leaderboard whose brain the
+  last pull brought (so its weights are here), else the best brain of the
+  pool that learned on this track (its context's track key is yours: a
+  pool also holds the nearest tracks' brains, ranked first when they are
+  better). The session keeps the last pull's entries (up to 64 brains),
+  names the champion after each pull and each leaderboard read (the same
+  brain again when its lap becomes known, so the label shows it), and drops
+  it when the track or the learning context changes until the next pull.
+  No route is new and nothing is stored: the weights come with the pool.
+- **The ghost** (`Ghost`): an `AI` car of car.js, from main.js's start pose,
+  with your car's top speed and traction and the champion's driving
+  profile. It senses every frame (`senseEveryFrame`, a flag car.js now
+  honours next to the champion and the players), as the service and the
+  trial worker's best car drive: so it drives the lap the service
+  verified. It never touches your car (the page has no car-to-car
+  collisions); when it hits a wall it starts over after 40 frames, as your
+  car does; it never trains, archives or scores anything.
+- **In the page** (main.js): while the AI trains (phase 4) it steps with
+  your cars (at the simulation speed, not while paused), starts over
+  whenever they do (each new run, in `begin`), and is drawn translucent on
+  the flat and tilted views (labelled "Cloud champion" there) and as a
+  translucent car in the 3D studio (graphics/studio.js). A new champion
+  while it races waits for its next start; the same champion never
+  restarts it.
+- **The Memory panel**: a toggle, "Race the cloud champion (16.63 s lap)"
+  (the lap when it is verified), the same label pressed or not
+  (`aria-pressed` says which). The choice is kept while champions come and
+  go: with none for this track it reads "(waiting for one on this track)"
+  and the race resumes when one comes. Off by default; a page in local
+  mode has none of it.
+
+### Evidence
+
+| Claim | Test |
+|---|---|
+| The ghost drives the champion's run | `npm run test:cloud-brain` (client 26 tests): the game's own car.js in a Node vm, the evolved Rectangle brain, the page's frame counter running and a sensor stride of 4: the ghost's run is the traced one (its lap at frame 998; the careful profile's run, and calm at top speed 10 and traction 0.8, as traced), and without `senseEveryFrame` the stride makes another drive; a wreck starts over after 40 frames; a new champion waits for the next start, the same one never restarts it and cancels a wait; the choice to race is kept with no champion and resumes when one comes; off means no car |
+| The champion | the fastest verified brain the pull brought (not the leaderboard's first when its weights did not come), else the pool's best that learned on this track (never a nearer track's brain ranked first), none without one or without a drivable brain; a session names it from its pool, then from the board once the brain is verified (with its lap, the same brain told again), and drops it on another track; the label, pressed or not, and while waiting |
+| In the app | `npm run test:cloud-brain:browser` (Chromium and WebKit), stage 6: on the real service, after the verified lap, a pull names that brain champion; the Memory panel's toggle reads "Race the cloud champion (16.63 s lap)", pressed with the same label; main.js steps the ghost with your cars and draws it, and a new run (`begin`) starts it over; from a new start its run is the champion's verified lap (frame 998); pressed again, it is gone. `npm run test:learning` (147), `npm run test:learning:browser` and `npm run test:demonstration:browser` pass with the car.js, main.js and demoPresentation.js changes. In WebKit, declining a shared link reloads the page while it still loads its Wasm, and WebKit reports those loads as page errors (on `main` too: 2 runs in 4): the test now counts them (`loadsCut`) instead of failing |
+| Review | An adversarial review found a champion from another track (a pool's nearer tracks rank first), a waiting champion not cancelled by the same one coming back, a ghost left a wreck while your car respawns, a stale ghost while editing (phase 3), the race turned off for good by a change of context, a toggle whose name changed with its state, an opaque ghost in the tilted view, and browser assertions that held with main.js not stepping, drawing or restarting it. All are fixed and tested above (7 of the review's 8 surviving mutants now fail a test; the eighth is equivalent) |
+
+### Limits
+
+- The champion is chosen among what this page pulled: a faster verified
+  brain whose weights did not come with the pool is not raced.
+- The ghost drives your physics with its own profile; a champion verified
+  at other physics drives another race than its lap says.
+- Pressing the toggle starts the ghost from the start line at once, not
+  with your car; from then on it starts over with your cars.
+- No ghost while you edit the track or the physics (phase 3).
+- The 3D studio's placement of the ghost is not covered by a test (the
+  browser test runs the flat view).

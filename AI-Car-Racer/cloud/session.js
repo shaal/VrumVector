@@ -14,11 +14,14 @@
 // - a brain that drove a lap is verified once it is sent (X1): the service
 //   drives it on the page's walls and gates, alone, from main.js's start; the
 //   leaderboard for the track and physics is read every minute and after a
-//   verification.
+//   verification;
+// - the champion (X3): the fastest verified brain the last pull brought, or
+//   the pool's best, can race you as a ghost (cloud/ghost.js).
 import {brainToWire, feedbackToWire, brainId, encodeF32, trackGeometry, boardQuery, parseBoard, DIMS, LIMITS} from './wire.js';
 import {CloudBrainClient, contributorToken} from './client.js';
 import {saveBrainMode, consented} from './mode.js';
 import {mountMemoryControl, ARRIVAL_DISCLOSURE} from './ui.js';
+import {Ghost, chooseChampion} from './ghost.js';
 import {geometryKey} from '../graphics/state.js';
 
 export const FLUSH_MS = 10_000;
@@ -108,6 +111,9 @@ export class SharedSession {
     this.boardSeq = 0;
     this.stopped = false;
     this.onBoard = null; // (board or null, {mine, last}) when the leaderboard is read or no longer this page's
+    this.pool = []; // the last pull's entries (X3: the champion is among them)
+    this.champion = null;
+    this.onChampion = null; // (champion or null) when it changes
   }
 
   start() {
@@ -251,6 +257,16 @@ export class SharedSession {
   #show(board) {
     this.board = board;
     try { this.onBoard?.(board, {mine: this.mine, last: this.verified.at(-1) || null}); } catch { /* the UI's problem */ }
+    this.#pickChampion();
+  }
+  /** The champion (X3) for this track, from the board and the last pool; told when it changes. */
+  #pickChampion() {
+    let track = null;
+    try { track = this.page.context()?.track || null; } catch { /* none yet */ }
+    const champion = chooseChampion(this.board, this.pool, track);
+    if (champion?.id === this.champion?.id && champion?.lapFrames === this.champion?.lapFrames) return;
+    this.champion = champion;
+    try { this.onChampion?.(champion); } catch { /* the UI's problem */ }
   }
 
   /** Offspring feedback the bridge applied: into the outbox, as cloud ids. */
@@ -281,6 +297,11 @@ export class SharedSession {
     // The coach's count restarts with a new context: a smaller count is due too.
     const due = generation !== null && this.pulledGeneration !== null && (generation < this.pulledGeneration || generation - this.pulledGeneration >= PULL_EVERY);
     if (!force && key === this.pulledTrack && !due) return Promise.resolve(0);
+    // Another track or context: the last pool's champion is not this one's.
+    if (key !== this.pulledTrack && this.pool.length) {
+      this.pool = [];
+      this.#pickChampion();
+    }
     this.pulling = (async () => {
       const track = unit(trackVec);
       const pool = await this.client.recall({trackVec: track, dynamicsVec: unit(this.page.dynamicsVec()), context, k: LIMITS.recallDefaultK});
@@ -288,6 +309,8 @@ export class SharedSession {
       this.pulledTrack = key;
       this.pulledGeneration = generation;
       this.pulls++;
+      this.pool = pool;
+      this.#pickChampion();
       const added = this.bridge.acceptCloudPool(pool, trackVec, context);
       this.accepted += added;
       return added;
@@ -354,7 +377,19 @@ export async function startCloudBrain(bridge, {win = globalThis.window, ask = te
     },
   });
   session.onBoard = (board, about) => ui.setBoard(board, about);
-  if (win) win.__rvCloud = session;
+  // The cloud champion's ghost (X3): main.js steps and draws window.CloudGhost.
+  const ghost = new Ghost({
+    Car: typeof Car === 'undefined' ? null : Car,
+    // main.js's network from 244 weights (brainCodec.js is not loaded here).
+    inflate: flat => globalThis.inflateBrainInline(Float32Array.from(flat)),
+    road: () => (typeof road === 'undefined' ? null : road),
+    start: () => (typeof startInfo === 'undefined' ? null : startInfo),
+    maxSpeed: () => (typeof maxSpeed === 'undefined' ? 15 : maxSpeed),
+  });
+  const showChampion = () => ui.setChampion(session.champion, {wanted: ghost.wanted});
+  session.onChampion = champion => { ghost.setChampion(champion); showChampion(); };
+  ui.onRace = () => { ghost.enable(!ghost.wanted); showChampion(); };
+  if (win) { win.__rvCloud = session; win.CloudGhost = ghost; }
   // (Unsent brains survive a reload in the outbox: nothing is sent on the way out.)
   session.start();
   return session;

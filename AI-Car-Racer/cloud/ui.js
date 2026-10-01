@@ -25,11 +25,11 @@ const STYLE = `
 .rv-memory{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:6px 0 2px;font-size:12px}
 .rv-memory-label{opacity:.8}
 .rv-memory label{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
-.rv-memory-switch{font:inherit;padding:2px 8px;cursor:pointer}
+.rv-memory-switch,.rv-memory-race{font:inherit;padding:2px 8px;cursor:pointer}
 .rv-memory-status,.rv-memory-board{flex-basis:100%;opacity:.85}
 .rv-memory-status.rv-memory-offline{opacity:1;background:#6b3a12;color:#fff;border-radius:4px;padding:3px 6px}
 .rv-memory-pill{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:1300;background:#6b3a12;color:#fff;border-radius:999px;padding:4px 12px;font:12px/1.4 system-ui,-apple-system,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.3)}
-@media (pointer:coarse){.rv-memory label,.rv-memory-switch{min-height:44px}}
+@media (pointer:coarse){.rv-memory label,.rv-memory-switch,.rv-memory-race{min-height:44px}}
 `;
 
 /** The status line: {text} (announced when it changes), {retry} (not announced), {offline}. */
@@ -89,11 +89,23 @@ async function panelHeader(doc, ms) {
 }
 
 /**
- * Mounts the control. Returns {setStatus, setBoard, ready} (ready resolves to
- * the row element, or null when it is not shown).
+ * The race toggle's label (X3), the same pressed or not (aria-pressed says
+ * which): the champion's verified lap if known; while racing is wanted with
+ * no champion for this track, that it waits. Empty: no toggle.
+ */
+export function describeChampion(champion, {wanted = false} = {}) {
+  if (!champion) return wanted ? 'Race the cloud champion (waiting for one on this track)' : '';
+  return `Race the cloud champion${champion.lapFrames ? ` (${lapText(champion.lapFrames)} lap)` : ''}`;
+}
+
+/**
+ * Mounts the control. Returns {setStatus, setBoard, setChampion, onRace,
+ * ready} (onRace: set by the caller, called when the race button is
+ * pressed; ready resolves to the row element, or null when it is not shown).
  */
 export function mountMemoryControl({mode, available, secure = true, onChoose, confirm: ask = text => globalThis.confirm?.(text) ?? false, doc = globalThis.document}) {
-  let row = null, textEl = null, retryEl = null, statusEl = null, boardEl = null, pill = null, last = null, ticker = null, boardText = '';
+  let row = null, textEl = null, retryEl = null, statusEl = null, boardEl = null, raceEl = null, pill = null, last = null, ticker = null, boardText = '';
+  let race = {text: '', wanted: false};
   const render = () => {
     if (!last) return;
     const {text, retry, offline} = describe(last, {secure});
@@ -134,6 +146,17 @@ export function mountMemoryControl({mode, available, secure = true, onChoose, co
     boardText = describeBoard(board, about);
     if (boardEl) { boardEl.textContent = boardText; boardEl.hidden = !boardText; }
   };
+  const showRace = () => {
+    if (!raceEl) return;
+    raceEl.textContent = race.text;
+    raceEl.hidden = !race.text;
+    raceEl.setAttribute('aria-pressed', String(race.wanted));
+  };
+  const setChampion = (champion, {wanted = false} = {}) => {
+    race = {text: describeChampion(champion, {wanted}), wanted: !!wanted};
+    showRace();
+  };
+  const control = {setStatus, setBoard, setChampion, onRace: null, ready: null};
   const ready = (async () => {
     if (!doc || (!available && mode !== 'shared')) return null;
     const header = await panelHeader(doc, 10_000);
@@ -156,6 +179,7 @@ export function mountMemoryControl({mode, available, secure = true, onChoose, co
       '<button type="button" class="rv-memory-switch" data-rv="memory-switch" hidden>Switch (reloads the page)</button>',
       '<span class="rv-memory-status" data-rv="memory-status"><span data-rv="memory-text" role="status" aria-live="polite"></span><span data-rv="memory-retry" aria-hidden="true"></span></span>',
       '<span class="rv-memory-board" data-rv="memory-board" hidden></span>',
+      '<button type="button" class="rv-memory-race" data-rv="memory-race" aria-pressed="false" hidden></button>',
     ].join('');
     header.insertAdjacentElement('afterend', row);
     statusEl = row.querySelector('[data-rv="memory-status"]');
@@ -164,6 +188,9 @@ export function mountMemoryControl({mode, available, secure = true, onChoose, co
     boardEl = row.querySelector('[data-rv="memory-board"]');
     boardEl.textContent = boardText;
     boardEl.hidden = !boardText;
+    raceEl = row.querySelector('[data-rv="memory-race"]');
+    raceEl.addEventListener('click', () => control.onRace?.());
+    showRace();
     const button = row.querySelector('[data-rv="memory-switch"]');
     const chosen = () => row.querySelector('input[name="rv-memory"]:checked')?.value || mode;
     for (const input of row.querySelectorAll('input[name="rv-memory"]')) {
@@ -184,5 +211,6 @@ export function mountMemoryControl({mode, available, secure = true, onChoose, co
     if (last) render();
     return row;
   })();
-  return {setStatus, setBoard, ready};
+  control.ready = ready;
+  return control;
 }

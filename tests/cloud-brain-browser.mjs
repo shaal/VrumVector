@@ -15,7 +15,10 @@
 //    the page's track is archived and sent, the service drives it on the
 //    page's walls and gates (the same lap as the game's own simulation), its
 //    fitness is then trusted in its context, and the Memory panel shows it
-//    on the leaderboard.
+//    on the leaderboard;
+// 6. race the cloud champion (X3): that brain, pulled back, is the
+//    champion; the Memory panel's button starts its ghost, which drives the
+//    same lap in the page, and stops it.
 //
 //   npm run test:cloud-brain:browser     (needs the cloud-brain toolchain for part 4)
 //   BROWSER=firefox (or webkit) runs it in that engine instead of Chromium.
@@ -44,7 +47,14 @@ const errors = [], report = {};
 async function openPage(context, {endpoint, fake = null, query = '', consent = true}) {
   const page = await context.newPage();
   page.setDefaultTimeout(60000);
-  page.on('pageerror', e => errors.push(`${stage}: ${e.message}`));
+  page.on('pageerror', e => {
+    // Declining a shared link reloads the page while it still loads its
+    // Wasm: WebKit then rejects those fetches in the page being left ("Load
+    // failed", or "<url> due to access control checks."). Counted, not an
+    // error of the page's.
+    if (stage === 'a link to shared mode' && /^(Load failed|.* due to access control checks\.)$/.test(e.message)) { report.loadsCut = (report.loadsCut || 0) + 1; return; }
+    errors.push(`${stage}: ${e.message}`);
+  });
   page.on('console', m => { if (process.env.DEBUG_CONSOLE && /cloud|rror/.test(m.text())) console.error('[console]', stage, m.text()); });
   if (query.includes('brain=shared')) page.once('dialog', d => (consent ? d.accept() : d.dismiss()));
   await page.route('**/*', route => {
@@ -447,6 +457,54 @@ try {
     const lineB = await b.evaluate(async () => { await window.__rvCloud.refreshBoard({force: true}); return document.querySelector('[data-rv="memory-board"]').textContent; });
     assert.equal(lineB, `Fastest verified laps here: 1. ${(lap.outcome.lapFrames[0] / 60).toFixed(2)} s`);
     report.verified = {answer: run.answer, served: run.served, line};
+
+    // ─── 6. race the cloud champion (X3) ─────────────────────────────────
+    stage = 'race the cloud champion';
+    const race = () => a.evaluate(() => {
+      const b = document.querySelector('[data-rv="memory-race"]'), s = window.__rvCloud;
+      return {label: b.hidden ? null : b.textContent, pressed: b.getAttribute('aria-pressed'), enabled: window.CloudGhost.enabled,
+        champion: s.champion && {id: s.champion.id, from: s.champion.from, lapFrames: s.champion.lapFrames}};
+    });
+    await a.evaluate(() => window.__rvCloud.maybePull({force: true}));
+    let r = await race();
+    assert.deepEqual(r.champion, {id: run.answer.id, from: 'leaderboard', lapFrames: lap.outcome.lapFrames[0]});
+    assert.equal(r.label, `Race the cloud champion (${(lap.outcome.lapFrames[0] / 60).toFixed(2)} s lap)`);
+    // Count what main.js does with it: steps, draws (flat view) and starts
+    // over (a new run); the 3D view places its own car.
+    await a.evaluate(() => {
+      const g = window.CloudGhost, seen = window.__ghostSeen = {steps: 0, draws: 0, resets: 0};
+      for (const name of ['step', 'draw', 'reset']) {
+        const f = g[name].bind(g);
+        g[name] = (...args) => { seen[name + 's'] += 1; const out = f(...args); seen.maxFrames = Math.max(seen.maxFrames || 0, g.frames); return out; };
+      }
+    });
+    await a.locator('[data-rv="memory-race"]').click();
+    r = await race();
+    assert.deepEqual([r.enabled, r.pressed, r.label], [true, 'true', `Race the cloud champion (${(lap.outcome.lapFrames[0] / 60).toFixed(2)} s lap)`], 'one label, pressed');
+    // main.js steps it with your cars and draws it (or the 3D view places
+    // it); a new run (begin) starts it over with them.
+    if (await a.evaluate(() => pause)) await a.locator('#pause').click();
+    await a.waitForFunction(() => window.CloudGhost.frames > 60, {}, {timeout: 60000});
+    const seen = await a.evaluate(() => ({...window.__ghostSeen, frames: window.CloudGhost.frames, studio: !!window.CircuitStudio?.cloudGhost?.visible,
+      wrecked: window.CloudGhost.wrecked, damaged: window.CloudGhost.car?.damaged, laps: window.CloudGhost.lapFrames, champion: window.CloudGhost.champion?.id, profile: window.CloudGhost.car?.driverProfile,
+      maxSpeed, traction, start: window.CloudGhost.start?.()}));
+    assert.ok(seen.frames > 60, 'main.js steps it: ' + JSON.stringify(seen));
+    assert.ok(seen.draws > 0 || seen.studio, 'drawn, or placed in the 3D view: ' + JSON.stringify(seen));
+    const restarted = await a.evaluate(() => { const before = window.__ghostSeen.resets; begin(); return {resets: window.__ghostSeen.resets - before, frames: window.CloudGhost.frames}; });
+    assert.deepEqual(restarted, {resets: 1, frames: 0}, 'a new run starts it over');
+    // From a new start, its run is the champion's verified lap.
+    const ghost = await a.evaluate(n => {
+      const g = window.CloudGhost;
+      g.reset();
+      for (let i = 0; i < n; i++) g.step();
+      return {status: g.status()};
+    }, lap.settings.seconds * 60);
+    assert.deepEqual(ghost.status.lapFrames, lap.outcome.lapFrames, JSON.stringify(ghost.status));
+    await a.locator('[data-rv="memory-race"]').click();
+    r = await race();
+    assert.deepEqual([r.enabled, r.pressed], [false, 'false']);
+    assert.equal(await a.evaluate(() => window.CloudGhost.pose()), null);
+    report.race = {champion: r.champion, lapFrames: ghost.status.lapFrames, seen};
     await contextA.close(); await contextB.close();
   }
 

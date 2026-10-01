@@ -651,11 +651,18 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
     is set (off by default, D2), idleness read from SQLite before the brain
     is built; `/health` says `training`. 120 000 frames take ~0.1 s, a
     rebuild at the caps ~1.1 s (docs/validation/cloud-brain.md#x2-the-brain-trains-while-nobody-is-playing).
-- [ ] **X3 — Race the cloud champion.** The best brain for your track drives a
+- [x] **X3 — Race the cloud champion.** The best brain for your track drives a
   ghost car next to yours, simulated locally from its weights (no trajectory
   storage). Value: medium-high, immediate and visible. Effort: ~3 hours. Risk:
   low. Needs no Rust.
   depends: CB3
+  - [x] cloud/ghost.js: the champion is the fastest verified brain the last
+    pull brought, else the pool's best that learned on this track; an AI
+    car of car.js drives it from the start pose with your physics, sensing
+    every frame (so it drives its verified lap), stepped and drawn with your
+    cars while the AI trains (flat, tilted and 3D views), restarted with
+    them and after a crash. The Memory panel's "Race the cloud champion"
+    toggle (docs/validation/cloud-brain.md#x3-race-the-cloud-champion).
 - [ ] **X4 — Everyone's crash map.** Aggregate 144-float crash maps per track
   neighbourhood; overlay "where everyone crashes here"; adaptive gates recall
   shared layouts. Value: medium (curriculum from many players). Effort: ~4
