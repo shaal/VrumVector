@@ -1,5 +1,5 @@
 import {LearningCoach,buildPopulation,cleanContext,contextKey,validBrain,collisionsLabel} from './policy.js';
-import {trackKey} from '../graphics/state.js';
+import {geometryKey} from '../graphics/state.js';
 import {applyTransferGuard,transferGuard,isTransferPaused,resumeTransfer,runTransferCheck,clearTransferGuards} from './transferCheck.js';
 import {TrainingHealth,loadHealth,HEALTH_WINDOW} from './health.js';
 import {DemonstrationRecorder,DemonstrationStore,MAX_DEMONSTRATIONS,MAX_SECONDS} from './demonstration.js';
@@ -8,11 +8,6 @@ import {offerKey,cloneDataset,leavesStart,demonstrationSeed,seedPool,SEED_KIND,U
 
 // Sliders store strings; accept a finite number in [0, 1] or use the default.
 const liveNumber=(value,fallback)=>{const n=Number(value);return Number.isFinite(n)&&n>=0&&n<=1?n:fallback;};
-function geometryKey(road){
-  const text=trackKey(road);let a=2166136261,b=5381;
-  for(let i=0;i<text.length;i++){const c=text.charCodeAt(i);a=Math.imul(a^c,16777619);b=Math.imul(b,33)^c;}
-  return `${(a>>>0).toString(16)}-${(b>>>0).toString(16)}-${text.length}`;
-}
 class DriverLearning {
   constructor(){
     this.profile='balanced';this.adaptive=false;this.coach=new LearningCoach();this.consolidations=0;

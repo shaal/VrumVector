@@ -5,7 +5,8 @@
 // fixture over HTTP, answers read with the browser's own parsers, a
 // contribution coming back from a recall, feedback, stats, persistence
 // across a restart, quarantine of claims, forget, daily quotas, the token
-// never stored, and the migration from SQL schema 1.
+// never stored, the migration from SQL schema 1, and (X1) verified runs, the
+// leaderboard and what the costliest verification takes.
 //
 //   npm run test:cloud-brain:service      (PORT=8881 by default)
 //
@@ -118,17 +119,28 @@ test('every CB1 request fixture gets the answer the wire format says', async () 
   for (const kind of ['valid', 'invalid']) {
     for (const file of (await readdir(new URL(kind + '/', root))).sort()) {
       const fixture = JSON.parse(await readFile(new URL(`${kind}/${file}`, root), 'utf8'));
-      if (!['contribute', 'recall', 'forget'].includes(fixture.route)) continue;
+      if (!['contribute', 'recall', 'forget', 'verify', 'leaderboard'].includes(fixture.route)) continue;
       const body = 'bodyBase64' in fixture ? Buffer.from(fixture.bodyBase64, 'base64') : fixture.body;
-      const res = await post('/v1/' + fixture.route, body);
+      // A leaderboard fixture's body is its query string.
+      const res = fixture.route === 'leaderboard' ? await call('/v1/leaderboard?' + body) : await post('/v1/' + fixture.route, body);
       const answer = await bytes(res), where = `${kind}/${file}`, expect = fixture.expect;
       checked++;
+      if (fixture.route === 'verify' && expect.ok) {
+        // The fixtures' brains are not held: the service alone refuses them.
+        assert.equal(res.status, 400, where);
+        assert.deepEqual(wire.parseErrorResponse(answer), {ok: true, error: 'brain-unknown'}, where);
+        continue;
+      }
       if (!expect.ok) {
         assert.equal(res.status, expect.status, where);
         assert.deepEqual(wire.parseErrorResponse(answer), {ok: true, error: expect.error}, where);
         continue;
       }
       assert.equal(res.status, 200, where);
+      if (fixture.route === 'leaderboard') {
+        assert.deepEqual(wire.parseLeaderboardResponse(answer), {...expect, entries: []}, where);
+        continue;
+      }
       if (fixture.route === 'forget') {
         const forgot = JSON.parse(new TextDecoder().decode(answer));
         assert.deepEqual(Object.keys(forgot).sort(), ['brains', 'feedback', 'protocol'], where);
@@ -154,7 +166,7 @@ test('every CB1 request fixture gets the answer the wire format says', async () 
       assert.equal(r.feedbackAccepted + unknown.length, expect.feedbackAccepted, where);
     }
   }
-  assert.ok(checked >= 104, `${checked} fixtures`);
+  assert.ok(checked >= 140, `${checked} fixtures`);
 });
 
 // The brains this file contributes, on a track no fixture uses.
@@ -293,6 +305,92 @@ test('an address past its limits gets 429 rate-limited, with CORS and Retry-Afte
   assert.equal((await call('/v1/contribute', {method: 'POST', body: wire.contributeBody({token: TOKEN}), address: '2001:db8:7:a::1'})).status, 200, 'another /64');
 });
 
+test('a verified run is the brain\'s fitness, and the leaderboard lists its first lap', async () => {
+  // A brain the game's own learning loop evolved on Rectangle, and what the
+  // game's scripts made of it (tests/fixtures/cloud-brain-sim/traces.json).
+  const traces = JSON.parse(await readFile(new URL('./fixtures/cloud-brain-sim/traces.json', import.meta.url), 'utf8'));
+  const c = traces.cases.find(x => x.track === 'Rectangle' && x.outcome.laps > 0 && x.settings.seconds === 20);
+  const t = traces.tracks.Rectangle;
+  const raw = Buffer.from(c.vector, 'base64'), vector = new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
+  const ctx = {profile: c.settings.profile, track: t.key, maxSpeed: c.settings.maxSpeed, traction: c.settings.traction, seconds: 20, collisions: 'off'};
+  const OWNER = '0a'.repeat(16), id = await brainId(vector), track = unit(DIMS.track, 45);
+  await post('/v1/contribute', wire.contributeBody({token: OWNER, tracks: [track],
+    brains: [wire.brainToWire({vector, fitness: 1e6, track: 0, meta: {learning: {context: ctx, styleScore: 0}}})]}));
+  const served = async () => (await wire.parseRecallResponse(await bytes(await post('/v1/recall', wire.recallBody({trackVec: track, context: ctx, k: 5}))))).pool.find(p => p.id === id).fitness;
+  assert.equal(await served(), 0, 'a claim of 1e6, quarantined');
+  const geometry = {width: t.width, height: t.height, inner: t.inner, outer: t.outer, checkpoints: t.checkpoints};
+  const started = performance.now();
+  const res = await post('/v1/verify', wire.verifyBody({token: TOKEN, vector, track: geometry, context: ctx, start: {x: c.start.x, y: c.start.y, heading: c.start.angle}}));
+  console.log(`# a verification of ${c.outcome.frames} frames: ${(performance.now() - started).toFixed(0)} ms`);
+  assert.equal(res.status, 200);
+  const v = wire.parseVerifyResponse(await bytes(res));
+  assert.deepEqual(v, {ok: true, id, track: t.key, matched: true, fitness: c.outcome.fitness, laps: c.outcome.laps, lapFrames: c.outcome.lapFrames,
+    crashedAt: c.outcome.crashedAt, frames: c.outcome.frames}, 'the service drove it as the browser did');
+  assert.equal(await served(), c.outcome.fitness, 'its fitness is the service\'s run');
+  const board = wire.parseLeaderboardResponse(await bytes(await call('/v1/leaderboard?' + wire.boardQuery({track: t.key, maxSpeed: ctx.maxSpeed, traction: ctx.traction}))));
+  assert.equal(board.ok, true);
+  assert.deepEqual(board.entries.map(e => [e.id, e.lapFrames, e.profile]), [[id, c.outcome.lapFrames[0], ctx.profile]]);
+  // A brain the service does not hold: refused.
+  const stranger = await post('/v1/verify', wire.verifyBody({token: TOKEN, vector: sine(DIMS.brain, 77, 0.5), track: geometry, context: ctx}));
+  assert.equal(stranger.status, 400);
+  assert.deepEqual(wire.parseErrorResponse(await bytes(stranger)), {ok: true, error: 'brain-unknown'});
+  // Six verifications a minute from one address.
+  const address = '198.51.100.9', statuses = [];
+  for (let i = 0; i < 7; i++) statuses.push((await call('/v1/verify', {method: 'POST', address, body: wire.verifyBody({token: TOKEN, vector, track: geometry, context: ctx})})).status);
+  assert.deepEqual(statuses.slice(0, 6), Array(6).fill(200));
+  assert.equal(statuses[6], 429);
+});
+
+test('the leaderboard orders the stored runs by first lap, fitness and age, a brain once', async () => {
+  // Runs written into the object's SQLite (as many verifications would),
+  // read after a restart: the order is SQL's.
+  const {DatabaseSync} = await import('node:sqlite');
+  const KEY = '1a2b-3c4d-99', ctx = {...context, track: KEY};
+  const vectors = [0, 1, 2, 3, 4].map(i => sine(DIMS.brain, 300 + i, 0.5));
+  const ids = await Promise.all(vectors.map(v => brainId(v)));
+  await post('/v1/contribute', wire.contributeBody({token: OTHER, brains: vectors.map(vector => wire.brainToWire({vector, fitness: 1, meta: {learning: {context: ctx, styleScore: 0}}}))}));
+  await dev.stop();
+  const dir = path.join(persist, 'v3/do/vectorvroom-brain-SharedBrain');
+  const db = new DatabaseSync(path.join(dir, (await readdir(dir)).find(f => f.endsWith('.sqlite') && !f.startsWith('metadata'))));
+  const put = db.prepare(`INSERT INTO verified (brain, track, profile, max_speed, traction, seconds, fitness, laps, lap_frames, frames, contributor, created)
+    VALUES (?, ?, ?, 15, 0.5, 30, ?, ?, ?, 1800, '', ?)`);
+  for (const [i, profile, lap, fitness, created] of [[0, 'balanced', 900, 6, 1], [1, 'balanced', 800, 5, 2], [2, 'balanced', 800, 7, 4],
+    [3, 'balanced', 800, 7, 3], [0, 'wild', 700, 4, 5], [4, 'balanced', null, 3, 6]]) {
+    put.run(ids[i], KEY, profile, fitness, lap === null ? 0 : 1, lap, created);
+  }
+  db.close();
+  dev = await startDev({port: PORT, persist, vars: {ALLOW_LOCAL: 'true'}});
+  const board = wire.parseLeaderboardResponse(await bytes(await call('/v1/leaderboard?track=' + KEY)));
+  assert.deepEqual(board.entries.map(e => [ids.indexOf(e.id), e.lapFrames, e.profile]), [[0, 700, 'wild'], [3, 800, 'balanced'], [2, 800, 'balanced'], [1, 800, 'balanced']]);
+});
+
+test('a track made to be costly is stopped within its budget and refused', async () => {
+  // As cloud-brain/sim/tests/cost.rs: walls as long diagonals over every grid
+  // cell, or zigzagging within the sensors' reach of a car that never moves.
+  const far = 99900;
+  const diagonal = (i, flip) => (i % 2 ? [far, flip * (far + i / 255)] : [-far, flip * (-far + i / 255)]);
+  const zigzag = y => Array.from({length: 256}, (_, i) => [i % 2 ? 3200 : 0, y + i * 0.01]);
+  const tracks = {
+    diagonals: {width: 3200, height: 1800, inner: Array.from({length: 256}, (_, i) => diagonal(i, 1)), outer: Array.from({length: 256}, (_, i) => diagonal(i, -1)),
+      checkpoints: [[[2600, 300], [2600, 301]], [[2601, 300], [2601, 301]], ...Array.from({length: 62}, (_, i) => [[-far, -far + i], [far, far + i]])]},
+    zigzags: {width: 3200, height: 1800, inner: zigzag(300), outer: zigzag(700),
+      checkpoints: [[[1600, 400], [1600, 600]], [[1700, 400], [1700, 600]], ...Array.from({length: 62}, (_, i) => [[1300 + i * 10, 420], [1300 + i * 10, 440]])]},
+  };
+  const vector = new Float32Array(DIMS.brain);
+  vector.fill(1, 176, 180); // the output layer's biases: every output off
+  const ctx = {...context, seconds: 120};
+  await post('/v1/contribute', wire.contributeBody({token: OTHER, brains: [wire.brainToWire({vector, fitness: 1, meta: {learning: {context: ctx, styleScore: 0}}})]}));
+  for (const [name, track] of Object.entries(tracks)) {
+    const started = performance.now();
+    const res = await post('/v1/verify', wire.verifyBody({token: TOKEN, vector, track, context: ctx}));
+    const ms = performance.now() - started;
+    console.log(`# ${name}, stopped within the budget: ${ms.toFixed(0)} ms`);
+    assert.equal(res.status, 400);
+    assert.deepEqual(wire.parseErrorResponse(await bytes(res)), {ok: true, error: 'track-geometry'});
+    assert.ok(ms < 1000, `${ms} ms`);
+  }
+});
+
 test('the token is never stored, only its hash', async () => {
   const dir = path.join(persist, 'v3/do/vectorvroom-brain-SharedBrain');
   const files = (await readdir(dir)).filter(f => !f.startsWith('metadata'));
@@ -353,7 +451,7 @@ test('a daily quota refuses a token past it with 429 until midnight', async () =
 
 test('a database at SQL schema 1 is migrated', async () => {
   // Back to schema 1 as CB2 left it: the old contributors table, feedback in
-  // the old format, no migration 2. Then again with the migration cut short.
+  // the old format, no migrations 2 and 3. Then again with migration 2 cut short.
   const {DatabaseSync} = await import('node:sqlite');
   const dir = path.join(persist, 'v3/do/vectorvroom-brain-SharedBrain');
   const file = path.join(dir, (await readdir(dir)).find(f => f.endsWith('.sqlite') && !f.startsWith('metadata')));
@@ -364,8 +462,8 @@ test('a database at SQL schema 1 is migrated', async () => {
     const db = new DatabaseSync(file);
     // A brain TOKEN did not contribute: its feedback is evidence, and written.
     const theirs = db.prepare('SELECT id FROM brains WHERE contributor != ? LIMIT 1').get(mine).id;
-    db.exec(`DROP TABLE contributors; DROP INDEX IF EXISTS brains_contributor; DELETE FROM feedback;
-      DELETE FROM migrations WHERE version = 2; UPDATE meta SET value = '1' WHERE key = 'sql_schema'`);
+    db.exec(`DROP TABLE contributors; DROP INDEX IF EXISTS brains_contributor; DROP TABLE IF EXISTS verified; DROP TABLE IF EXISTS geometries; DELETE FROM feedback;
+      DELETE FROM migrations WHERE version >= 2; UPDATE meta SET value = '1' WHERE key = 'sql_schema'`);
     db.prepare(`INSERT INTO feedback (brain, context_key, context, weight, count, baseline, contributors, updated)
       VALUES (?, '0123456789abcdef', '{}', 0.5, 3, 40, 'aaaaaaaa,bbbbbbbb', ?)`).run(theirs, Date.now());
     // Cut short: the contributors table already dropped, the migration not recorded.
@@ -385,7 +483,9 @@ test('a database at SQL schema 1 is migrated', async () => {
     assert.equal(wire.parseContributeResponse(await bytes(res)).feedbackAccepted, 1);
     await dev.stop();
     const after = new DatabaseSync(file, {readOnly: true});
-    assert.deepEqual(after.prepare('SELECT version FROM migrations ORDER BY version').all().map(r => r.version), [1, 2]);
+    assert.deepEqual(after.prepare('SELECT version FROM migrations ORDER BY version').all().map(r => r.version), [1, 2, 3]);
+    assert.equal(after.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name IN ('verified', 'geometries')").get().n, 2, 'schema 3: verified runs, pinned geometries');
+    assert.equal(after.prepare('SELECT COUNT(*) AS n FROM geometries').get().n, 10, 'the presets pinned');
     assert.ok(after.prepare("SELECT COUNT(*) AS n FROM feedback WHERE contributors = 'aaaaaaaa,bbbbbbbb'").get().n === 0, 'schema 1 feedback is gone');
     const slots = after.prepare('SELECT contributors FROM feedback WHERE brain = ?').all(theirs).map(r => r.contributors);
     assert.deepEqual(slots.map(t => t.split(':')[0]), [mine], 'a slot with its contributor id');
@@ -397,7 +497,7 @@ test('a database at SQL schema 1 is migrated', async () => {
   // A database newer than the build is not served from.
   await dev.stop();
   const db = new DatabaseSync(file);
-  db.prepare('INSERT INTO migrations (version, applied) VALUES (3, ?)').run(Date.now());
+  db.prepare('INSERT INTO migrations (version, applied) VALUES (4, ?)').run(Date.now());
   db.close();
   dev = await startDev({port: PORT, persist, vars: {ALLOW_LOCAL: 'true'}});
   assert.equal((await (await call('/health', {origin: null})).json()).ok, false);

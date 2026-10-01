@@ -1,0 +1,10 @@
+{
+ "description": "A hash of 9 digits.",
+ "route": "leaderboard",
+ "body": "track=123456789-1-1",
+ "expect": {
+  "ok": false,
+  "error": "leaderboard-query",
+  "status": 400
+ }
+}

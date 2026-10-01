@@ -9,8 +9,9 @@
 // A fixture: {description, route, body or bodyBase64, expect}. body is the
 // raw text (sent as its UTF-8 bytes); bodyBase64 is raw bytes, for bodies that
 // are not valid UTF-8. route is
-// contribute | recall | forget | recall-response | contribute-response |
-// stats-response | error-response. expect is {ok: false, error} for a refused
+// contribute | recall | forget | verify | leaderboard (its body is the
+// query string) | recall-response | contribute-response | stats-response |
+// verify-response | leaderboard-response | error-response. expect is {ok: false, error} for a refused
 // body, or what was accepted: ids, refused items with their reasons, and
 // (for some) the values read: cleaned meta and contexts, fitness values,
 // feedback rows, track indices, and vector fingerprints (`brain_` + the
@@ -50,7 +51,7 @@ const wireBrain = (vector, extra = {}) => ({vector: encodeF32(vector), fitness: 
 const row = (id, extra = {}) => ({id, context: CONTEXT, meanFitness: 9.5, count: 12, ...extra});
 const recall = (track, extra = {}) => json({protocol: PROTOCOL, brainSchema: BRAIN_SCHEMA, track: encodeF32(track), context: CONTEXT, ...extra});
 const accepts = (accepted, extra = {}) => ({ok: true, accepted, rejected: [], feedbackAccepted: 0, feedbackRejected: [], ...extra});
-const REQUESTS = ['contribute', 'recall', 'forget'];
+const REQUESTS = ['contribute', 'recall', 'forget', 'verify', 'leaderboard'];
 const refused = (description, route, body, error) => ({description, route, body,
   expect: REQUESTS.includes(route) ? {ok: false, error, status: httpStatus(error)} : {ok: false, error}});
 // A body given as bytes: parts are text (UTF-8) or lists of raw byte values.
@@ -429,6 +430,80 @@ export async function fixtures() {
     body: json({protocol: PROTOCOL, brainSchema: 5, token: TOKEN}), expect: {ok: true}};
   invalid['forget-bad-token'] = refused('Forget with a short token.', 'forget', json({protocol: PROTOCOL, token: 'abc'}), REASONS.token);
 
+  // ─── verify (X1) ────────────────────────────────────────────────────────
+  // The Rectangle preset: the game's canvas, walls, the five gates.
+  const GEOMETRY = {width: 3200, height: 1800, inner: [[650, 700], [2450, 700], [2450, 1100], [650, 1100]],
+    outer: [[250, 300], [3100, 300], [3100, 1500], [250, 1500]],
+    checkpoints: [[[3128, 1316], [2418, 1068]], [[3135, 376], [2414, 725]], [[1600, 300], [1600, 700]], [[250, 900], [650, 900]], [[1600, 1060], [1600, 1565]]]};
+  const verifyOf = (extra = {}, vector = evolved) => ({protocol: PROTOCOL, brainSchema: BRAIN_SCHEMA, token: TOKEN, vector: encodeF32(vector),
+    track: GEOMETRY, context: CONTEXT, ...extra});
+  const withTrack = extra => verifyOf({track: {...GEOMETRY, ...extra}});
+  const verified = async (extra = {}, vector = evolved) => ({ok: true, id: await id(vector), context: CONTEXT, points: [4, 4, 5], ...extra});
+  valid['verify'] = {description: 'Verify a brain on the Rectangle preset, in its context.', route: 'verify', body: json(verifyOf()), expect: await verified()};
+  valid['verify-start-not-read'] = {description: 'A start pose is not read: the service finds it from the gates, as main.js does.', route: 'verify',
+    body: json(verifyOf({start: {x: 'anywhere'}})), expect: await verified()};
+  valid['verify-at-the-bounds'] = {description: 'Coordinates of ±100 000, 256 points a loop, 64 gates, 120 seconds.',
+    route: 'verify', body: json(verifyOf({track: {width: 3200, height: 1800, inner: Array.from({length: 256}, (_, i) => [i, -1e5]),
+      outer: [[1e5, 0], [0, 1e5], [-1e5, -1e5]], checkpoints: Array.from({length: 64}, (_, i) => [[i, 0], [i, 1]])},
+    context: {...CONTEXT, seconds: 120}})),
+    expect: await verified({context: {...CONTEXT, seconds: 120}, points: [256, 3, 64]})};
+  invalid['verify-bad-token'] = refused('A short token.', 'verify', json(verifyOf({token: 'abc'})), REASONS.token);
+  invalid['verify-token-before-vector'] = refused('A short token and a bad vector: the token is checked first.', 'verify',
+    json(verifyOf({token: 'abc', vector: 'AAAA'})), REASONS.token);
+  invalid['verify-brain-encoding'] = refused('A vector that is not a brain.', 'verify', json(verifyOf({vector: 'AAAA'})), REASONS.brainEncoding);
+  invalid['verify-brain-not-finite'] = refused('A NaN weight.', 'verify', json(verifyOf({}, nanBrain)), REASONS.brainNotFinite);
+  invalid['verify-brain-weight-range'] = refused('A weight of 16.5.', 'verify', json(verifyOf({}, heavyBrain)), REASONS.brainWeightRange);
+  invalid['verify-vector-before-track'] = refused('A bad vector and no track: the vector is checked first.', 'verify',
+    json(verifyOf({vector: 'AAAA', track: null})), REASONS.brainEncoding);
+  invalid['verify-no-track'] = refused('No track.', 'verify', json(verifyOf({track: null})), REASONS.trackGeometry);
+  invalid['verify-track-no-width'] = refused('No canvas width.', 'verify', json(withTrack({width: undefined})), REASONS.trackGeometry);
+  invalid['verify-track-other-height'] = refused('A canvas 1 801 tall: not the game\'s (its sides are walls).', 'verify', json(withTrack({height: 1801})), REASONS.trackGeometry);
+  invalid['verify-track-other-width'] = refused('A canvas 3 199.5 wide.', 'verify', json(withTrack({width: 3199.5})), REASONS.trackGeometry);
+  invalid['verify-track-two-points'] = refused('An inner loop of two points.', 'verify', json(withTrack({inner: [[0, 0], [1, 1]]})), REASONS.trackGeometry);
+  invalid['verify-track-257-points'] = refused('An outer loop of 257 points.', 'verify',
+    json(withTrack({outer: Array.from({length: 257}, (_, i) => [i, i])})), REASONS.trackGeometry);
+  invalid['verify-track-far-coordinate'] = refused('A coordinate of 100 001.', 'verify',
+    json(withTrack({outer: [[0, 0], [1, 1], [100001, 0]]})), REASONS.trackGeometry);
+  invalid['verify-track-string-coordinate'] = refused('A coordinate written as a string.', 'verify',
+    json(withTrack({inner: [['650', 700], [2450, 700], [2450, 1100]]})), REASONS.trackGeometry);
+  invalid['verify-track-three-numbers'] = refused('A point of three numbers.', 'verify',
+    json(withTrack({inner: [[650, 700, 1], [2450, 700], [2450, 1100]]})), REASONS.trackGeometry);
+  invalid['verify-track-no-gates'] = refused('No gates.', 'verify', json(withTrack({checkpoints: []})), REASONS.trackGeometry);
+  invalid['verify-track-gate-one-end'] = refused('A gate with one end.', 'verify', json(withTrack({checkpoints: [[[0, 0]]]})), REASONS.trackGeometry);
+  invalid['verify-track-65-gates'] = refused('65 gates.', 'verify', json(withTrack({checkpoints: Array.from({length: 65}, () => [[0, 0], [1, 1]])})), REASONS.trackGeometry);
+  invalid['verify-track-before-context'] = refused('No track and no context: the track is checked first.', 'verify',
+    json(verifyOf({track: null, context: null})), REASONS.trackGeometry);
+  invalid['verify-no-context'] = refused('No context.', 'verify', json(verifyOf({context: null})), REASONS.context);
+  invalid['verify-context-before-verify-context'] = refused('A context that is not an object.', 'verify', json(verifyOf({context: 'wild'})), REASONS.context);
+  invalid['verify-collisions'] = refused('Collisions on: a car cannot be run alone.', 'verify',
+    json(verifyOf({context: {...CONTEXT, collisions: 'solid/k8'}})), REASONS.verifyContext);
+  invalid['verify-121-seconds'] = refused('121 seconds: over the longest run verified.', 'verify',
+    json(verifyOf({context: {...CONTEXT, seconds: 121}})), REASONS.verifyContext);
+  invalid['verify-other-schema'] = refused('Another brain format.', 'verify', json(verifyOf({brainSchema: 5})), REASONS.brainSchema);
+  invalid['verify-schema-before-token'] = refused('Another brain format and a bad token: the format is checked first.', 'verify',
+    json(verifyOf({brainSchema: 5, token: 'abc'})), REASONS.brainSchema);
+
+  // ─── leaderboard (X1): the body is the query string ────────────────────
+  const KEY = 'e9755c3b-fb81e227-361';
+  const board = (maxSpeed, traction, track = KEY) => ({ok: true, track, maxSpeed, traction});
+  valid['leaderboard'] = {description: 'A track and its physics.', route: 'leaderboard', body: `track=${KEY}&maxSpeed=15&traction=0.5`, expect: board(15, 0.5)};
+  valid['leaderboard-defaults'] = {description: 'The track alone: maxSpeed 15, traction 0.5.', route: 'leaderboard', body: `track=${KEY}`, expect: board(15, 0.5)};
+  valid['leaderboard-cleaned'] = {description: 'Numbers cleaned as a context: maxSpeed 500 is 100, traction -1 is 0, maxSpeed 0 the default.',
+    route: 'leaderboard', body: `traction=-1&maxSpeed=500&track=${KEY}`, expect: board(100, 0)};
+  valid['leaderboard-zero-and-others'] = {description: 'maxSpeed 0 is 15; other keys are ignored; empty pairs too.',
+    route: 'leaderboard', body: `x=1&&track=${KEY}&maxSpeed=0&y`, expect: board(15, 0.5)};
+  valid['leaderboard-last-wins'] = {description: 'A key given twice keeps its last value; 1e1 and +7.5 are numbers.',
+    route: 'leaderboard', body: `track=1-2-3&track=${KEY}&maxSpeed=1e1&traction=+.25&maxSpeed=+7.5`, expect: board(7.5, 0.25)};
+  invalid['leaderboard-no-track'] = refused('No track key.', 'leaderboard', 'maxSpeed=15', REASONS.leaderboardQuery);
+  invalid['leaderboard-bad-key'] = refused('A track key in capitals.', 'leaderboard', 'track=E9755C3B-FB81E227-361', REASONS.leaderboardQuery);
+  invalid['leaderboard-long-key'] = refused('A hash of 9 digits.', 'leaderboard', 'track=123456789-1-1', REASONS.leaderboardQuery);
+  invalid['leaderboard-long-length'] = refused('A length of 10 digits (a body is at most 64 KB).', 'leaderboard', 'track=1-2-1234567890', REASONS.leaderboardQuery);
+  valid['leaderboard-nine-digit-length'] = {description: 'A length of 9 digits.', route: 'leaderboard', body: 'track=1-2-123456789', expect: board(15, 0.5, '1-2-123456789')};
+  invalid['leaderboard-word'] = refused('maxSpeed=fast.', 'leaderboard', `track=${KEY}&maxSpeed=fast`, REASONS.leaderboardQuery);
+  invalid['leaderboard-hex'] = refused('maxSpeed=0x10: not a decimal number.', 'leaderboard', `track=${KEY}&maxSpeed=0x10`, REASONS.leaderboardQuery);
+  invalid['leaderboard-infinite'] = refused('traction=1e400: not finite.', 'leaderboard', `track=${KEY}&traction=1e400`, REASONS.leaderboardQuery);
+  invalid['leaderboard-empty-number'] = refused('maxSpeed= (empty).', 'leaderboard', `track=${KEY}&maxSpeed=`, REASONS.leaderboardQuery);
+
   // ─── answers ────────────────────────────────────────────────────────────
   const entry = async (v, i, extra = {}) => ({id: await id(v), vector: encodeF32(v), fitness: 10 - i, score: 1 - i / 100,
     meta: {generation: i, source: 'evolved', learning: {context: CONTEXT, styleScore: 0.5, driving: {averageSpeed: 0.5, smoothness: 0.5, crashed: false}}},
@@ -558,6 +633,39 @@ export async function fixtures() {
     json({protocol: PROTOCOL, accepted: [], rejected: [], feedbackAccepted: 0, feedbackRejected: [{index: 50, reason: REASONS.feedbackId}]}), REASONS.shape);
   invalid['contribute-response-no-feedback-accepted'] = refused('No feedbackAccepted.', 'contribute-response',
     json({protocol: PROTOCOL, accepted: [], rejected: [], feedbackRejected: []}), REASONS.shape);
+
+  // Verification and leaderboard answers (X1).
+  const verifyAnswer = async extra => ({protocol: PROTOCOL, id: await id(evolved), track: KEY, matched: true, fitness: 16, laps: 2,
+    lapFrames: [512, 1010], crashedAt: null, frames: 1200, ...extra});
+  const readVerify = a => ({ok: true, id: a.id, track: a.track, matched: a.matched, fitness: a.fitness, laps: a.laps, lapFrames: a.lapFrames,
+    crashedAt: a.crashedAt, frames: a.frames});
+  valid['verify-response'] = {description: 'A verified run with two laps.', route: 'verify-response', body: json(await verifyAnswer()), expect: readVerify(await verifyAnswer())};
+  valid['verify-response-crashed'] = {description: 'A run that crashed at frame 40 without a lap.', route: 'verify-response',
+    body: json(await verifyAnswer({matched: false, fitness: 1, laps: 0, lapFrames: [], crashedAt: 40, frames: 40})),
+    expect: readVerify(await verifyAnswer({matched: false, fitness: 1, laps: 0, lapFrames: [], crashedAt: 40, frames: 40}))};
+  invalid['verify-response-laps-mismatch'] = refused('Two laps, one lap frame.', 'verify-response', json(await verifyAnswer({lapFrames: [512]})), REASONS.shape);
+  invalid['verify-response-too-long'] = refused('7 201 frames: over 120 s.', 'verify-response', json(await verifyAnswer({frames: 7201})), REASONS.shape);
+  invalid['verify-response-bad-id'] = refused('An id that is not a cloud id.', 'verify-response', json(await verifyAnswer({id: 'brain_x'})), REASONS.shape);
+  invalid['verify-response-bad-track'] = refused('A track key in capitals.', 'verify-response', json(await verifyAnswer({track: 'ABC-1-2'})), REASONS.shape);
+  invalid['verify-response-long-length'] = refused('A track key whose length has 10 digits.', 'verify-response', json(await verifyAnswer({track: '1-2-1234567890'})), REASONS.shape);
+  invalid['verify-response-crashed-at-0'] = refused('A crash at frame 0.', 'verify-response', json(await verifyAnswer({crashedAt: 0})), REASONS.shape);
+  invalid['verify-response-crashed-late'] = refused('A crash at frame 7 201.', 'verify-response', json(await verifyAnswer({crashedAt: 7201})), REASONS.shape);
+  invalid['verify-response-crashed-string'] = refused('A crash frame written as a string.', 'verify-response', json(await verifyAnswer({crashedAt: '40'})), REASONS.shape);
+  const boardEntry = async (v, lap) => ({id: await id(v), lapFrames: lap, laps: 1, fitness: 6, profile: 'balanced', verified: 1790000000000});
+  const boardEntries = [];
+  for (let i = 0; i < LIMITS.boardSize; i++) boardEntries.push(await boardEntry(brain(900 + i), 500 + i));
+  valid['leaderboard-response'] = {description: 'A full leaderboard: 20 entries, the fastest first lap first.', route: 'leaderboard-response',
+    body: json({protocol: PROTOCOL, track: KEY, maxSpeed: 15, traction: 0.5, entries: boardEntries}),
+    expect: {ok: true, track: KEY, maxSpeed: 15, traction: 0.5, entries: boardEntries}};
+  valid['leaderboard-response-profile-cleaned'] = {description: 'An unknown profile is read as balanced.', route: 'leaderboard-response',
+    body: json({protocol: PROTOCOL, track: KEY, maxSpeed: 15, traction: 0.5, entries: [{...boardEntries[0], profile: 'turbo'}]}),
+    expect: {ok: true, track: KEY, maxSpeed: 15, traction: 0.5, entries: [{...boardEntries[0], profile: 'balanced'}]}};
+  invalid['leaderboard-response-21'] = refused('21 entries.', 'leaderboard-response',
+    json({protocol: PROTOCOL, track: KEY, maxSpeed: 15, traction: 0.5, entries: [...boardEntries, boardEntries[0]]}), REASONS.shape);
+  invalid['leaderboard-response-no-lap'] = refused('An entry without a lap.', 'leaderboard-response',
+    json({protocol: PROTOCOL, track: KEY, maxSpeed: 15, traction: 0.5, entries: [{...boardEntries[0], laps: 0}]}), REASONS.shape);
+  valid['error-response-brain-unknown'] = {description: 'A verification of a brain the service does not hold (HTTP 400).', route: 'error-response',
+    body: json({protocol: PROTOCOL, error: 'brain-unknown'}), expect: {ok: true, error: 'brain-unknown', status: 400}};
   invalid['stats-response-too-large'] = refused('A stats answer one byte over 256 KiB.', 'stats-response', answerSize(statsAnswer, LIMITS.responseBytes + 1), REASONS.bodyTooLarge);
   valid['stats-response-negative-zero'] = {description: 'Counts of -0 come out as 0.', route: 'stats-response',
     body: json({protocol: PROTOCOL, brains: 7, tracks: 8, contributorsToday: 9, contributions24h: 10}).replace('"brains":7', '"brains":-0').replace('"tracks":8', '"tracks":-0.0')

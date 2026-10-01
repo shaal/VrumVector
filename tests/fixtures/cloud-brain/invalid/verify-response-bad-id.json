@@ -1,0 +1,9 @@
+{
+ "description": "An id that is not a cloud id.",
+ "route": "verify-response",
+ "body": "{\"protocol\":1,\"id\":\"brain_x\",\"track\":\"e9755c3b-fb81e227-361\",\"matched\":true,\"fitness\":16,\"laps\":2,\"lapFrames\":[512,1010],\"crashedAt\":null,\"frames\":1200}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

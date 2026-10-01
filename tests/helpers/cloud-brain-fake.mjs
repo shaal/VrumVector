@@ -4,8 +4,11 @@
 // a recall returns the brains on the query's exact track (every brain when
 // none is on it), best fitness first; feedback is counted per brain and
 // context. `down` simulates the network ('offline': fetch throws;
-// 'disabled': 503; 'error': 500; 'busy': 429).
+// 'disabled': 503; 'error': 500; 'busy': 429). A verification (X1) does not
+// drive the car: its outcome is `verifyOutcome(v)` (by default one lap in
+// 10 s), kept per brain, track and physics for the leaderboard.
 import * as wire from '../../AI-Car-Racer/cloud/wire.js';
+import {geometryKey} from '../../AI-Car-Racer/graphics/state.js';
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), {status, headers: {'Content-Type': 'application/json'}});
 const error = reason => json({protocol: wire.PROTOCOL, error: reason}, wire.httpStatus(reason));
@@ -16,9 +19,13 @@ export function createFakeCloudBrain() {
     brains,
     requests: [],
     down: null,
-    /** {recall, contribute}: a reason to refuse that route with (tests of backoff). */
+    /** {recall, contribute, verify, leaderboard}: a reason to refuse that route with (tests of backoff). */
     refuse: {},
     contributors: new Set(),
+    /** Verified runs: {id, track, profile, maxSpeed, traction, seconds, laps, lapFrames, fitness, created}. */
+    verified: [],
+    /** The outcome of a verification: {laps, lapFrames, fitness, crashedAt, frames}. */
+    verifyOutcome: v => ({laps: 1, lapFrames: [600], fitness: v.geometry.checkpoints.length, crashedAt: null, frames: Math.floor(v.context.seconds * 60)}),
     /** Adds brains directly: [{vector, fitness, track (Float32Array|null), meta}]. */
     async seed(items) {
       for (const item of items) {
@@ -37,8 +44,12 @@ export function createFakeCloudBrain() {
       if (fake.down === 'busy') return error('rate-limited');
       if (path === '/v1/contribute' && fake.refuse.contribute) return error(fake.refuse.contribute);
       if (path === '/v1/recall' && fake.refuse.recall) return error(fake.refuse.recall);
+      if (path === '/v1/verify' && fake.refuse.verify) return error(fake.refuse.verify);
+      if (path === '/v1/leaderboard' && fake.refuse.leaderboard) return error(fake.refuse.leaderboard);
       if (path === '/v1/contribute' && init.method === 'POST') return contribute(body);
       if (path === '/v1/recall' && init.method === 'POST') return recall(body);
+      if (path === '/v1/verify' && init.method === 'POST') return verify(body);
+      if (path === '/v1/leaderboard') return leaderboard(new URL(url).search.slice(1));
       if (path === '/v1/stats') return json({protocol: wire.PROTOCOL, brains: brains.size, tracks: new Set([...brains.values()].map(b => b.track).filter(Boolean)).size, contributorsToday: fake.contributors.size, contributions24h: fake.requests.filter(r => r.path === '/v1/contribute').length});
       return new Response('Not found', {status: 404});
     },
@@ -97,6 +108,31 @@ export function createFakeCloudBrain() {
         feedback: {weight: f ? f.weight : 0, count: f ? f.count : 0, contributors: f ? f.contributors.size : 0}};
     });
     return json({protocol: wire.PROTOCOL, brainSchema: wire.BRAIN_SCHEMA, pool});
+  }
+
+  async function verify(bytes) {
+    const v = await wire.parseVerify(bytes);
+    if (!v.ok) return error(v.error);
+    if (!brains.has(v.id)) return error('brain-unknown');
+    const point = ([x, y]) => ({x, y});
+    const track = geometryKey({innerList: v.geometry.inner.map(point), outerList: v.geometry.outer.map(point), checkPointList: v.geometry.checkpoints.map(g => g.map(point))});
+    const outcome = fake.verifyOutcome(v);
+    const run = {id: v.id, track, profile: v.context.profile, maxSpeed: v.context.maxSpeed, traction: v.context.traction, seconds: v.context.seconds, ...outcome, created: fake.verified.length + 1};
+    fake.verified = fake.verified.filter(r => !(r.id === run.id && r.track === track && r.profile === run.profile && r.maxSpeed === run.maxSpeed && r.traction === run.traction && r.seconds === run.seconds));
+    fake.verified.push(run);
+    return json({protocol: wire.PROTOCOL, id: v.id, track, matched: track === v.context.track, ...outcome});
+  }
+
+  function leaderboard(query) {
+    const b = wire.parseBoard(query);
+    if (!b.ok) return error(b.error);
+    const seen = new Set();
+    const entries = fake.verified.filter(r => r.track === b.track && r.maxSpeed === b.maxSpeed && r.traction === b.traction && r.laps > 0 && brains.has(r.id))
+      .sort((x, y) => x.lapFrames[0] - y.lapFrames[0] || y.fitness - x.fitness || x.created - y.created)
+      .filter(r => !seen.has(r.id) && seen.add(r.id)) // a brain once, at its best run
+      .slice(0, wire.LIMITS.boardSize)
+      .map(r => ({id: r.id, lapFrames: r.lapFrames[0], laps: r.laps, fitness: r.fitness, profile: r.profile, verified: r.created}));
+    return json({protocol: wire.PROTOCOL, track: b.track, maxSpeed: b.maxSpeed, traction: b.traction, entries});
   }
 
   return fake;

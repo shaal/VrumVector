@@ -11,10 +11,13 @@
 //   brain and context (the service would refuse a second as a repeat; it
 //   goes in the next request), and no row about a brain still waiting.
 // - Pull: recall() asks for a pool for a track.
+// - Verify (X1): verify() has the service drive a brain it holds on a track;
+//   leaderboard() reads the fastest verified first laps.
 // - Offline: a failure backs off (1 s, doubling, to 60 s) on a monotonic
 //   clock, sending and reading apart; training never waits on the network.
 // Answers are read as bytes and given to wire.js's parsers as they are.
-import {LIMITS, SERVICE_ERRORS, contributeBody, recallBody, parseContributeResponse, parseRecallResponse, parseErrorResponse, parseStatsResponse} from './wire.js';
+import {LIMITS, SERVICE_ERRORS, contributeBody, recallBody, verifyBody, boardQuery, parseContributeResponse, parseRecallResponse, parseErrorResponse, parseStatsResponse,
+  parseVerifyResponse, parseLeaderboardResponse} from './wire.js';
 
 export const OUTBOX_KEY = 'vv.cloudBrainOutbox';
 export const TOKEN_KEY = 'vv.cloudBrainToken';
@@ -23,6 +26,9 @@ const LOCK_NAME = 'vv.cloudBrainOutbox';
 export const OUTBOX_LIMITS = Object.freeze({brains: 64, feedback: 200});
 const BACKOFF_MS = {first: 1000, max: 60000};
 const TIMEOUT_MS = 15000;
+// A verification the service could not take now (busy, paused, broken):
+// the next waits this long. It does not hold contributions or recalls.
+export const VERIFY_WAIT_MS = 60000;
 
 /** A contributor token: 128 random bits as hex, made once and kept. */
 export function contributorToken(storage = globalThis.localStorage, random = n => globalThis.crypto.getRandomValues(new Uint8Array(n))) {
@@ -68,6 +74,7 @@ export class CloudBrainClient {
     // stop recalls, and a recall does not end the contributions' backoff).
     this.backoff = {send: {failures: 0, retryAt: 0, error: null}, read: {failures: 0, retryAt: 0, error: null}};
     this.flushing = null;
+    this.verifyAt = 0;
     this.saveFailed = false;
     // The service refused this page's protocol or brain format: nothing more
     // is sent until the page reloads (a newer version).
@@ -305,6 +312,46 @@ export class CloudBrainClient {
     this.#set({received: this.status.received + r.pool.length});
     this.#ok('read');
     return r.pool;
+  }
+
+  /**
+   * POST /v1/verify (X1): the service drives a brain it holds on `track`
+   * ({width, height, inner, outer, checkpoints}) in `context`, from the
+   * start pose it finds from the gates. Returns the answer (wire.js
+   * parseVerifyResponse), {error} when the service refuses this
+   * verification (asking again would not help, except 'brain-unknown'
+   * while it does not hold the brain yet), or null (offline, waiting, or
+   * busy: try later).
+   */
+  async verify({vector, track, context}) {
+    if (!this.canTry('send') || this.now() < this.verifyAt) return null;
+    const answer = await this.#request('/v1/verify', verifyBody({token: this.token, vector, track, context}));
+    if (answer.error) { this.#failed('send', answer.error); return null; }
+    const wait = () => { this.verifyAt = this.now() + VERIFY_WAIT_MS * (0.8 + 0.4 * this.random()); return null; };
+    if (answer.status === 200) {
+      const r = parseVerifyResponse(answer.bytes);
+      return r.ok ? r : wait();
+    }
+    const {error} = parseErrorResponse(answer.bytes);
+    if (error === 'protocol' || error === 'brain-schema') { this.#failed('send', error); return null; }
+    if (answer.status >= 500 || answer.status === 429 || SERVICE_ERRORS.includes(error)) return wait();
+    return {error};
+  }
+
+  /**
+   * GET /v1/leaderboard (X1): {track, maxSpeed, traction, entries: [{id,
+   * lapFrames, laps, fitness, profile, verified}]} (wire.js
+   * parseLeaderboardResponse), or null.
+   */
+  async leaderboard({track, maxSpeed, traction}) {
+    if (!this.canTry('read')) return null;
+    const answer = await this.#request('/v1/leaderboard?' + boardQuery({track, maxSpeed, traction}));
+    if (answer.error) { this.#failed('read', answer.error); return null; }
+    if (answer.status !== 200) { this.#failed('read', parseErrorResponse(answer.bytes).error); return null; }
+    const r = parseLeaderboardResponse(answer.bytes);
+    if (!r.ok) { this.#failed('read', 'bad-answer'); return null; }
+    this.#ok('read');
+    return r;
   }
 
   /** GET /v1/stats: {brains, tracks, contributorsToday, contributions24h}, or null. */

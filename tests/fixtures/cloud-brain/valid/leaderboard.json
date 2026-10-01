@@ -1,0 +1,11 @@
+{
+ "description": "A track and its physics.",
+ "route": "leaderboard",
+ "body": "track=e9755c3b-fb81e227-361&maxSpeed=15&traction=0.5",
+ "expect": {
+  "ok": true,
+  "track": "e9755c3b-fb81e227-361",
+  "maxSpeed": 15,
+  "traction": 0.5
+ }
+}

@@ -48,6 +48,18 @@ async function run(fixture, body = fixture.body) {
     const r = wire.parseForget(body);
     return r.ok ? {ok: true} : refusal(r);
   }
+  if (route === 'verify') {
+    const r = await wire.parseVerify(body);
+    if (!r.ok) return refusal(r);
+    const g = r.geometry;
+    return {ok: true, id: r.id, context: r.context, points: [g.inner.length, g.outer.length, g.checkpoints.length]};
+  }
+  if (route === 'leaderboard') {
+    const r = wire.parseBoard(typeof body === 'string' ? body : new TextDecoder().decode(body));
+    return r.ok ? r : refusal(r);
+  }
+  if (route === 'verify-response') return wire.parseVerifyResponse(body);
+  if (route === 'leaderboard-response') return wire.parseLeaderboardResponse(body);
   if (route === 'recall-response') {
     const r = await wire.parseRecallResponse(body);
     if (!r.ok) return r;
@@ -89,7 +101,7 @@ test('every fixture gives its expected result', async () => {
       if ('body' in fixture) assert.deepEqual(await run(fixture), fixture.expect, `${kind}/${name} as text`);
       // A valid request is accepted whole, a valid answer read; an invalid
       // fixture refuses something (answers: refused, or an unknown error).
-      const answer = ['contribute-response', 'stats-response', 'error-response'].includes(fixture.route);
+      const answer = ['contribute-response', 'stats-response', 'error-response', 'verify-response', 'leaderboard-response'].includes(fixture.route);
       const refusedSomething = answer ? !result.ok || result.error === 'server-error'
         : !result.ok || result.rejected?.length || result.feedbackRejected?.length || result.dropped?.length;
       assert.equal(!!refusedSomething, kind === 'invalid', `${kind}/${name}`);

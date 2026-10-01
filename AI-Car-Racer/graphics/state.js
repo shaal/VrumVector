@@ -46,6 +46,15 @@ export function cleanLoop(points) {
 export function trackKey(road) {
   return JSON.stringify([road.innerList, road.outerList, road.checkPointList]);
 }
+// The short track key a learning context carries: two 32-bit hashes and the
+// length of trackKey. The cloud brain computes the same key from the walls
+// and gates a page sends it (cloud-brain/core wire.rs geometry_key, X1).
+export function geometryKey(road) {
+  const text = trackKey(road);
+  let a = 2166136261, b = 5381;
+  for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); a = Math.imul(a ^ c, 16777619); b = Math.imul(b, 33) ^ c; }
+  return `${(a >>> 0).toString(16)}-${(b >>> 0).toString(16)}-${text.length}`;
+}
 export function seededRandom(seed) {
   let h = 2166136261;
   for (const c of String(seed)) h = Math.imul(h ^ c.charCodeAt(0), 16777619);

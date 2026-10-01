@@ -1,0 +1,10 @@
+{
+ "description": "A verification of a brain the service does not hold (HTTP 400).",
+ "route": "error-response",
+ "body": "{\"protocol\":1,\"error\":\"brain-unknown\"}",
+ "expect": {
+  "ok": true,
+  "error": "brain-unknown",
+  "status": 400
+ }
+}

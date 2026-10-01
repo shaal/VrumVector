@@ -1,0 +1,9 @@
+{
+ "description": "An entry without a lap.",
+ "route": "leaderboard-response",
+ "body": "{\"protocol\":1,\"track\":\"e9755c3b-fb81e227-361\",\"maxSpeed\":15,\"traction\":0.5,\"entries\":[{\"id\":\"brain_4f4085434cf96eb7664f8a4d60f429ac\",\"lapFrames\":500,\"laps\":0,\"fitness\":6,\"profile\":\"balanced\",\"verified\":1790000000000}]}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

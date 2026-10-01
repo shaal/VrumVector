@@ -93,6 +93,18 @@ fn run(route: &str, bytes: &[u8], expect: &Value) -> Option<Value> {
             Err(r) => refusal(r),
             Ok(_) => json!({"ok": true}),
         },
+        "verify" => match wire::parse_verify(bytes) {
+            Err(r) => refusal(r),
+            Ok(v) => {
+                let g = &v.geometry;
+                json!({"ok": true, "id": v.id, "context": v.context, "points": [g.inner.len(), g.outer.len(), g.checkpoints.len()]})
+            }
+        },
+        // A leaderboard fixture's body is its query string.
+        "leaderboard" => match wire::parse_board(std::str::from_utf8(bytes).ok()?) {
+            Err(r) => refusal(r),
+            Ok(b) => json!({"ok": true, "track": b.track, "maxSpeed": b.max_speed, "traction": b.traction}),
+        },
         _ => return None,
     })
 }

@@ -1,0 +1,10 @@
+{
+ "description": "A bad vector and no track: the vector is checked first.",
+ "route": "verify",
+ "body": "{\"protocol\":1,\"brainSchema\":6,\"token\":\"0123456789abcdef0123456789abcdef\",\"vector\":\"AAAA\",\"track\":null,\"context\":{\"version\":1,\"profile\":\"balanced\",\"track\":\"1a2b3c4d-5e6f7a8b-812\",\"maxSpeed\":15,\"traction\":0.5,\"seconds\":20,\"collisions\":\"off\"}}",
+ "expect": {
+  "ok": false,
+  "error": "brain-encoding",
+  "status": 400
+ }
+}

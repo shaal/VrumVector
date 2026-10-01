@@ -42,6 +42,16 @@ export const LIMITS = Object.freeze({
   generation: 1e9,
   parentIds: 8,
   trackKey: 180,             // context.track: printable ASCII, cut to this
+  // A verification's track (X1): the game's canvas (its sides are walls),
+  // points a wall loop, gates, a coordinate's size; the longest run
+  // verified; leaderboard entries.
+  canvasWidth: 3200,
+  canvasHeight: 1800,
+  loopPoints: 256,
+  gates: 64,
+  coordinate: 1e5,
+  verifySeconds: 120,
+  boardSize: 20,
 });
 export const SOURCES = Object.freeze(['evolved', 'demonstration', 'cloud']);
 const TOKEN = /^[0-9a-f]{32}$/;
@@ -80,6 +90,11 @@ export const REASONS = Object.freeze({
   // one entry of a recall answer (checked by the browser)
   poolId: 'pool-id',
   poolDuplicate: 'pool-duplicate',
+  // a verification (X1): its track; a context that cannot run alone
+  // (collisions on, over 120 s); a leaderboard query
+  trackGeometry: 'track-geometry',
+  verifyContext: 'verify-context',
+  leaderboardQuery: 'leaderboard-query',
 });
 // Refusals only the service gives (CB4, CB5): in error answers, never from a parser here.
 export const SERVICE_ERRORS = Object.freeze(['rate-limited', 'disabled', 'server-error']);
@@ -88,6 +103,9 @@ export const SERVICE_ERRORS = Object.freeze(['rate-limited', 'disabled', 'server
 // for the same brain and context in one request (the first counts); a row in
 // a new context for a brain whose 8 contexts cannot be replaced.
 export const SERVICE_ITEM_REASONS = Object.freeze(['feedback-unknown', 'feedback-duplicate', 'feedback-full']);
+// Requests only the service refuses (X1): a verification of a brain it does
+// not hold (HTTP 400).
+export const SERVICE_REFUSALS = Object.freeze(['brain-unknown']);
 /** The HTTP status of an error answer. */
 export function httpStatus(reason) {
   if (reason === REASONS.bodyTooLarge) return 413;
@@ -396,6 +414,78 @@ export function parseForget(text) {
   return {ok: true, token};
 }
 
+// ─── verification (X1) ────────────────────────────────────────────────────
+
+const coordinate = v => (Array.isArray(v) && v.length === 2 && isNum(v[0], -LIMITS.coordinate, LIMITS.coordinate)
+  && isNum(v[1], -LIMITS.coordinate, LIMITS.coordinate) ? [v[0] + 0, v[1] + 0] : null);
+const wallLoop = v => {
+  if (!Array.isArray(v) || v.length < 3 || v.length > LIMITS.loopPoints) return null;
+  const points = v.map(coordinate);
+  return points.every(Boolean) ? points : null;
+};
+/** A verification's track: {width, height, inner, outer, checkpoints}, or null. */
+export function trackGeometry(g) {
+  if (!isObject(g)) return null;
+  const width = own(g, 'width'), height = own(g, 'height'), gates = own(g, 'checkpoints');
+  if (!isNum(width, LIMITS.canvasWidth, LIMITS.canvasWidth) || !isNum(height, LIMITS.canvasHeight, LIMITS.canvasHeight)) return null;
+  const inner = wallLoop(own(g, 'inner')), outer = wallLoop(own(g, 'outer'));
+  if (!inner || !outer || !Array.isArray(gates) || gates.length < 1 || gates.length > LIMITS.gates) return null;
+  const checkpoints = gates.map(gate => {
+    if (!Array.isArray(gate) || gate.length !== 2) return null;
+    const a = coordinate(gate[0]), b = coordinate(gate[1]);
+    return a && b ? [a, b] : null;
+  });
+  return checkpoints.every(Boolean) ? {width: width + 0, height: height + 0, inner, outer, checkpoints} : null;
+}
+
+/**
+ * POST /v1/verify (X1). Checks, in order: the body, token, the brain's vector
+ * (encoding, finite, weight range), the track (the game's canvas, 3 to 256
+ * points a wall loop, 1 to 64 gates), the context (an object; then
+ * collisions off and at most 120 seconds). The service finds the start pose
+ * from the gates itself.
+ */
+export async function parseVerify(text) {
+  const r = read(text);
+  if (!r.ok) return r;
+  const token = own(r.body, 'token');
+  if (typeof token !== 'string' || !TOKEN.test(token)) return refuse(REASONS.token);
+  const vector = decodeF32(own(r.body, 'vector'), DIMS.brain);
+  const problem = brainProblem(vector);
+  if (problem) return refuse(problem);
+  const geometry = trackGeometry(own(r.body, 'track'));
+  if (!geometry) return refuse(REASONS.trackGeometry);
+  const context = wireContext(own(r.body, 'context'));
+  if (!context) return refuse(REASONS.context);
+  if (context.collisions !== 'off' || context.seconds > LIMITS.verifySeconds) return refuse(REASONS.verifyContext);
+  return {ok: true, token, id: await brainId(vector), vector, geometry, context};
+}
+
+const TRACK_KEY = /^[0-9a-f]{1,8}-[0-9a-f]{1,8}-[0-9]{1,9}$/;
+const QUERY_NUMBER = /^[0-9.eE+-]+$/;
+/**
+ * GET /v1/leaderboard?track=<key>&maxSpeed=<n>&traction=<n> (X1): the query
+ * (in any order; other keys ignored; a key given twice keeps its last value),
+ * the numbers cleaned as a context's (maxSpeed 15 and traction 0.5 when absent).
+ */
+export function parseBoard(query) {
+  if (typeof query !== 'string') return refuse(REASONS.leaderboardQuery);
+  const input = {};
+  for (const pair of query.split('&')) {
+    if (!pair) continue;
+    const at = pair.indexOf('='), key = at < 0 ? pair : pair.slice(0, at), value = at < 0 ? '' : pair.slice(at + 1);
+    if (key === 'track') input.track = value;
+    else if (key === 'maxSpeed' || key === 'traction') {
+      const n = QUERY_NUMBER.test(value) ? Number(value) : NaN;
+      if (!Number.isFinite(n)) return refuse(REASONS.leaderboardQuery);
+      input[key] = n;
+    }
+  }
+  if (typeof input.track !== 'string' || !TRACK_KEY.test(input.track)) return refuse(REASONS.leaderboardQuery);
+  const context = wireContext(input);
+  return {ok: true, track: input.track, maxSpeed: context.maxSpeed, traction: context.traction};
+}
+
 // ─── answers (the browser) ────────────────────────────────────────────────
 
 // Every answer may be up to 256 KiB; only a recall answer carries a brain format.
@@ -439,7 +529,7 @@ export async function parseRecallResponse(text) {
   return {ok: true, pool, dropped};
 }
 
-const knownReason = new Set([...Object.values(REASONS), ...SERVICE_ERRORS, ...SERVICE_ITEM_REASONS]);
+const knownReason = new Set([...Object.values(REASONS), ...SERVICE_ERRORS, ...SERVICE_ITEM_REASONS, ...SERVICE_REFUSALS]);
 const reasonList = (v, max) => {
   const items = list(v);
   if (!items || items.length > max) return null;
@@ -469,6 +559,47 @@ export function parseErrorResponse(text) {
   const r = read(text, ANSWER);
   const error = r.ok ? own(r.body, 'error') : undefined;
   return {ok: true, error: knownReason.has(error) ? error : 'server-error'};
+}
+
+const frame = v => isInt(v, 1, LIMITS.verifySeconds * 60);
+/**
+ * The answer to a verification (X1): {ok, id, track, matched, fitness, laps,
+ * lapFrames, crashedAt, frames} or {ok: false, error: 'shape'} (anything out
+ * of its bounds).
+ */
+export function parseVerifyResponse(text) {
+  const r = read(text, ANSWER);
+  if (!r.ok) return r;
+  const b = r.body, id = own(b, 'id'), track = own(b, 'track'), laps = own(b, 'lapFrames'), crashedAt = own(b, 'crashedAt');
+  const ok = typeof id === 'string' && BRAIN_ID.test(id) && typeof track === 'string' && TRACK_KEY.test(track)
+    && typeof own(b, 'matched') === 'boolean' && isNum(own(b, 'fitness'), -LIMITS.fitness, LIMITS.fitness)
+    && isInt(own(b, 'laps'), 0, LIMITS.verifySeconds * 60) && Array.isArray(laps) && laps.length === own(b, 'laps') && laps.every(frame)
+    && (crashedAt === null || frame(crashedAt)) && isInt(own(b, 'frames'), 0, LIMITS.verifySeconds * 60);
+  if (!ok) return refuse(REASONS.shape);
+  return {ok: true, id, track, matched: own(b, 'matched'), fitness: own(b, 'fitness') + 0, laps: own(b, 'laps') + 0,
+    lapFrames: laps.map(f => f + 0), crashedAt: crashedAt === null ? null : crashedAt + 0, frames: own(b, 'frames') + 0};
+}
+
+/**
+ * The leaderboard (X1): {ok, track, maxSpeed, traction, entries: [{id,
+ * lapFrames, laps, fitness, profile, verified}]} (up to 20, the fastest first
+ * lap first), or {ok: false, error: 'shape'}.
+ */
+export function parseLeaderboardResponse(text) {
+  const r = read(text, ANSWER);
+  if (!r.ok) return r;
+  const b = r.body, entries = own(b, 'entries');
+  if (typeof own(b, 'track') !== 'string' || !TRACK_KEY.test(own(b, 'track')) || !isNum(own(b, 'maxSpeed'), 1, 100)
+    || !isNum(own(b, 'traction'), 0, 1) || !Array.isArray(entries) || entries.length > LIMITS.boardSize) return refuse(REASONS.shape);
+  const out = [];
+  for (const e of entries) {
+    if (!isObject(e) || typeof own(e, 'id') !== 'string' || !BRAIN_ID.test(own(e, 'id')) || !frame(own(e, 'lapFrames'))
+      || !isInt(own(e, 'laps'), 1, LIMITS.verifySeconds * 60) || !isNum(own(e, 'fitness'), -LIMITS.fitness, LIMITS.fitness)
+      || typeof own(e, 'profile') !== 'string' || !isInt(own(e, 'verified'), 0, Number.MAX_SAFE_INTEGER)) return refuse(REASONS.shape);
+    out.push({id: own(e, 'id'), lapFrames: own(e, 'lapFrames') + 0, laps: own(e, 'laps') + 0, fitness: own(e, 'fitness') + 0,
+      profile: cleanContext({profile: own(e, 'profile')}).profile, verified: own(e, 'verified') + 0});
+  }
+  return {ok: true, track: own(b, 'track'), maxSpeed: own(b, 'maxSpeed') + 0, traction: own(b, 'traction') + 0, entries: out};
 }
 
 /** GET /v1/stats: {ok, brains, tracks, contributorsToday, contributions24h} or {ok: false, error}. */
@@ -519,6 +650,18 @@ export function recallBody({trackVec, dynamicsVec = null, context, k = LIMITS.re
 }
 export function forgetBody({token}) {
   return JSON.stringify({protocol: PROTOCOL, token});
+}
+/**
+ * POST /v1/verify (X1): a brain the service holds, the track it ran on
+ * ({width, height, inner, outer, checkpoints}: points as [x, y]) and its
+ * learning context.
+ */
+export function verifyBody({token, vector, track, context}) {
+  return JSON.stringify({protocol: PROTOCOL, brainSchema: BRAIN_SCHEMA, token, vector: encodeF32(vector), track, context: cleanContext(context)});
+}
+/** The query of GET /v1/leaderboard (X1). */
+export function boardQuery({track, maxSpeed, traction}) {
+  return `track=${track}&maxSpeed=${Number(maxSpeed)}&traction=${Number(traction)}`;
 }
 /** An error answer's body; its HTTP status is httpStatus(error). */
 export function errorBody(error) {

@@ -1,0 +1,9 @@
+{
+ "description": "A track key whose length has 10 digits.",
+ "route": "verify-response",
+ "body": "{\"protocol\":1,\"id\":\"brain_f7f8d1c4119a66e85d7ed05f290501dd\",\"track\":\"1-2-1234567890\",\"matched\":true,\"fitness\":16,\"laps\":2,\"lapFrames\":[512,1010],\"crashedAt\":null,\"frames\":1200}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

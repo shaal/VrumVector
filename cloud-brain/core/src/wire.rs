@@ -36,6 +36,16 @@ pub mod limits {
     pub const GENERATION: f64 = 1e9;
     pub const PARENT_IDS: usize = 8;
     pub const TRACK_KEY: usize = 180;
+    /// A verification's track (X1): the game's canvas (main.js: 3200 × 1800;
+    /// its sides are walls, and the sensors' side inputs scale by its
+    /// diagonal, so it is part of the track), points a wall loop, gates, the
+    /// size of a coordinate; and the longest run it simulates.
+    pub const CANVAS_WIDTH: f64 = 3_200.0;
+    pub const CANVAS_HEIGHT: f64 = 1_800.0;
+    pub const LOOP_POINTS: usize = 256;
+    pub const GATES: usize = 64;
+    pub const COORDINATE: f64 = 100_000.0;
+    pub const VERIFY_SECONDS: f64 = 120.0;
 }
 use limits::*;
 
@@ -76,6 +86,18 @@ pub enum Reason {
     /// replaced (each reported more than once in the last 7 days, or in this
     /// request). Given by the service only.
     FeedbackFull,
+    /// A verification's track: its size, walls or gates are not a track
+    /// (X1).
+    TrackGeometry,
+    /// A verification's context cannot be simulated alone: collisions on,
+    /// or over 120 seconds (X1).
+    VerifyContext,
+    /// A verification of a brain the shared brain does not hold (X1). Given
+    /// by the service only.
+    BrainUnknown,
+    /// A leaderboard query without a track key, or with numbers that do
+    /// not read (X1).
+    LeaderboardQuery,
     RateLimited,
     Disabled,
     ServerError,
@@ -111,6 +133,10 @@ impl Reason {
             FeedbackUnknown => "feedback-unknown",
             FeedbackDuplicate => "feedback-duplicate",
             FeedbackFull => "feedback-full",
+            TrackGeometry => "track-geometry",
+            VerifyContext => "verify-context",
+            BrainUnknown => "brain-unknown",
+            LeaderboardQuery => "leaderboard-query",
             RateLimited => "rate-limited",
             Disabled => "disabled",
             ServerError => "server-error",
@@ -608,6 +634,150 @@ pub fn parse_recall(bytes: &[u8]) -> Result<Recall, Reason> {
 /// POST /v1/forget: the body (no brain format) and the token.
 pub fn parse_forget(bytes: &[u8]) -> Result<String, Reason> {
     token(&read(bytes, REQUEST_BYTES, false)?)
+}
+
+// ─── verification (X1) ──────────────────────────────────────────────────────
+
+/// A track as the page draws it: the canvas, the inner and outer wall loops,
+/// the gates in order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Geometry {
+    pub width: f64,
+    pub height: f64,
+    pub inner: Vec<[f64; 2]>,
+    pub outer: Vec<[f64; 2]>,
+    pub checkpoints: Vec<[[f64; 2]; 2]>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Verify {
+    pub token: String,
+    pub id: String,
+    pub vector: Vec<f32>,
+    pub geometry: Geometry,
+    /// The learning context the brain is run in (profile and physics).
+    pub context: Context,
+}
+
+fn coordinate(v: &Value) -> Option<[f64; 2]> {
+    let pair = v.as_array().filter(|a| a.len() == 2)?;
+    let (x, y) = (pair[0].as_f64()?, pair[1].as_f64()?);
+    (x.abs() <= COORDINATE && y.abs() <= COORDINATE).then_some([plain(x), plain(y)])
+}
+fn wall_loop(v: Option<&Value>) -> Option<Vec<[f64; 2]>> {
+    let items = v?.as_array().filter(|a| (3..=LOOP_POINTS).contains(&a.len()))?;
+    items.iter().map(coordinate).collect()
+}
+fn geometry(v: Option<&Value>) -> Option<Geometry> {
+    let g = v?.as_object()?;
+    let side = |k: &str, size: f64| is_num(g.get(k), size, size);
+    let checkpoints = g.get("checkpoints")?.as_array().filter(|a| (1..=GATES).contains(&a.len()))?;
+    let checkpoints = checkpoints
+        .iter()
+        .map(|gate| {
+            let ends = gate.as_array().filter(|a| a.len() == 2)?;
+            Some([coordinate(&ends[0])?, coordinate(&ends[1])?])
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(Geometry { width: side("width", CANVAS_WIDTH)?, height: side("height", CANVAS_HEIGHT)?, inner: wall_loop(g.get("inner"))?, outer: wall_loop(g.get("outer"))?, checkpoints })
+}
+
+/// POST /v1/verify (X1). In order: the body, token, the brain's vector
+/// (encoding, finite, weight range), the track (the game's canvas, 3 to 256
+/// points a wall loop, 1 to 64 gates, coordinates within ±100 000), the
+/// context (an object; then collisions off and at most 120 seconds). The
+/// service finds the start pose from the gates itself.
+pub fn parse_verify(bytes: &[u8]) -> Result<Verify, Reason> {
+    let body = read(bytes, REQUEST_BYTES, true)?;
+    let token = token(&body)?;
+    let vector = decode_f32(body.get("vector"), BRAIN_DIM);
+    if let Some(problem) = brain_problem(vector.as_deref()) {
+        return Err(problem);
+    }
+    let vector = vector.unwrap_or_default();
+    let geometry = geometry(body.get("track")).ok_or(Reason::TrackGeometry)?;
+    let context = wire_context(body.get("context")).ok_or(Reason::Context)?;
+    if context.collisions != "off" || context.seconds > VERIFY_SECONDS {
+        return Err(Reason::VerifyContext);
+    }
+    Ok(Verify { token, id: brain_id(&vector), vector, geometry, context })
+}
+
+/// A number as JavaScript writes it (`Number.prototype.toString`, which
+/// `JSON.stringify` uses): the shortest digits that read back, the even
+/// one of two equally near, an exponent below 1e-6 and from 1e21, no
+/// trailing `.0`; -0 is `0` (the `ryu-js` crate: Rust's own formatting
+/// breaks those ties the other way).
+pub fn js_number(x: f64) -> String {
+    if x == 0.0 {
+        return "0".into();
+    }
+    ryu_js::Buffer::new().format(x).to_string()
+}
+
+/// `JSON.stringify([inner, outer, checkpoints])` as the page writes it
+/// (graphics/state.js `trackKey`), points as `{x, y}` objects.
+fn geometry_text(g: &Geometry) -> String {
+    let point = |p: &[f64; 2]| format!("{{\"x\":{},\"y\":{}}}", js_number(p[0]), js_number(p[1]));
+    let list = |ps: &[[f64; 2]]| format!("[{}]", ps.iter().map(point).collect::<Vec<_>>().join(","));
+    let gates = format!("[{}]", g.checkpoints.iter().map(|gate| list(gate)).collect::<Vec<_>>().join(","));
+    format!("[{},{},{}]", list(&g.inner), list(&g.outer), gates)
+}
+
+/// The SHA-256 (hex) of the text the track key hashes: what pins a key to
+/// one geometry (the key is two 32-bit hashes, not a digest).
+pub fn geometry_digest(g: &Geometry) -> String {
+    Sha256::digest(geometry_text(g).as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The page's own track key (graphics/state.js `geometryKey`): two 32-bit
+/// hashes and the length of `geometry_text`.
+pub fn geometry_key(g: &Geometry) -> String {
+    let text = geometry_text(g);
+    let (mut a, mut b) = (2_166_136_261u32, 5381u32);
+    // The text is ASCII: its UTF-16 units are its bytes.
+    for c in text.bytes() {
+        a = (a ^ u32::from(c)).wrapping_mul(16_777_619);
+        b = b.wrapping_mul(33) ^ u32::from(c);
+    }
+    format!("{a:x}-{b:x}-{}", text.len())
+}
+
+/// A track key as `geometry_key` writes it.
+pub fn is_track_key(s: &str) -> bool {
+    let parts: Vec<&str> = s.split('-').collect();
+    let hex = |p: &str| (1..=8).contains(&p.len()) && p.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+    parts.len() == 3 && hex(parts[0]) && hex(parts[1]) && (1..=9).contains(&parts[2].len()) && parts[2].bytes().all(|b| b.is_ascii_digit())
+}
+
+/// GET /v1/leaderboard: a track key, and the physics (cleaned as a
+/// context's: maxSpeed 15 and traction 0.5 when absent).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Board {
+    pub track: String,
+    pub max_speed: f64,
+    pub traction: f64,
+}
+
+/// `track=<key>&maxSpeed=<n>&traction=<n>` (in any order; other keys are
+/// ignored; a key given twice keeps its last value).
+pub fn parse_board(query: &str) -> Result<Board, Reason> {
+    let mut map = Map::new();
+    for pair in query.split('&').filter(|p| !p.is_empty()) {
+        let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+        let value = match k {
+            "track" => Value::String(v.to_string()),
+            "maxSpeed" | "traction" => {
+                let n = v.parse::<f64>().ok().filter(|n| n.is_finite() && !v.is_empty() && v.bytes().all(|b| b.is_ascii_digit() || b == b'.' || b == b'-' || b == b'e' || b == b'E' || b == b'+'));
+                Value::from(n.ok_or(Reason::LeaderboardQuery)?)
+            }
+            _ => continue,
+        };
+        map.insert(k.to_string(), value);
+    }
+    let track = string(map.get("track")).filter(|t| is_track_key(t)).ok_or(Reason::LeaderboardQuery)?.to_string();
+    let context = wire_context(Some(&Value::Object(map))).ok_or(Reason::LeaderboardQuery)?;
+    Ok(Board { track, max_speed: context.max_speed, traction: context.traction })
 }
 
 // ─── answers ─────────────────────────────────────────────────────────────────

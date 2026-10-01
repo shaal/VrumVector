@@ -1,0 +1,16 @@
+{
+ "description": "A run that crashed at frame 40 without a lap.",
+ "route": "verify-response",
+ "body": "{\"protocol\":1,\"id\":\"brain_f7f8d1c4119a66e85d7ed05f290501dd\",\"track\":\"e9755c3b-fb81e227-361\",\"matched\":false,\"fitness\":1,\"laps\":0,\"lapFrames\":[],\"crashedAt\":40,\"frames\":40}",
+ "expect": {
+  "ok": true,
+  "id": "brain_f7f8d1c4119a66e85d7ed05f290501dd",
+  "track": "e9755c3b-fb81e227-361",
+  "matched": false,
+  "fitness": 1,
+  "laps": 0,
+  "lapFrames": [],
+  "crashedAt": 40,
+  "frames": 40
+ }
+}

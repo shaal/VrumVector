@@ -10,17 +10,34 @@
 // - brains the bridge archives, and offspring feedback, are queued with their
 //   cloud ids (SHA-256 of the weights) and pushed at most every 10 s;
 // - a pool for the current track is pulled when the page starts, when the
-//   track changes, and every few generations, and enters the replica.
-import {brainToWire, feedbackToWire, brainId, encodeF32, DIMS, LIMITS} from './wire.js';
+//   track changes, and every few generations, and enters the replica;
+// - a brain that drove a lap is verified once it is sent (X1): the service
+//   drives it on the page's walls and gates, alone, from main.js's start; the
+//   leaderboard for the track and physics is read every minute and after a
+//   verification.
+import {brainToWire, feedbackToWire, brainId, encodeF32, trackGeometry, boardQuery, parseBoard, DIMS, LIMITS} from './wire.js';
 import {CloudBrainClient, contributorToken} from './client.js';
 import {saveBrainMode, consented} from './mode.js';
 import {mountMemoryControl, ARRIVAL_DISCLOSURE} from './ui.js';
+import {geometryKey} from '../graphics/state.js';
 
 export const FLUSH_MS = 10_000;
 const STATS_MS = 60_000;
 const TRACK_POLL_MS = 5_000;
 /** A pull every this many generations (and on a new track). */
 export const PULL_EVERY = 5;
+/** Brains waiting for a verification (the fastest laps are kept). */
+export const VERIFY_QUEUE = 4;
+/** Times the service may not hold a brain yet (another tab may still be sending it). */
+export const VERIFY_TRIES = 3;
+/** The leaderboard is read again after this long (and after a verification). */
+export const BOARD_MS = 60_000;
+
+/** The key the service gives a verification's track (wire.rs geometry_key). */
+export function trackKeyOf(track) {
+  const point = ([x, y]) => ({x, y});
+  return geometryKey({innerList: track.inner.map(point), outerList: track.outer.map(point), checkPointList: track.checkpoints.map(g => g.map(point))});
+}
 
 /** v scaled to length 1 (the wire needs unit vectors), or null. */
 export function unit(v) {
@@ -81,6 +98,16 @@ export class SharedSession {
     this.pulls = 0;
     this.accepted = 0;
     this.pending = new Set(); // queueing work in flight (tests await it)
+    this.verifications = []; // brains waiting for a verification, the fastest lap first
+    this.verifying = null;
+    this.verified = []; // the service's answers, newest last (up to VERIFY_QUEUE)
+    this.mine = new Set(); // ids this page had verified
+    this.board = null;
+    this.boardKey = null;
+    this.boardAt = -Infinity;
+    this.boardSeq = 0;
+    this.stopped = false;
+    this.onBoard = null; // (board or null, {mine, last}) when the leaderboard is read or no longer this page's
   }
 
   start() {
@@ -89,20 +116,28 @@ export class SharedSession {
       onFeedback: rows => this.#track(this.pushFeedback(rows)),
     });
     if (this.every) {
-      this.timers.push(this.every(() => this.client.flush(), FLUSH_MS));
+      this.timers.push(this.every(() => this.#track(this.tick()), FLUSH_MS));
       this.timers.push(this.every(() => this.poll(), TRACK_POLL_MS));
       this.timers.push(this.every(() => this.client.stats(), STATS_MS));
     }
     this.client.announce();
     this.client.stats();
+    this.refreshBoard();
     return this.maybePull();
   }
   /** Every few seconds: a pull when due, and, once a retry is due, a try. */
   poll() {
     if (this.client.status.state !== 'online' && this.client.canTry('read')) this.client.stats();
+    this.refreshBoard();
     return this.maybePull();
   }
+  /** Every FLUSH_MS: what waits is sent, then a brain that drove a lap is verified. */
+  async tick() {
+    await this.client.flush();
+    return this.verifyNext();
+  }
   stop() {
+    this.stopped = true;
     this.bridge.setCloudHooks(null);
     for (const t of this.timers) this.stop_?.(t);
     this.timers = [];
@@ -135,8 +170,87 @@ export class SharedSession {
       vector, fitness, dynamicsVec: unit(dynamicsVec),
       meta: {generation: meta.generation, parentIds: parents, fastestLap: meta.fastestLap, source: meta.source || 'evolved', learning},
     });
-    const track = unit(trackVec);
-    return this.client.enqueueBrain({id: await brainId(vector), brain, track: track && track.length === DIMS.track ? encodeF32(track) : null});
+    const track = unit(trackVec), id = await brainId(vector);
+    const queued = await this.client.enqueueBrain({id, brain, track: track && track.length === DIMS.track ? encodeF32(track) : null});
+    this.queueVerification({vector, meta}, id);
+    return queued;
+  }
+
+  /**
+   * A brain that drove a lap here (X1), kept for a verification with the
+   * page's walls and gates, when they are the track it learned on (its
+   * context's key). The service runs a context alone: not with car
+   * collisions, nor longer than 120 s. Returns whether it waits.
+   */
+  queueVerification({vector, meta = {}}, id) {
+    const context = meta.learningContext;
+    if (!(meta.fastestLap > 0) || !context || context.collisions !== 'off' || !(context.seconds <= LIMITS.verifySeconds)) return false;
+    if (this.verifications.some(v => v.id === id) || this.mine.has(id)) return false;
+    let track = null;
+    try { track = trackGeometry(this.page.geometry?.()); } catch { /* no track */ }
+    if (!track || trackKeyOf(track) !== context.track) return false;
+    const item = {id, vector: Float32Array.from(vector), track, context, lap: meta.fastestLap, tries: 0};
+    this.verifications.push(item);
+    this.verifications.sort((a, b) => a.lap - b.lap);
+    this.verifications.length = Math.min(this.verifications.length, VERIFY_QUEUE);
+    return this.verifications.includes(item);
+  }
+
+  /**
+   * The fastest lap waiting, once sent (a brain still in the outbox waits),
+   * verified: one a call, so the flush timer's every 10 s stays within the
+   * service's 6 a minute. Returns the service's answer, {error}, or null.
+   */
+  verifyNext() {
+    if (this.verifying) return this.verifying;
+    const unsent = new Set(this.client.outbox.brains.map(b => b.id));
+    const item = this.verifications.find(v => !unsent.has(v.id));
+    if (!item) return Promise.resolve(null);
+    const done = () => { this.verifications = this.verifications.filter(v => v !== item); };
+    this.verifying = (async () => {
+      const r = await this.client.verify(item);
+      if (!r) return null; // offline or busy: it waits
+      if (r.error) {
+        // Not held yet, or never: a few more tries, then it goes.
+        if (r.error !== 'brain-unknown' || ++item.tries >= VERIFY_TRIES) done();
+        return r;
+      }
+      done();
+      this.mine.add(r.id);
+      this.verified = [...this.verified, r].slice(-VERIFY_QUEUE);
+      await this.refreshBoard({force: true});
+      return r;
+    })().finally(() => { this.verifying = null; });
+    return this.verifying;
+  }
+
+  /**
+   * The leaderboard for the current track and physics: read when they
+   * change, after BOARD_MS, or when forced (after a verification).
+   */
+  async refreshBoard({force = false} = {}) {
+    if (this.stopped) return null;
+    let context = null;
+    try { context = this.page.context(); } catch { /* none yet */ }
+    const query = context && {track: context.track, maxSpeed: context.maxSpeed, traction: context.traction};
+    const key = query && parseBoard(boardQuery(query)).ok ? boardQuery(query) : null;
+    // Another track or physics (or none): the board shown is not this one's.
+    if (key !== this.boardKey && this.board) this.#show(null);
+    if (!key) { this.boardKey = null; return null; }
+    if (!force && key === this.boardKey && this.client.now() - this.boardAt < BOARD_MS) return this.board;
+    // One read a key a minute; a change, or a force, reads again. Only the
+    // latest read is shown (an earlier one may answer after it).
+    const seq = ++this.boardSeq;
+    this.boardKey = key;
+    this.boardAt = this.client.now();
+    const board = await this.client.leaderboard(query);
+    if (!board || seq !== this.boardSeq || this.stopped) return null;
+    this.#show(board);
+    return board;
+  }
+  #show(board) {
+    this.board = board;
+    try { this.onBoard?.(board, {mine: this.mine, last: this.verified.at(-1) || null}); } catch { /* the UI's problem */ }
   }
 
   /** Offspring feedback the bridge applied: into the outbox, as cloud ids. */
@@ -180,6 +294,14 @@ export class SharedSession {
     })().finally(() => { this.pulling = null; });
     return this.pulling;
   }
+}
+
+/** The page's track as a verification sends it: main.js's road (its walls, gates and canvas sides), or null. */
+export function pageGeometry(r = typeof road === 'undefined' ? null : road) {
+  if (!r || r.left !== 0 || r.top !== 0 || !Array.isArray(r.innerList) || !Array.isArray(r.outerList) || !Array.isArray(r.checkPointList)) return null;
+  const xy = p => [p?.x, p?.y];
+  return {width: r.right, height: r.bottom, inner: r.innerList.map(xy), outer: r.outerList.map(xy),
+    checkpoints: r.checkPointList.map(g => (Array.isArray(g) ? g.map(xy) : null))};
 }
 
 /**
@@ -226,8 +348,12 @@ export async function startCloudBrain(bridge, {win = globalThis.window, ask = te
       context: () => { try { return bridge.info().learning?.context || null; } catch { return null; } },
       // Generations trained on this page (the driver-learning coach's rounds).
       generation: () => (Number.isFinite(win?.DriverLearning?.coach?.rounds) ? win.DriverLearning.coach.rounds : null),
+      // The walls and gates the cars learn on (X1): main.js's `road`, a
+      // top-level const of a classic script.
+      geometry: () => pageGeometry(),
     },
   });
+  session.onBoard = (board, about) => ui.setBoard(board, about);
   if (win) win.__rvCloud = session;
   // (Unsent brains survive a reload in the outbox: nothing is sent on the way out.)
   session.start();

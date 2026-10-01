@@ -1,0 +1,11 @@
+{
+ "description": "A length of 9 digits.",
+ "route": "leaderboard",
+ "body": "track=1-2-123456789",
+ "expect": {
+  "ok": true,
+  "track": "1-2-123456789",
+  "maxSpeed": 15,
+  "traction": 0.5
+ }
+}

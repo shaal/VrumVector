@@ -10,7 +10,7 @@ description = "One shared vector memory for VectorVroom, as a Rust Worker (docs/
 # .work/ holds the fetched ruvector sources, a workspace of their own, and
 # core/fuzz the fuzz targets (nightly, CB4).
 [workspace]
-members = ["core"]
+members = ["core", "sim"]
 exclude = [".work", "core/fuzz"]
 
 [dependencies]

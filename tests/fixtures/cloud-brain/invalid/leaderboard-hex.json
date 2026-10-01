@@ -1,0 +1,10 @@
+{
+ "description": "maxSpeed=0x10: not a decimal number.",
+ "route": "leaderboard",
+ "body": "track=e9755c3b-fb81e227-361&maxSpeed=0x10",
+ "expect": {
+  "ok": false,
+  "error": "leaderboard-query",
+  "status": 400
+ }
+}

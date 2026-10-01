@@ -1,0 +1,15 @@
+[package]
+name = "vectorvroom-sim"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "The game's deterministic core in Rust (X1): car physics, the 7 rays, the 10-16-4 network, the driving styles, checkpoints and laps, as AI-Car-Racer's car.js, sensor.js, network.js, utils.js, spatialGrid.js and driver/profiles.js run them. The cloud brain re-simulates a brain with it to verify a lap."
+
+[dependencies]
+# Platform-independent math (the same results natively and in Wasm).
+libm = "0.2"
+
+[dev-dependencies]
+# The traces' numbers read back exactly as JavaScript wrote them.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+base64 = "0.22"

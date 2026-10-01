@@ -1,0 +1,11 @@
+{
+ "description": "maxSpeed 0 is 15; other keys are ignored; empty pairs too.",
+ "route": "leaderboard",
+ "body": "x=1&&track=e9755c3b-fb81e227-361&maxSpeed=0&y",
+ "expect": {
+  "ok": true,
+  "track": "e9755c3b-fb81e227-361",
+  "maxSpeed": 15,
+  "traction": 0.5
+ }
+}

@@ -1,0 +1,11 @@
+{
+ "description": "A key given twice keeps its last value; 1e1 and +7.5 are numbers.",
+ "route": "leaderboard",
+ "body": "track=1-2-3&track=e9755c3b-fb81e227-361&maxSpeed=1e1&traction=+.25&maxSpeed=+7.5",
+ "expect": {
+  "ok": true,
+  "track": "e9755c3b-fb81e227-361",
+  "maxSpeed": 7.5,
+  "traction": 0.25
+ }
+}

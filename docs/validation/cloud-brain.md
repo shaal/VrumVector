@@ -669,3 +669,152 @@ restart or a contribution at the cap fits (D2).
   Cloudflare's limiter counts per location and is approximate.
 - `fastestLap` in meta is served as claimed (it does not rank).
 - The page has no "forget me" control yet; the route is there.
+
+## X1: verified laps and a leaderboard
+
+A claimed fitness is a claim; a lap the service drove itself is not. X1
+ports the game's simulation to Rust, has the service drive a brain on the
+page's track, serves the result as the brain's fitness in its own context
+(past quarantine), and lists the fastest verified first laps per track.
+
+### What it does
+
+- **The simulator** (`cloud-brain/sim`, crate `vectorvroom-sim`; the
+  plan's `vv-sim`) ports the deterministic core as the trial worker runs
+  it: car.js (driving, sliding, traction, `#move`, the polygon and wall
+  test, gates in order and laps), sensor.js (7 rays of 400 px) on
+  spatialGrid.js's 200 px cells, network.js's 10-16-4 forward pass (f32
+  weights, f64 sums, `tanh` hidden, `sum > bias` outputs),
+  driver/profiles.js (the five profiles' pace, corners, braking and
+  patience) and main.js's `computeStartInfoInPlace`. One car alone, sensors
+  every frame, no start jitter: the browser reuses controls between sensor
+  reads at high simulation speeds and may run cars together, so a
+  verification measures the brain, not one browser run of it.
+- **Math as V8 does it.** `Math.hypot` is V8's own algorithm (largest
+  magnitude, then a compensated sum), `Math.tanh` fdlibm's (which V8 uses),
+  both bit for bit; `sin`, `cos` and `atan2` are musl's (the `libm` crate),
+  within 1 ulp of V8's (on 400 000 values the simulation meets, 2.5 % of
+  `sin` results differ by 1 ulp). Every function gives the same bits
+  natively and in Wasm.
+- **`POST /v1/verify`** `{protocol, brainSchema, token, vector, track:
+  {width, height, inner, outer, checkpoints}, context}` → `{protocol, id,
+  track, matched, fitness, laps, lapFrames, crashedAt, frames}`. Checked in
+  order: the body, token, the brain's vector, the track (the game's
+  3200 × 1800 canvas: its sides are walls and the sensors' side inputs
+  scale by its diagonal, so another size would be another track; loops of
+  3 to 256 points, 1 to 64 gates, coordinates within ±100 000), the context
+  (collisions off and at most 120 s, else `verify-context`). A brain the
+  service does not hold: 400 `brain-unknown`, not counted. The service finds
+  the start pose from the gates as main.js does (a `start` in the body is
+  not read): a run depends on the brain, the track and the context only, so
+  whoever asks gets the same run. It drives `floor(seconds × 60)` frames, or
+  until the car crashes.
+- **A budget of work.** The car counts the segments its grid queries
+  return (`Car::work`). Past 600 a frame on average the run stops and the
+  verification is refused, `track-geometry` (counted: it ran): the ten presets take at most
+  37 a frame, a track built so every wall is in every ray's way takes 1 500
+  to 4 200.
+- **The track key** of the geometry is the page's own: graphics/state.js's
+  `geometryKey` (FNV-1a and djb2 over `JSON.stringify([inner, outer,
+  checkpoints])`, moved there from learning/session.js) is computed in Rust,
+  numbers written as JavaScript writes them (the `ryu-js` crate: Rust's own
+  formatting breaks exact ties between two shortest forms the other way).
+  `matched` says whether it is the context's `track`; the run is kept under
+  the key of the geometry sent, never under the context's word.
+- **One geometry a key.** A key is two 32-bit hashes, not a digest: a
+  second track can be built to share one (about 2^32 work). So the first
+  geometry run under a key is the only one ever run under it: the SHA-256
+  of the text the key hashes is kept (`geometries`), and another geometry
+  with that key is refused, `track-geometry`, before it is counted. The ten
+  presets' keys are pinned to their own geometries when the object opens.
+- **Standing.** In a recall whose context is the brain's own (its key,
+  profile, speed, traction and seconds, collisions off), a run there is its
+  fitness: the claim and the quarantine no longer count. Its contributors'
+  reports in that context are measured against the run, not the claim (a
+  claim made low on purpose would make every offspring look better). In
+  every other context, and for eviction and each track's protected best,
+  CB4's rules hold: the brain's contributor chooses the track it ran on, and
+  a track anyone can make up (one gate under a parked car counts a lap every
+  frame, in the game too) protects nothing elsewhere. Runs in other
+  contexts count only on the leaderboard. A brain keeps 4 runs (the oldest
+  go first, never the one in its own context); they go with the brain;
+  forget takes the token's id off the runs it asked for (`verified` and
+  `geometries` tables, SQL schema 3).
+- **`GET /v1/leaderboard?track=&maxSpeed=&traction=`** → `{protocol, track,
+  maxSpeed, traction, entries}`: up to 20 `{id, lapFrames, laps, fitness,
+  profile, verified}`, a brain once at its best run, of brains the service
+  holds, the fastest first lap first (then fitness, then the oldest),
+  whatever profile or run length. `maxSpeed` and `traction` are cleaned as a
+  context's (15 and 0.5 when absent); a bad query is 400
+  `leaderboard-query`.
+- **Limits.** 6 verifications a minute per address (the `VERIFY_LIMIT`
+  binding; the leaderboard counts as a read); each one counts a request and
+  a brain on the token's daily quota; and at most 30 a minute for everyone
+  (in the object's memory): the object answers one request at a time, and
+  a verification takes up to ~0.1 s, so at most ~3 s of a minute.
+- **The browser** (cloud/session.js, client.js, ui.js). A brain the bridge
+  archives with a `fastestLap`, learned with collisions off in at most
+  120 s on the page's current track (the key of the walls and gates it
+  would send is its context's), waits for a verification with main.js's
+  `road`; the 4 with the fastest laps wait. Once its brain has left the
+  outbox, the flush timer verifies one every 10 s (within the 6 a minute);
+  `brain-unknown` is tried 3 times (another tab may still be sending it), a
+  busy or paused service makes the next wait a minute without holding
+  contributions or recalls. The leaderboard for the current track and
+  physics is read on start, when they change (the line is cleared first),
+  every minute and after a verification; only the latest read is shown.
+  The Memory panel shows it: "Fastest verified laps here: 1. 16.63 s
+  (yours) · your last car verified: 16.63 s". What shared mode sends now
+  says the track's walls and checkpoints go with a car that drove a lap
+  (nothing was deployed, so no consent was given to the earlier text).
+
+### Measured
+
+| | |
+|---|---|
+| Fidelity, the fixture (125 cases: the five presets, 2 random and 3 evolved brains each, 7 settings of 20 and 40 s; 20 lap, from 4 brains on the Rectangle, Monza and Monaco: no brain the learning loop evolved in 80 generations laps the Oval or the Triangle) | 125 identical, from the browser's start pose and from the port's own: every frame's controls, the outcome (fitness, laps, lap frames, crash frame); states every 30 frames within 1e-9 relative, 3 837 of 4 352 bit for bit |
+| Fidelity, the fixture's cases and 2 000 more random brains and settings on all ten presets (`--extra 2000`, `SIM_TRACES`) | 2 125 identical (21 lap), from the browser's start pose and from the port's own; 52 702 of 53 500 states bit for bit; no case parted at a near-threshold frame |
+| The start pose | x and y exact on the five presets, the heading within 2 ulps; the port's own drives every case of both sets as the browser's |
+| Track keys | `js_number` equals `JSON.stringify` on the fixture's 1 128 numbers and on 757 787 more (random bits, ties, powers of ten and their neighbours) |
+| Native speed (release, Apple M3 Max) | 0.9 to 1.5 µs a frame: 6.5 to 10.9 ms for 120 s |
+| A verification over HTTP (`wrangler dev`, Wasm) | 7 to 18 ms for 1 200 frames (the round trip, the run and the write) |
+| Work a frame (segments examined) | at most 36 in the fixture, 37 in the extended set (all ten presets) |
+| A track made to be costly (`sim/tests/cost.rs`: walls zigzagging across the canvas within the sensors' reach of a car that never moves, or as diagonals over every grid cell; 64 gates; 120 s) | without the budget 65 and 237 ms native (11.4 and 30.0 million segments); stopped by it after 25 and 34 ms native, 46 to 98 ms under `wrangler dev` |
+
+On the Workers Free plan (10 ms CPU a request) a verification of a 20 s run
+is at the limit and longer ones do not fit (D2).
+
+### Evidence
+
+| Claim | Test |
+|---|---|
+| The simulator drives as the game | `cargo test -p vectorvroom-sim` (`sim/tests/traces.rs`): the golden traces of `node scripts/cloud-brain-sim-traces.mjs` (the game's classic scripts in a Node vm, Math.random seeded, brains from the game's `LearningCoach`) as in the table, from either start pose; `sim/tests/cost.rs`: the costly tracks run without a crash (their timing probe is `--ignored`) |
+| The service | `cargo test` (`core/tests/verify.rs`, 17 tests): the track key and `js_number` equal the page's; the ten presets pinned to their geometries (the keys and SHA-256 Node computed) when the brain opens; a player's track pinned by its first run, another geometry under a pinned key refused before it is counted, pins kept by a rebuild; every lapping case's verification equals the game's outcome and becomes the brain's served fitness in its own context, also after a rebuild; a run in another context or on another key decides nothing, after a rebuild too; a made-up one-gate track (1 200 in 20 s) counts only in its own context, served 0 on the real Rectangle, and is evicted before a corroborated brain; reports measured against the run (a claim of -1e6 no longer lifts the weight to 1); the leaderboard's order (first lap, fitness, age), a brain once, at most 20, physics, eviction; `brain-unknown` before any counting; 30 a minute for everyone, then `Retry-After` to the next minute, not counted; 4 runs a brain, always the own context's; forget; another token's run, with a start pose in the body, is the same run, and another canvas is refused; the costly tracks stopped and refused, their keys not pinned (nor one asked about past the minute's 30), a track at ~543 segments a frame run and one at ~663 stopped; runs that differ only in length are two runs; hostile bodies and queries refused with their reasons. `npm run test:cloud-brain` (wire 10, client 23): the fixtures for `verify`, `leaderboard` and their answers (66 valid, 147 invalid in all), the client's verify and leaderboard, the session's queue (each reason not to verify alone, the 4 fastest, after sending, retries, one at a time), the leaderboard's reads (a late answer, an old track's board, no track then the same track again, a read in flight at stop, none after), the page geometry and the panel's line |
+| The Worker | `npm run test:cloud-brain:service` (17 tests): every fixture over HTTP; the migration to schema 3 (its tables, the presets pinned); a claim of 1e6 served as 0, then the verified run's fitness; the verification equal to the game's run; the leaderboard, and its order from rows written into SQLite and read after a restart (a brain once); `brain-unknown`; 6 verifications a minute from one address then 429; both costly tracks stopped and refused within 0.1 s |
+| The browser | `npm run test:cloud-brain:browser`: on the real service, a brain the game evolved on the Rectangle (the page's default track: its key is the fixture's) is archived through the bridge with a lap, sent, verified with the same outcome as the game's (fitness 6, its lap at frame 998), served with that fitness in its context, and shown in the Memory panel ("Fastest verified laps here: 1. 16.63 s (yours) · your last car verified: 16.63 s"); another profile sees it without "(yours)" |
+| Fuzzing | `bash scripts/fuzz-cloud-brain.sh 300`: `wire` now also takes every body through `parse_verify` (what it accepts holds the track's bounds and the game's canvas) and drives each accepted track for 2 s within its budget, and `parse_board`; `brain` adds verifications (on the traces' tracks with their evolved brains, a made-up one-gate track, degenerate and costly tracks) and leaderboards to its request sequences, and checks after every step that a verified fitness is served only in the brain's own context, every run's key is pinned (the presets' to theirs), at most 4 runs a brain, a board of held brains with a lap, each once, in order, and a rebuild's boards equal the live ones. On the final code, 5 minutes each: `wire` 2 004 011 inputs, `brain` 31 018 sequences, clean |
+| Reviews | Three adversarial reviews (correctness, abuse, spec fit) found: a run on a made-up one-gate track served everywhere (fitness 7 200 for a parked car), anyone able to change a brain's standing by verifying it on another canvas size (not in the key), reports measured against a claim made low on purpose, a worst case 4 times the measured one (walls as diagonals over a 10 000 px canvas), `js_number` breaking ties unlike JavaScript (599 of 757 787 numbers), the sim test reading JavaScript's numbers a bit off (no `float_roundtrip`: 2 010 states bit for bit, not 2 753), a brain listed up to 4 times, a client test whose cases were refused for the wrong reason (4 surviving mutants), untested leaderboard order and rebuild paths (3 more), thin lap evidence (15 cases from 3 brains), and client races (a late board shown, an old track's board left up). All are fixed and tested above. A second round (trust and abuse; integration, parity and tests) found no way past the fixes (the canvas pin, the context binding, the pins and the budget held under its probes; 20 000 leaderboard queries and 6 000 verify bodies parsed the same in JavaScript and Rust; `js_number` equal on 414 720 more numbers) and 9 mutants that survived the tests (a track refused for its key, not its own check; a pin written before the run; runs differing only in length merged; a budget twice as loose; three session races; a 10-digit key length; an unchecked crash frame), and stale figures. All are tested above: each of those mutants now fails a test. |
+
+### Limits
+
+- A verification measures the brain on the page's walls and gates as the
+  service runs it: alone, sensors every frame, from main.js's start pose.
+  The browser's own runs differ at high simulation speeds (controls reused
+  between sensor reads), with pose jitter on, or with car collisions; that
+  is the browser's run, not the brain's.
+- A track of a player's own is pinned by its first verification: someone
+  who builds a second track with its key (about 2^32 work) and verifies on
+  it first decides what runs under that key (the presets are pinned from
+  the start).
+- Anyone can verify any brain the service holds, in any context. In its
+  own context that is the same run whoever asks; in four other contexts it
+  pushes out the brain's other runs (and their leaderboard entries).
+- 30 verifications a minute for everyone: five addresses at their limit
+  use them up, and the rest wait a minute (training and recalls do not).
+- One contributor can list up to 20 slightly changed copies of a brain
+  that laps.
+- With Adaptive Gates on, a generation that moved the gates is not
+  verified (its walls and gates are not its context's track).
+- The queue keeps the 4 brains with the fastest laps the browser saw; the
+  leaderboard ranks the first lap the service drove.
+- The client does not read `Retry-After` (as in CB4).
