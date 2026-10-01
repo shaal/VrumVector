@@ -67,32 +67,50 @@ retries about once a minute (the client does not read `Retry-After` yet).
 
 ## Emergency disablement
 
-This answers every `/v1/` route with 503 `disabled` without changing the
-Pages site. Pages show "unavailable" and train from their own memory.
+This answers every `/v1/` route with 503 `disabled` without a build and
+without changing the Pages site. Pages show "unavailable" and train from
+their own memory. A secret stays through later deploys:
 
 ```sh
 cd cloud-brain
-npx wrangler deploy --name vectorvroom-brain --var DISABLE_BRAIN:true
+echo true | npx wrangler secret put DISABLE_BRAIN --name vectorvroom-brain
 ```
 
-While disabled, `/health` returns `"brain":false`. Deploy normally (or let
-the next `main` deploy run) to turn it back on; the normal configuration
-does not set the variable. The data stays in the Durable Object either way.
+While disabled, `/health` returns `"brain":false`. Later `main` deploys
+then fail their health check on purpose and keep the Shared option hidden.
+Turn it back on with:
+
+```sh
+npx wrangler secret delete DISABLE_BRAIN --name vectorvroom-brain
+```
+
+and re-run the latest `main` deploy so the site offers Shared again. The
+data stays in the Durable Object either way. (Tried on the PR 55 preview:
+`brain:false` and 503 on `/v1/stats` within seconds, back after the delete.)
 
 ## Deploy and verify
 
 Push to `main`. `.github/workflows/deploy.yml`:
 
 1. Installs the pinned toolchain (`.github/actions/cloud-brain-toolchain`:
-   the Rust beta, worker-build 0.8.7, the Emscripten it provisions; cached).
-2. Deploys the Worker from `cloud-brain/` with its own wrangler
-   (`vectorvroom-brain`, or `vectorvroom-brain-pr-<n>`).
-3. Runs `scripts/cloud-brain-health.mjs` on it: `/health` must say `ok`,
-   `brain`, `limits` and the page's protocol, and `/v1/stats` must answer
-   `https://vv.shaal.dev` with CORS.
-4. Writes the Worker origin into `AI-Car-Racer/cloud/config.json` only if
-   that passed (else `null`: the Shared option is hidden), then publishes
-   Pages. A failed brain deploy fails the workflow after Pages is published.
+   the Rust beta, worker-build 0.8.7, the Emscripten it provisions; cached)
+   and the brain's own wrangler.
+2. On `main` only: runs `bash scripts/build-cloud-brain.sh --test` and
+   `npm run test:cloud-brain:service` first. Production holds the shared
+   data, and an SQL migration cannot be rolled back.
+3. Deploys the Worker from `cloud-brain/` (`vectorvroom-brain` from `main`,
+   `vectorvroom-brain-pr-<n>` for a PR; any other run deploys none). The
+   build never sees the Cloudflare credentials (`wrangler.jsonc` unsets
+   them for `build.sh`).
+4. Runs `scripts/cloud-brain-health.mjs <url> <commit>`. `/health` must say
+   `ok`, `brain`, `limits`, the page's protocol and the commit just built
+   (not the version before). `/v1/stats` and a recall (a `text/plain` POST,
+   as the page sends) must answer `https://vv.shaal.dev` with CORS.
+5. Writes the Worker origin into `AI-Car-Racer/cloud/config.json`. If this
+   run could not deploy one on `main`, it uses the running production brain
+   if that still answers. Otherwise it writes `null`, which hides the Shared
+   option. Then it publishes Pages. A brain failure fails the run after
+   Pages is published.
 
 After a run, verify by hand:
 
@@ -117,25 +135,46 @@ than the build (the `migrations` table) makes an older Worker refuse to
 serve (`/health` `ok:false`, every route `server-error`). Fix forward
 instead.
 
-## The per-address limit keys
+## The per-address limits
 
-The limits key on `CF-Connecting-IP`, which Cloudflare sets at the edge (a
-client cannot choose it). Check it after a change to the front door. These
-25 writes carry made-up `CF-Connecting-IP` headers and invalid bodies, so
-nothing is stored. The first 24 get 400, the 25th 429:
+The limits key on `CF-Connecting-IP`, which Cloudflare sets at the edge. A
+request that brings its own `CF-Connecting-IP` header gets 403 from
+Cloudflare before the Worker runs, so a client cannot choose its key:
 
 ```sh
-for i in $(seq 1 25); do
-  curl -s -o /dev/null -w '%{http_code} ' -X POST \
-    -H 'Origin: https://vv.shaal.dev' -H "CF-Connecting-IP: 198.51.100.$i" \
-    --data 'x' https://vectorvroom-brain.shaal.workers.dev/v1/contribute
-done; echo
+curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Origin: https://vv.shaal.dev' \
+  -H 'CF-Connecting-IP: 198.51.100.7' --data 'x' \
+  https://vectorvroom-brain.shaal.workers.dev/v1/contribute      # 403
 ```
+
+The Rate Limiting binding is "permissive, eventually consistent" (Cloudflare):
+counters are cached per machine and per location and synced in the
+background. A few dozen requests from one client may all pass; a sustained
+burst is refused. On the PR 55 preview, 300 parallel reads got 5 refusals
+and the next 60 got 28 (`429 rate-limited`). To check after a change to the
+front door (reads only, nothing stored):
+
+```sh
+B=https://vectorvroom-brain.shaal.workers.dev
+seq 1 300 | xargs -P 20 -I{} curl -s -o /dev/null -w '%{http_code}\n' \
+  -H 'Origin: https://vv.shaal.dev' $B/v1/stats | sort | uniq -c
+```
+
+The per-token daily quotas in the object are exact; the per-address limits
+only slow a flood.
 
 ## Cloud training (X2)
 
-Off unless `TRAIN_FRAMES` is set. To turn it on, deploy with, for example,
-`--var TRAIN_FRAMES:120000` (about 0.1 s of CPU a session).
+Off unless `TRAIN_FRAMES` is set. To turn it on without a build (it stays
+through deploys), for example 120 000 frames a session (about 0.1 s of
+CPU):
+
+```sh
+cd cloud-brain
+echo 120000 | npx wrangler secret put TRAIN_FRAMES --name vectorvroom-brain
+```
+
+
 `TRAIN_EVERY_SECONDS` (1 800) and `TRAIN_IDLE_MINUTES` (10) set when
 sessions run. `/health` then says `"training":true`.
 

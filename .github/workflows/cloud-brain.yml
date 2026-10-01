@@ -6,10 +6,15 @@ name: Cloud brain
 # from the runbook (docs/operations/cloud-brain-operations.md).
 on:
   pull_request:
+    paths-ignore: ['docs/**', '**/*.md']
   push:
     branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
 permissions:
   contents: read
+concurrency:
+  group: cloud-brain-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   service:
     runs-on: ubuntu-latest
@@ -23,7 +28,8 @@ jobs:
       - run: npm ci
       - uses: ./.github/actions/cloud-brain-toolchain
         with:
-          target-cache: ci
+          name: ci
+          target-cache: 'true'
       - run: bash scripts/build-cloud-brain.sh --test
       - run: npm ci
         working-directory: cloud-brain

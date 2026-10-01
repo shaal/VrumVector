@@ -485,8 +485,8 @@ fake `fetch`.
 - Claimed fitness was trusted until CB4 (quarantine until corroborated).
   Feedback sent twice (a lost answer, then a retry) counts twice: since
   CB4 twice in one contributor's own value, never as a second contributor.
-- The service is not deployed: CB5 writes the endpoint into
-  `cloud/config.json` at deploy.
+- The endpoint comes from `cloud/config.json`, which the deploy writes
+  (CB5) only when the deployed Worker answers its health check.
 
 ## CB4: abuse and trust
 
@@ -671,6 +671,70 @@ restart or a contribution at the cap fits (D2).
   Cloudflare's limiter counts per location and is approximate.
 - `fastestLap` in meta is served as claimed (it does not rank).
 - The page has no "forget me" control yet; the route is there.
+
+## CB5: deploy
+
+The shared brain is deployed with the site, on Workers Paid (D2).
+
+### What it does
+
+- **`deploy.yml`** installs the pinned toolchain
+  (`.github/actions/cloud-brain-toolchain`: the Rust beta with the
+  Emscripten and unknown targets, worker-build 0.8.7, the Emscripten it
+  provisions, the ruvector sources; cached per job) and deploys the Worker
+  from `cloud-brain/` with its own wrangler: `vectorvroom-brain` from
+  `main` only, after the native and Worker tests pass (production holds the
+  data, and a migration cannot be rolled back); `vectorvroom-brain-pr-<n>`
+  for a pull request (its own Durable Object); no brain for any other run.
+  The build never sees the Cloudflare credentials (`wrangler.jsonc` unsets
+  them for `build.sh`).
+- **The page gets a Worker only when it answers.**
+  `scripts/cloud-brain-health.mjs` must see `/health` say `ok`, `brain`,
+  `limits`, the page's protocol and the commit just built (`build.commit`,
+  so not the version before), and `/v1/stats` and a recall (a `text/plain`
+  POST, as the page sends) answer `https://vv.shaal.dev` with CORS (each
+  tried for up to a minute). Then `AI-Car-Racer/cloud/config.json` gets the
+  Worker's origin. When a `main` run cannot deploy one, it keeps the
+  running production brain if that still answers; otherwise `null` (the
+  Shared option is hidden). Pages is published either way, and a brain
+  failure fails the run.
+- **The breaker** is a Worker secret (`DISABLE_BRAIN`): no build, and it
+  stays through deploys (later health checks then fail on purpose).
+- **Workers Paid.** `wrangler.jsonc` sets `limits.cpu_ms` to 30 000, which
+  only Paid accounts can set: a cold start rebuilds the index in about a
+  second, far past Free's 10 ms.
+- **`cloud-brain.yml`** runs on every pull request and on `main`: the
+  native tests and the `wasm32-unknown-unknown` check, the client and
+  crash-map tests, the Worker under `wrangler dev`, and the page against
+  it in Chromium.
+- **The runbook** (`docs/operations/cloud-brain-operations.md`): plan and
+  cost, limits, the breaker (`DISABLE_BRAIN`), deploy and verify, rollback
+  (not across a schema change), the per-address limits, cloud training,
+  forget, fuzzing, preview cleanup.
+
+### Evidence
+
+| Claim | Evidence |
+|---|---|
+| It builds and deploys from CI | PR 55's deploy run: the toolchain from cold in about 3 minutes (worker-build compiled), the Emscripten download and the release build in about 1.5 minutes, 948 KiB uploaded (400 KiB gzip), `vectorvroom-brain-pr-55.shaal.workers.dev` deployed with its 4 rate limits; the account accepted `limits.cpu_ms` |
+| The health gate | in that run, `cloud-brain-health.mjs` passed (`ok`, `brain`, `limits`, protocol 1; stats with CORS for `https://vv.shaal.dev`) and the preview site's `cloud/config.json` names the preview Worker; locally it also passed against `npm run dev` |
+| The page works against it | a headless Chromium session on the preview site with `?brain=shared`: the consent question, "Shared brain online", a crash map sent at 25 s, a brain at 35 s; the Worker's stats went from 0 to 1 brain, 1 track, 1 contributor; no page errors |
+| A client cannot choose its rate-limit key | a request with its own `CF-Connecting-IP` header gets 403 from Cloudflare before the Worker; without it, 400 for an invalid body |
+| The per-address limits act | 106 invalid writes and 70 reads in about 2 minutes all passed (the binding is "permissive, eventually consistent": counters cached per machine); 300 parallel reads then got 5 refusals and the next 60 got 28 (`429`) |
+| The breaker | on the PR 55 preview, `wrangler secret put DISABLE_BRAIN`: `/health` `"brain":false` and `/v1/stats` 503 within seconds; `wrangler secret delete`: `"brain":true` again |
+| CI | `cloud-brain.yml` on PR 55: native tests, the wasm check, client, crash maps, the Worker suite and the browser suite on Ubuntu (stage 7 now waits out A's send backoff: A and B share one address and its write limit) |
+
+### Limits
+
+- The per-address limits are approximate and per location: they slow a
+  flood, not a few dozen requests. The per-token quotas are exact.
+- PR previews share the rate-limit namespaces with production (their
+  traffic counts against the same addresses) and are not deleted when a PR
+  closes (the runbook says how).
+- A deploy adds the brain's build to every site deploy (about 4.5 minutes
+  cold, less from the cache).
+- Rolling back across an SQL schema change is not safe: an older build
+  refuses a newer database (fix forward).
 
 ## X1: verified laps and a leaderboard
 

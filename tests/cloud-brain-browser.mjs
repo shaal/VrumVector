@@ -524,16 +524,22 @@ try {
       const g = window.AdaptiveGates.wallSignature();
       const s = window.__rvCloud;
       const cps = [[{x: 1600, y: 300}, {x: 1600, y: 700}], [{x: 2450, y: 900}, {x: 3100, y: 900}], [{x: 1600, y: 1100}, {x: 1600, y: 1500}], [{x: 250, y: 900}, {x: 650, y: 900}]];
-      // A's own send may be in flight (one at a time): after it, archive and
-      // send in one step, so no training map replaces this one in between.
-      while (s.crashSending) await new Promise(r => setTimeout(r, 50));
-      s.crash = null;
-      window.__rvBridge.archiveCrashMap(m.map(x => x / n), {survival: 0.99, nDeaths: 8, generation: 3, geometrySig: g, walls: g, cps, measured: false});
-      if (s.crash !== null) throw new Error('an unmeasured layout was queued');
-      window.__rvBridge.archiveCrashMap(m.map(x => x / n), {survival: 0.95, nDeaths: 8, generation: 3, geometrySig: g, walls: g, cps});
-      s.crashSentAt = -Infinity;
-      if (!(await s.sendCrash())) throw new Error('the crash map was not sent');
-      return g;
+      // A's own send may be in flight (one at a time), or its send channel
+      // backing off (A and B share one address and its write limit): after
+      // that, archive and send in one step, so no training map replaces this
+      // one in between.
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      for (let attempt = 0; attempt < 30; attempt++) {
+        while (s.crashSending || !s.client.canTry('send')) await sleep(250);
+        s.crash = null;
+        window.__rvBridge.archiveCrashMap(m.map(x => x / n), {survival: 0.99, nDeaths: 8, generation: 3, geometrySig: g, walls: g, cps, measured: false});
+        if (s.crash !== null) throw new Error('an unmeasured layout was queued');
+        window.__rvBridge.archiveCrashMap(m.map(x => x / n), {survival: 0.95, nDeaths: 8, generation: 3, geometrySig: g, walls: g, cps});
+        s.crashSentAt = -Infinity;
+        if (await s.sendCrash()) return g;
+        await sleep(2000);
+      }
+      throw new Error(`the crash map was not sent: ${JSON.stringify(s.client.status)}`);
     });
     // B (same track) pulls: everyone's map and the layout for these walls.
     const crash = await b.evaluate(async () => {

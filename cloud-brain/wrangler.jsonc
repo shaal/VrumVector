@@ -8,8 +8,9 @@
   "workers_dev": true,
   // The build runs in wrangler's working folder: run wrangler from
   // cloud-brain/, or with `--cwd cloud-brain` (build.cwd is not relative to
-  // this file).
-  "build": {"command": "bash build.sh"},
+  // this file). It never sees the deploy's Cloudflare credentials (CB5: the
+  // build runs crates' build scripts and worker-build's Emscripten setup).
+  "build": {"command": "env -u CLOUDFLARE_API_TOKEN -u CLOUDFLARE_ACCOUNT_ID bash build.sh"},
   "durable_objects": {"bindings": [{"name": "BRAIN", "class_name": "SharedBrain"}]},
   // Workers Paid (D2, CB5): up to 30 s of CPU a request. A cold start
   // rebuilds the index (a recall then took 0.7 to 1.1 s locally) and a

@@ -63,7 +63,7 @@ test('health answers without an origin', async () => {
   const res = await call('/health', {origin: null});
   assert.equal(res.status, 200);
   assert.deepEqual(await res.json(), {ok: true, protocol: 1, brain: true, limits: true, training: false,
-    build: {target: 'wasm32-unknown-emscripten', ruvector: '5356a84e2', spike: false}});
+    build: {target: 'wasm32-unknown-emscripten', ruvector: '5356a84e2', spike: false, commit: null}});
 });
 
 test('origins, CORS and routes', async () => {

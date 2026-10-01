@@ -47,6 +47,9 @@ struct Build {
     target: &'static str,
     ruvector: Option<&'static str>,
     spike: bool,
+    /// The commit deployed (CB5: deploy.yml sets CLOUD_BRAIN_COMMIT, and its
+    /// health check waits for this version to answer); null in a local build.
+    commit: Option<&'static str>,
 }
 
 fn build() -> Build {
@@ -54,6 +57,7 @@ fn build() -> Build {
         target: if cfg!(target_os = "emscripten") { "wasm32-unknown-emscripten" } else { "wasm32-unknown-unknown" },
         ruvector: Some(RUVECTOR),
         spike: cfg!(feature = "spike"),
+        commit: option_env!("CLOUD_BRAIN_COMMIT"),
     }
 }
 
