@@ -429,10 +429,10 @@ test('while nobody plays, the service breeds a better brain on the busiest prese
       brains: seeds.map(vector => wire.brainToWire({vector, fitness: 1, track: 0, meta: {generation: 3, learning: {context: ctx, styleScore: 0}}}))}))).status, 200);
     // Sessions run on their own; a brain of the service's appears.
     const started = performance.now();
-    let cloud = null;
+    let cloud = null, pool = [];
     while (!cloud && performance.now() - started < 150_000) {
       await new Promise(r => setTimeout(r, 2000));
-      const pool = (await wire.parseRecallResponse(await bytes(await at('/v1/recall', wire.recallBody({trackVec: track, context: ctx, k: 64}))))).pool;
+      pool = (await wire.parseRecallResponse(await bytes(await at('/v1/recall', wire.recallBody({trackVec: track, context: ctx, k: 64}))))).pool;
       cloud = pool.find(p => p.meta.source === 'cloud') || null;
     }
     // A few more sessions, for their times (each logged with its report).
@@ -442,7 +442,12 @@ test('while nobody plays, the service breeds a better brain on the busiest prese
     assert.ok(sessions.length >= 1 && sessions.every(s => s.frames <= 120_000 && s.track === 'Rectangle'), JSON.stringify(sessions.slice(0, 2)));
     assert.ok(cloud, 'a brain the service bred: ' + trainer.log().slice(-1500));
     assert.ok(cloud.fitness >= evolved.outcome.fitness, `it drove at least as well as the best seed (${cloud.fitness})`);
-    assert.ok(!ids.includes(cloud.id) && ids.includes(cloud.meta.parentIds[0]), 'a new brain, bred from a seed');
+    // Bred from a seed, or (sessions run every second, so several may have
+    // run before the first look) from the service's own brains bred from one.
+    const byId = new Map(pool.map(p => [p.id, p]));
+    let ancestor = cloud;
+    for (let hops = 0; ancestor && !ids.includes(ancestor.meta.parentIds?.[0]) && hops < 50; hops++) ancestor = byId.get(ancestor.meta.parentIds?.[0]);
+    assert.ok(!ids.includes(cloud.id) && ancestor?.meta.source === 'cloud' && ids.includes(ancestor.meta.parentIds[0]), 'a new brain, bred from a seed');
     assert.deepEqual(cloud.meta.learning.context.track, ctx.track);
     // Anyone verifying it gets its fitness.
     const v = wire.parseVerifyResponse(await bytes(await at('/v1/verify', wire.verifyBody({token: OTHER, vector: cloud.vector, track: {width: 3200, height: 1800,
