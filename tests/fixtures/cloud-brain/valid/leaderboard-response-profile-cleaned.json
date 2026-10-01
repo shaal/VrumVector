@@ -1,0 +1,21 @@
+{
+ "description": "An unknown profile is read as balanced.",
+ "route": "leaderboard-response",
+ "body": "{\"protocol\":1,\"track\":\"e9755c3b-fb81e227-361\",\"maxSpeed\":15,\"traction\":0.5,\"entries\":[{\"id\":\"brain_4f4085434cf96eb7664f8a4d60f429ac\",\"lapFrames\":500,\"laps\":1,\"fitness\":6,\"profile\":\"turbo\",\"verified\":1790000000000}]}",
+ "expect": {
+  "ok": true,
+  "track": "e9755c3b-fb81e227-361",
+  "maxSpeed": 15,
+  "traction": 0.5,
+  "entries": [
+   {
+    "id": "brain_4f4085434cf96eb7664f8a4d60f429ac",
+    "lapFrames": 500,
+    "laps": 1,
+    "fitness": 6,
+    "profile": "balanced",
+    "verified": 1790000000000
+   }
+  ]
+ }
+}

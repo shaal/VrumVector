@@ -12,8 +12,8 @@
 //! service logic is the `brain` crate (core/), tested natively.
 
 use brain::brain::{
-    contributor_id, parse_slots, resolve_ids, slots_text, Brain, BrainRow, Config, FeedbackRow, Limited, Loaded, Page, Result as StoreResult,
-    Slot, Store, StoreError, StoredBrain, TrackRow, Usage,
+    contributor_id, parse_slots, resolve_ids, slots_text, Brain, BrainRow, Config, FeedbackRow, Limited, Loaded, Page, Refusal, Result as StoreResult,
+    Slot, Store, StoreError, StoredBrain, TrackRow, Usage, VerifiedRow,
 };
 use brain::wire::{self, error_body, Reason};
 use futures_util::StreamExt;
@@ -237,14 +237,16 @@ async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
         (Method::Post, "/v1/contribute") => "WRITE_LIMIT",
         // A forget can read every feedback record: a few a minute.
         (Method::Post, "/v1/forget") => "FORGET_LIMIT",
-        (Method::Post, "/v1/recall") | (Method::Get, "/v1/stats") => "READ_LIMIT",
+        // A verification runs the simulator (up to 7 200 frames).
+        (Method::Post, "/v1/verify") => "VERIFY_LIMIT",
+        (Method::Post, "/v1/recall") | (Method::Get, "/v1/stats" | "/v1/leaderboard") => "READ_LIMIT",
         _ => return with_cors(Response::error("Not found", 404)?, cors),
     };
     if over_rate_limit(&env, limiter, &req).await {
         return with_cors(limited_response(RATE_WINDOW_S)?, cors);
     }
     let forwarded = match (method, path.as_str()) {
-        (Method::Post, "/v1/recall" | "/v1/contribute" | "/v1/forget") => match capped_body(&mut req, wire::limits::REQUEST_BYTES).await {
+        (Method::Post, "/v1/recall" | "/v1/contribute" | "/v1/forget" | "/v1/verify") => match capped_body(&mut req, wire::limits::REQUEST_BYTES).await {
             Ok(None) => return with_cors(error_response(Reason::BodyTooLarge)?, cors),
             Ok(Some(body)) => {
                 let mut init = RequestInit::new();
@@ -257,7 +259,7 @@ async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
             // The body could not be read (the page went away mid-send).
             Err(e) => Err(e),
         },
-        (Method::Get, "/v1/stats") => match stub() {
+        (Method::Get, "/v1/stats" | "/v1/leaderboard") => match stub() {
             Ok(stub) => stub.fetch_with_request(req).await,
             Err(e) => Err(e),
         },
@@ -329,6 +331,15 @@ const MIGRATIONS: &[&[&str]] = &[
         "CREATE INDEX IF NOT EXISTS contributors_last_seen ON contributors (last_seen)",
         "CREATE INDEX IF NOT EXISTS brains_contributor ON brains (contributor)",
     ],
+    // 3 (X1): verified runs, the leaderboards read from them, and the
+    // geometry each track key is pinned to.
+    &[
+        "CREATE TABLE IF NOT EXISTS geometries (track TEXT PRIMARY KEY, digest TEXT NOT NULL, created INTEGER NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS verified (brain TEXT NOT NULL, track TEXT NOT NULL, profile TEXT NOT NULL, max_speed REAL NOT NULL, \
+         traction REAL NOT NULL, seconds REAL NOT NULL, fitness REAL NOT NULL, laps INTEGER NOT NULL, lap_frames INTEGER, frames INTEGER NOT NULL, \
+         contributor TEXT NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (brain, track, profile, max_speed, traction, seconds))",
+        "CREATE INDEX IF NOT EXISTS verified_board ON verified (track, max_speed, traction, lap_frames)",
+    ],
 ];
 
 fn init_schema(state: &State) -> Result<()> {
@@ -371,7 +382,7 @@ impl DurableObject for SharedBrain {
             feedback: number(&env, "QUOTA_FEEDBACK", d.feedback),
         };
         let config = Config { quota, ..Config::default() };
-        let limits = ["WRITE_LIMIT", "READ_LIMIT", "FORGET_LIMIT"].iter().all(|name| env.rate_limiter(name).is_ok());
+        let limits = ["WRITE_LIMIT", "READ_LIMIT", "FORGET_LIMIT", "VERIFY_LIMIT"].iter().all(|name| env.rate_limiter(name).is_ok());
         Self { state, init_error, disabled: flag(&env, "DISABLE_BRAIN"), limits, brain: AssertUnwindSafe(RefCell::new(None)), config, spike_enabled }
     }
 
@@ -393,7 +404,9 @@ impl DurableObject for SharedBrain {
             (Method::Post, "/v1/contribute") => Route::Contribute,
             (Method::Post, "/v1/recall") => Route::Recall,
             (Method::Post, "/v1/forget") => Route::Forget,
+            (Method::Post, "/v1/verify") => Route::Verify,
             (Method::Get, "/v1/stats") => Route::Stats,
+            (Method::Get, "/v1/leaderboard") => Route::Leaderboard,
             // Before any body is read or the brain built.
             _ => return Response::error("Not found", 404),
         };
@@ -403,13 +416,15 @@ impl DurableObject for SharedBrain {
         }
         // The only await: after it, the request runs to its answer alone.
         // (The front door has already cut the body at 64 KB.)
-        let body = if route == Route::Stats { Vec::new() } else { req.bytes().await? };
+        let body = if matches!(route, Route::Stats | Route::Leaderboard) { Vec::new() } else { req.bytes().await? };
         // Parsed before the brain is touched: a refused body never builds it.
         let job = match route {
             Route::Contribute => wire::parse_contribute(&body).map(Job::Contribute),
             Route::Recall => wire::parse_recall(&body).map(Job::Recall),
             Route::Forget => wire::parse_forget(&body).map(Job::Forget),
+            Route::Verify => wire::parse_verify(&body).map(Job::Verify),
             Route::Stats => Ok(Job::Stats),
+            Route::Leaderboard => wire::parse_board(url.query().unwrap_or("")).map(Job::Leaderboard),
         };
         let job = match job {
             Ok(job) => job,
@@ -429,6 +444,7 @@ impl DurableObject for SharedBrain {
         match result {
             Ok(Answer::Json(answer)) => json_response(answer, 200),
             Ok(Answer::Limited(Limited { retry_after })) => limited_response(retry_after),
+            Ok(Answer::Refused(reason)) => error_response(reason),
             Err(error) => {
                 // The store may hold part of this request: the brain is
                 // rebuilt from it on the next request.
@@ -444,7 +460,9 @@ enum Route {
     Contribute,
     Recall,
     Forget,
+    Verify,
     Stats,
+    Leaderboard,
 }
 
 /// A parsed request.
@@ -453,13 +471,17 @@ enum Job {
     Recall(wire::Recall),
     /// The token.
     Forget(String),
+    Verify(wire::Verify),
     Stats,
+    Leaderboard(wire::Board),
 }
 
 enum Answer {
     Json(String),
     /// Past the contributor's daily quota.
     Limited(Limited),
+    /// Refused by the service (a verification of a brain it does not hold).
+    Refused(Reason),
 }
 
 /// A job against the brain: its answer, or the store's error (the brain is
@@ -476,7 +498,16 @@ fn run(brain: &mut Brain, store: &mut SqlStore, job: Job, now: u64) -> StoreResu
         }
         Job::Recall(r) => json(&brain.recall(&r, store)?),
         Job::Forget(token) => json(&brain.forget(&contributor_id(&token), store)?),
+        Job::Verify(v) => {
+            let contributor = contributor_id(&v.token);
+            match brain.verify(v, &contributor, now, store)? {
+                Ok(answer) => json(&answer),
+                Err(Refusal::Limited(limited)) => Ok(Answer::Limited(limited)),
+                Err(Refusal::Reason(reason)) => Ok(Answer::Refused(reason)),
+            }
+        }
         Job::Stats => json(&brain.stats(now, store)?),
+        Job::Leaderboard(board) => json(&brain.leaderboard(&board, store)?),
     }
 }
 
@@ -548,6 +579,27 @@ impl SqlStore {
     }
 }
 
+const VERIFIED_COLUMNS_QUERY: &str =
+    "SELECT brain, track, profile, max_speed, traction, seconds, fitness, laps, lap_frames, frames, contributor, created FROM verified";
+
+/// A `verified` row as VERIFIED_COLUMNS_QUERY reads it.
+fn verified_row(r: &[SqlStorageValue]) -> Option<VerifiedRow> {
+    Some(VerifiedRow {
+        brain: text(&r[0])?,
+        track: text(&r[1])?,
+        profile: text(&r[2])?,
+        max_speed: real(&r[3])?,
+        traction: real(&r[4])?,
+        seconds: real(&r[5])?,
+        fitness: real(&r[6])?,
+        laps: int(&r[7])?,
+        lap_frames: int(&r[8]),
+        frames: int(&r[9])?,
+        contributor: text(&r[10])?,
+        created: int(&r[11])?,
+    })
+}
+
 impl Store for SqlStore {
     fn load(&self, since_minute: u64, sink: &mut dyn FnMut(Loaded) -> StoreResult<()>) -> StoreResult<()> {
         self.each("SELECT id, vector, created FROM tracks", vec![], |r| match (text(&r[0]), blob(&r[1]), int(&r[2])) {
@@ -561,6 +613,10 @@ impl Store for SqlStore {
                 }
                 _ => Ok(()),
             }
+        })?;
+        self.each(VERIFIED_COLUMNS_QUERY, vec![], |r| match verified_row(&r) {
+            Some(v) => sink(Loaded::Verified(v)),
+            None => Ok(()),
         })?;
         // The context JSON stays in SQLite: memory keys feedback by its hash.
         // Slots that do not read come as none, so the rebuild deletes the row.
@@ -611,7 +667,8 @@ impl Store for SqlStore {
     }
     fn delete_brain(&mut self, id: &str) -> StoreResult<()> {
         self.run("DELETE FROM brains WHERE id = ?", vec![id.into()])?;
-        self.run("DELETE FROM feedback WHERE brain = ?", vec![id.into()])
+        self.run("DELETE FROM feedback WHERE brain = ?", vec![id.into()])?;
+        self.run("DELETE FROM verified WHERE brain = ?", vec![id.into()])
     }
     fn put_feedback(&mut self, row: &FeedbackRow) -> StoreResult<()> {
         // A slot the brain knows by its tag alone keeps the id stored for it.
@@ -741,10 +798,76 @@ impl Store for SqlStore {
             ids.extend(text(&r[0]));
             Ok(())
         })?;
-        // Their feedback first: the brains alone would still be valid.
+        // Their feedback and runs first: the brains alone would still be valid.
         self.run("DELETE FROM feedback WHERE brain IN (SELECT id FROM brains WHERE contributor = ?)", vec![contributor.into()])?;
+        self.run("DELETE FROM verified WHERE brain IN (SELECT id FROM brains WHERE contributor = ?)", vec![contributor.into()])?;
         self.run("DELETE FROM brains WHERE contributor = ?", vec![contributor.into()])?;
         Ok(ids)
+    }
+    fn put_verified(&mut self, v: &VerifiedRow) -> StoreResult<()> {
+        self.run(
+            "INSERT OR REPLACE INTO verified (brain, track, profile, max_speed, traction, seconds, fitness, laps, lap_frames, frames, contributor, created) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            vec![
+                v.brain.as_str().into(),
+                v.track.as_str().into(),
+                v.profile.as_str().into(),
+                v.max_speed.into(),
+                v.traction.into(),
+                v.seconds.into(),
+                v.fitness.into(),
+                (v.laps as i64).into(),
+                v.lap_frames.map_or(SqlStorageValue::Null, |f| (f as i64).into()),
+                (v.frames as i64).into(),
+                v.contributor.as_str().into(),
+                (v.created as i64).into(),
+            ],
+        )
+    }
+    fn delete_verified(&mut self, v: &VerifiedRow) -> StoreResult<()> {
+        self.run(
+            "DELETE FROM verified WHERE brain = ? AND track = ? AND profile = ? AND max_speed = ? AND traction = ? AND seconds = ?",
+            vec![v.brain.as_str().into(), v.track.as_str().into(), v.profile.as_str().into(), v.max_speed.into(), v.traction.into(), v.seconds.into()],
+        )
+    }
+    fn verified_of(&self, brain: &str) -> StoreResult<Vec<VerifiedRow>> {
+        let mut rows = Vec::new();
+        self.each(&format!("{VERIFIED_COLUMNS_QUERY} WHERE brain = ?"), vec![brain.into()], |r| {
+            rows.extend(verified_row(&r));
+            Ok(())
+        })?;
+        Ok(rows)
+    }
+    fn board(&self, board: &wire::Board, limit: usize) -> StoreResult<Vec<VerifiedRow>> {
+        let mut rows = Vec::new();
+        self.each(
+            &format!(
+                "{VERIFIED_COLUMNS_QUERY} WHERE track = ? AND max_speed = ? AND traction = ? AND lap_frames IS NOT NULL \
+                 AND brain IN (SELECT id FROM brains) ORDER BY lap_frames, fitness DESC, created, brain LIMIT ?"
+            ),
+            vec![board.track.as_str().into(), board.max_speed.into(), board.traction.into(), (limit as i64).into()],
+            |r| {
+                rows.extend(verified_row(&r));
+                Ok(())
+            },
+        )?;
+        Ok(rows)
+    }
+    fn anonymize_verified(&mut self, contributor: &str) -> StoreResult<()> {
+        self.run("UPDATE verified SET contributor = '' WHERE contributor = ?", vec![contributor.into()])
+    }
+    fn pinned(&self, track: &str) -> StoreResult<Option<String>> {
+        let mut digest = None;
+        self.each("SELECT digest FROM geometries WHERE track = ?", vec![track.into()], |r| {
+            if let Some(SqlStorageValue::String(d)) = r.first() {
+                digest = Some(d.clone());
+            }
+            Ok(())
+        })?;
+        Ok(digest)
+    }
+    fn pin(&mut self, track: &str, digest: &str, now: u64) -> StoreResult<()> {
+        self.run("INSERT OR IGNORE INTO geometries (track, digest, created) VALUES (?, ?, ?)", vec![track.into(), digest.into(), (now as i64).into()])
     }
 }
 

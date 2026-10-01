@@ -1,0 +1,10 @@
+{
+ "description": "A track key in capitals.",
+ "route": "leaderboard",
+ "body": "track=E9755C3B-FB81E227-361",
+ "expect": {
+  "ok": false,
+  "error": "leaderboard-query",
+  "status": 400
+ }
+}

@@ -9,6 +9,15 @@
 //! other contributors corroborate it, forget leaves none of the
 //! contributor's brains or slots, answers hold no -0 and fit 256 KiB, and a
 //! rebuild answers as the live brain did.
+//!
+//! X1: verifications on the golden traces' tracks (and a few hostile ones),
+//! of random brains and of brains the game evolved there (they lap), and
+//! leaderboards. A brain verified in its own context is served its verified
+//! fitness in that context (only there), whatever it claimed; every run's
+//! track key pinned to one geometry, the presets' to theirs; at most 4 runs
+//! a brain, every run of a held brain, none left with a forgotten
+//! contributor; a leaderboard holds at most 20 held brains with a lap, each
+//! once, the fastest first lap first.
 
 #![no_main]
 
@@ -16,8 +25,9 @@ use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
 use serde_json::{json, Value};
 use std::collections::HashSet;
-use vectorvroom_brain_core::brain::{context_hash, contributor_id, tag, Brain, Config, MemStore, Usage, MAX_CONTEXTS_PER_BRAIN, MAX_CONTRIBUTORS};
-use vectorvroom_brain_core::wire::{self, encode_f32, limits, parse_contribute, parse_recall};
+use std::sync::OnceLock;
+use vectorvroom_brain_core::brain::{context_hash, contributor_id, tag, Brain, Config, MemStore, Refusal, Usage, BOARD_SIZE, MAX_CONTEXTS_PER_BRAIN, MAX_CONTRIBUTORS, PRESET_TRACKS, VERIFIED_PER_BRAIN};
+use vectorvroom_brain_core::wire::{self, encode_f32, limits, parse_board, parse_contribute, parse_recall, parse_verify};
 
 const T0: u64 = 1_790_000_000_000;
 const TOKENS: usize = 5;
@@ -44,6 +54,8 @@ enum Op {
     Contribute { who: u8, tracks: Vec<u8>, brains: Vec<BrainIn>, feedback: Vec<RowIn> },
     Recall { track: u8, dynamics: Option<u8>, context: u8, k: u8 },
     Forget { who: u8 },
+    Verify { who: u8, brain: u8, track: u8, context: u8 },
+    Board { track: u8, context: u8 },
     Wait { ms: u32 },
     Reopen,
     Bytes(Vec<u8>),
@@ -65,20 +77,74 @@ fn vector(seed: u64, dim: usize) -> Vec<f32> {
     let mut r = stream(seed);
     (0..dim).map(|_| r()).collect()
 }
+
+/// The golden traces' tracks and their evolved brains (tests/fixtures/
+/// cloud-brain-sim), then hostile tracks: every point the same, one gate,
+/// coordinates far off the canvas.
+struct Traces {
+    tracks: Vec<Value>,
+    evolved: Vec<Vec<f32>>,
+}
+fn traces() -> &'static Traces {
+    static TRACES: OnceLock<Traces> = OnceLock::new();
+    TRACES.get_or_init(|| {
+        let f: Value = serde_json::from_str(include_str!("../../../../tests/fixtures/cloud-brain-sim/traces.json")).unwrap();
+        let mut tracks: Vec<Value> = ["Rectangle", "Oval", "Triangle", "Monza", "Monaco"].iter().map(|n| f["tracks"][n].clone()).collect();
+        for t in &mut tracks {
+            t.as_object_mut().unwrap().remove("key");
+        }
+        tracks.push(json!({"width": 3200, "height": 1800, "inner": [[5, 5], [5, 5], [5, 5]], "outer": [[5, 5], [5, 5], [5, 5]], "checkpoints": [[[5, 5], [5, 5]]]}));
+        tracks.push(json!({"width": 3200, "height": 1800, "inner": [[650, 700], [2450, 700], [2450, 1100]], "outer": [[250, 300], [3100, 300], [3100, 1500]], "checkpoints": [[[1600, 300], [1600, 700]]]}));
+        tracks.push(json!({"width": 3200, "height": 1800, "inner": [[-100000, -100000], [100000, -100000], [100000, 100000]], "outer": [[-99999, 5], [3, 99999], [0.5, -0.25]], "checkpoints": [[[-100000, 0], [100000, 0]], [[0, -100000], [0, 100000]]]}));
+        // Every wall in every ray's way: stopped past the work budget.
+        let zigzag = |y: f64| (0..256).map(|i| json!([if i % 2 == 0 { 0.0 } else { 3200.0 }, y + i as f64 * 0.01])).collect::<Vec<_>>();
+        tracks.push(json!({"width": 3200, "height": 1800, "inner": zigzag(300.0), "outer": zigzag(700.0),
+            "checkpoints": [[[1600, 400], [1600, 600]], [[1700, 400], [1700, 600]]]}));
+        let evolved = f["cases"].as_array().unwrap().iter().filter(|c| c["outcome"]["laps"].as_u64() > Some(0)).map(|c| {
+            let bytes = wire::decode_f32(Some(&c["vector"]), wire::BRAIN_DIM).unwrap();
+            bytes
+        }).collect();
+        Traces { tracks, evolved }
+    })
+}
+fn geometry(t: u8) -> &'static Value {
+    let all = &traces().tracks;
+    &all[t as usize % all.len()]
+}
+/// The track keys of the Rectangle and of a made-up track with one gate
+/// (a car parked on it laps every frame): contexts are on them, so a brain's
+/// own context can be one a verification decides.
+fn keys() -> &'static [String; 2] {
+    static KEYS: OnceLock<[String; 2]> = OnceLock::new();
+    KEYS.get_or_init(|| {
+        [0u8, 6].map(|t| {
+            let body = json!({"protocol": 1, "brainSchema": 6, "token": token(0), "vector": encode_f32(&vector(1, wire::BRAIN_DIM)),
+                "track": geometry(t), "context": {"profile": "balanced", "track": "", "maxSpeed": 15, "traction": 0.5, "seconds": 20}});
+            wire::geometry_key(&parse_verify(&serde_json::to_vec(&body).unwrap()).unwrap().geometry)
+        })
+    })
+}
 fn unit(seed: u64, dim: usize) -> Vec<f32> {
     let v = vector(seed, dim);
     let n = v.iter().map(|x| x * x).sum::<f32>().sqrt();
     v.iter().map(|x| x / n).collect()
 }
-/// A few contexts: one without a track key (never a brain's own).
+/// A few contexts: one without a track key (never a brain's own), on the
+/// Rectangle and on the made-up track (a verification there can decide a
+/// brain's fitness).
 fn context(c: u8) -> Value {
-    let tracks = ["t1", "t2", ""];
+    let tracks = [keys()[0].as_str(), keys()[1].as_str(), "t2", ""];
     let profiles = ["balanced", "wild"];
-    json!({"profile": profiles[c as usize % 2], "track": tracks[(c as usize / 2) % 3], "maxSpeed": 15, "traction": 0.5, "seconds": 20})
+    json!({"profile": profiles[c as usize % 2], "track": tracks[(c as usize / 2) % 4], "maxSpeed": 15, "traction": 0.5, "seconds": 20})
 }
-/// Few brains, tracks and dynamics, so ops meet the same ones again.
-fn brain_seed(s: u8) -> u64 {
-    1_000 + u64::from(s % 24)
+/// Few brains, tracks and dynamics, so ops meet the same ones again: 24
+/// random brains, then the evolved ones.
+fn brain_vector(s: u8) -> Vec<f32> {
+    let evolved = &traces().evolved;
+    match (s as usize) % (24 + evolved.len()) {
+        n if n < 24 => vector(1_000 + n as u64, wire::BRAIN_DIM),
+        n => evolved[n - 24].clone(),
+    }
 }
 fn track_seed(t: u8) -> u64 {
     2_000 + u64::from(t % 6)
@@ -102,28 +168,36 @@ struct World {
 
 impl World {
     fn recall(&self, body: &[u8]) -> Value {
-        let answer = self.brain.recall(&parse_recall(body).expect("a valid recall"), &self.store).unwrap();
+        let r = parse_recall(body).expect("a valid recall");
+        let query = context_hash(&r.context);
+        let answer = self.brain.recall(&r, &self.store).unwrap();
         let text = serde_json::to_string(&answer).unwrap();
         assert!(text.len() <= limits::RESPONSE_BYTES);
         let value: Value = serde_json::from_str(&text).unwrap();
         assert!(no_negative_zero(&value));
         for e in value["pool"].as_array().unwrap() {
-            self.check_entry(e);
+            self.check_entry(e, query);
         }
         value
     }
 
-    /// A served fitness is at most the claim, and at most 0 unless two other
-    /// contributors have values in the brain's own context.
-    fn check_entry(&self, e: &Value) {
+    /// In its own context a brain verified there is served its verified
+    /// fitness; otherwise (and in every other context) a served fitness is
+    /// at most the claim, and at most 0 unless two other contributors have
+    /// values in the brain's own context.
+    fn check_entry(&self, e: &Value, query: u64) {
         let id = e["id"].as_str().unwrap();
         let (row, _) = &self.store.brains[id];
         let served = e["fitness"].as_f64().unwrap();
+        let meta: Value = serde_json::from_str(&row.meta).unwrap();
+        let own = wire::clean_brain_meta(Some(&meta)).learning.map(|l| l.context).filter(|c| !c.track.is_empty());
+        if let Some(run) = own.as_ref().filter(|o| context_hash(o) == query).and_then(|o| self.store.verified.iter().find(|r| r.brain == id && context_hash(&r.context()) == context_hash(o))) {
+            assert_eq!(served, wire::plain(run.fitness), "{id}: verified, served {served}");
+            return;
+        }
         assert!(served <= row.fitness, "{id}: served {served} over the claim {}", row.fitness);
         assert!(served >= row.fitness.min(0.0), "{id}: served {served} under its floor");
         if served > 0.0 {
-            let meta: Value = serde_json::from_str(&row.meta).unwrap();
-            let own = wire::clean_brain_meta(Some(&meta)).learning.map(|l| l.context).filter(|c| !c.track.is_empty());
             let key = format!("{:016x}", context_hash(own.as_ref().expect("a claim counts only in its own context")));
             let others = self.store.feedback.get(&(id.to_string(), key)).map_or(0, |r| r.slots.iter().filter(|s| s.value.is_some()).count());
             assert!(others >= 2, "{id}: served {served} with {others} corroborators");
@@ -153,7 +227,42 @@ impl World {
         for row in self.store.contributors.values() {
             assert!(row.used.requests <= c.quota.requests && row.used.brains <= c.quota.brains && row.used.feedback <= c.quota.feedback);
         }
+        let mut runs = std::collections::HashMap::<&str, usize>::new();
+        for (i, r) in self.store.verified.iter().enumerate() {
+            assert!(self.store.brains.contains_key(&r.brain), "a run of a brain not held");
+            assert!(self.store.verified[..i].iter().all(|o| !(o.brain == r.brain && o.context() == r.context())), "a run twice");
+            assert!(r.lap_frames.is_some() == (r.laps > 0) && r.frames <= (limits::VERIFY_SECONDS * 60.0) as u64);
+            *runs.entry(r.brain.as_str()).or_default() += 1;
+        }
+        assert!(runs.values().all(|n| *n <= VERIFIED_PER_BRAIN));
+        // Every run's key is pinned; the presets' to their own geometries.
+        assert!(self.store.verified.iter().all(|r| self.store.pins.contains_key(&r.track)));
+        assert!(PRESET_TRACKS.iter().all(|(k, d)| self.store.pins.get(*k).map(String::as_str) == Some(*d)));
     }
+
+    /// A leaderboard: at most 20 held brains with a lap, the fastest first lap first.
+    fn board(&self, track: u8, c: u8) -> Value {
+        let ctx = context(c);
+        let query = format!("track={}&maxSpeed={}&traction={}", self.key_of(track), ctx["maxSpeed"], ctx["traction"]);
+        let answer = self.brain.leaderboard(&parse_board(&query).unwrap(), &self.store).unwrap();
+        assert!(answer.entries.len() <= BOARD_SIZE);
+        assert_eq!(answer.entries.iter().map(|e| &e.id).collect::<HashSet<_>>().len(), answer.entries.len(), "a brain twice");
+        assert!(answer.entries.windows(2).all(|w| (w[0].lap_frames, -w[0].fitness) <= (w[1].lap_frames, -w[1].fitness)), "{answer:?}");
+        for e in &answer.entries {
+            assert!(self.store.brains.contains_key(&e.id) && e.laps >= 1);
+            assert!(self.store.verified.iter().any(|r| r.brain == e.id && r.track == answer.track && r.lap_frames == Some(e.lap_frames)));
+        }
+        let value = serde_json::to_value(&answer).unwrap();
+        assert!(no_negative_zero(&value));
+        value
+    }
+    fn key_of(&self, track: u8) -> String {
+        wire::geometry_key(&parse_verify(&verify_body(0, 0, track, 0)).unwrap().geometry)
+    }
+}
+
+fn verify_body(who: u8, brain: u8, track: u8, c: u8) -> Vec<u8> {
+    serde_json::to_vec(&json!({"protocol": 1, "brainSchema": 6, "token": token(who), "vector": encode_f32(&brain_vector(brain)), "track": geometry(track), "context": context(c)})).unwrap()
 }
 
 fn contribution(who: &str, tracks: &[u8], brains: &[BrainIn], feedback: &[RowIn]) -> Vec<u8> {
@@ -163,7 +272,7 @@ fn contribution(who: &str, tracks: &[u8], brains: &[BrainIn], feedback: &[RowIn]
         .iter()
         .take(limits::BRAINS_PER_REQUEST)
         .map(|b| {
-            let mut v = json!({"vector": encode_f32(&vector(brain_seed(b.seed), wire::BRAIN_DIM)), "fitness": b.fitness as f64 / 10.0,
+            let mut v = json!({"vector": encode_f32(&brain_vector(b.seed)), "fitness": b.fitness as f64 / 10.0,
                 "meta": {"generation": 1, "source": "evolved", "learning": {"context": context(b.context), "styleScore": 0.5}}});
             if let Some(t) = b.track.filter(|_| n > 0) {
                 v["track"] = json!(t as usize % n);
@@ -177,7 +286,7 @@ fn contribution(who: &str, tracks: &[u8], brains: &[BrainIn], feedback: &[RowIn]
     let feedback: Vec<Value> = feedback
         .iter()
         .take(limits::FEEDBACK_PER_REQUEST)
-        .map(|r| json!({"id": wire::brain_id(&vector(brain_seed(r.brain), wire::BRAIN_DIM)), "context": context(r.context),
+        .map(|r| json!({"id": wire::brain_id(&brain_vector(r.brain)), "context": context(r.context),
             "meanFitness": r.mean as f64 / 10.0, "count": 1 + u64::from(r.count)}))
         .collect();
     serde_json::to_vec(&json!({"protocol": 1, "brainSchema": 6, "token": who, "tracks": tracks, "brains": brains, "feedback": feedback})).unwrap()
@@ -220,14 +329,37 @@ fuzz_target!(|ops: Vec<Op>| {
                 w.brain.forget(&contributor, &mut w.store).unwrap();
                 assert!(w.store.brains.values().all(|b| b.0.contributor != contributor));
                 assert!(w.store.feedback.values().all(|r| r.slots.iter().all(|s| s.id != contributor)));
+                assert!(w.store.verified.iter().all(|r| r.contributor != contributor));
+            }
+            Op::Verify { who, brain, track, context } => {
+                let v = parse_verify(&verify_body(who, brain, track, context)).expect("a valid verification");
+                let held = w.store.brains.contains_key(&v.id);
+                let (id, ctx) = (v.id.clone(), v.context.clone());
+                match w.brain.verify(v, &contributor_id(&token(who)), w.now, &mut w.store).unwrap() {
+                    Ok(answer) => {
+                        assert!(held);
+                        let run = w.store.verified.iter().find(|r| r.brain == id && r.track == answer.track && r.profile == ctx.profile).expect("its run is kept");
+                        assert_eq!((run.fitness, run.laps, run.lap_frames), (answer.fitness, answer.laps, answer.lap_frames.first().copied()));
+                        assert_eq!(answer.matched, answer.track == ctx.track);
+                    }
+                    Err(Refusal::Reason(reason)) => assert!(!held || reason == wire::Reason::TrackGeometry, "{reason:?}"),
+                    Err(Refusal::Limited(_)) => assert!(held),
+                }
+            }
+            Op::Board { track, context } => {
+                w.board(track, context);
             }
             Op::Wait { ms } => w.now += u64::from(ms) * 64,
             Op::Reopen => {
                 let queries: Vec<Vec<u8>> = (0..3u8).map(|i| recall_body(i, (i == 1).then_some(i), i, 63)).collect();
                 let live: Vec<Value> = queries.iter().map(|q| w.recall(q)).collect();
+                let boards: Vec<Value> = (0..2u8).map(|t| w.board(t, 0)).collect();
                 w.brain = Brain::open(w.config.clone(), &mut w.store, w.now).unwrap();
                 for (q, before) in queries.iter().zip(&live) {
                     assert_eq!(&w.recall(q), before, "a rebuild answers as the live brain");
+                }
+                for (t, before) in boards.iter().enumerate() {
+                    assert_eq!(&w.board(t as u8, 0), before, "a rebuild's leaderboard is the live one");
                 }
             }
             Op::Bytes(bytes) => {

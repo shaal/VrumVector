@@ -1,8 +1,9 @@
 // cloud/ui.js — the Memory control in the Vector Memory panel
 // (docs/plan/cloud-brain.md, CB3): "This browser" or "Shared (cloud, beta)",
 // what shared mode sends (asked before the first switch), and the shared
-// brain's status. Hidden where the service is not available, unless this
-// page is already in shared mode (then it says why, and offers the way back).
+// brain's status, and the leaderboard of verified laps (X1). Hidden where the
+// service is not available, unless this page is already in shared mode
+// (then it says why, and offers the way back).
 //
 // Choosing a radio does nothing by itself (keys move through radios): the
 // Switch button, which says it reloads the page, switches.
@@ -10,7 +11,7 @@
 const WHAT = [
   'Shared brain (beta): your cars learn from, and add to, one brain shared with everyone who turns this on.',
   '',
-  'Sent: the network weights of your best cars (a copy of your own driving too, when you use "Use my driving", marked as such), with their fitness, lap times, generation and lineage; how they drove (driving summaries and a 64-number driving signature); the track\'s embedding and a fingerprint of its shape (not the shape itself); your learning settings; and the results of cars bred from shared brains.',
+  'Sent: the network weights of your best cars (a copy of your own driving too, when you use "Use my driving", marked as such), with their fitness, lap times, generation and lineage; how they drove (driving summaries and a 64-number driving signature); the track\'s embedding and a fingerprint of its shape; your learning settings; and the results of cars bred from shared brains. When a car drives a lap, the track\'s walls and checkpoints go with it, so the service can drive that car again and verify the lap for the leaderboard.',
   'With them goes an anonymous random token made in this browser, which links your contributions to each other, not to you. The service sees your IP address while it answers and does not store it. Your recordings of driving are never sent.',
   '',
   'This browser\'s own memory and training are kept apart, unchanged.',
@@ -25,7 +26,7 @@ const STYLE = `
 .rv-memory-label{opacity:.8}
 .rv-memory label{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
 .rv-memory-switch{font:inherit;padding:2px 8px;cursor:pointer}
-.rv-memory-status{flex-basis:100%;opacity:.85}
+.rv-memory-status,.rv-memory-board{flex-basis:100%;opacity:.85}
 .rv-memory-status.rv-memory-offline{opacity:1;background:#6b3a12;color:#fff;border-radius:4px;padding:3px 6px}
 .rv-memory-pill{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:1300;background:#6b3a12;color:#fff;border-radius:999px;padding:4px 12px;font:12px/1.4 system-ui,-apple-system,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 @media (pointer:coarse){.rv-memory label,.rv-memory-switch{min-height:44px}}
@@ -56,6 +57,26 @@ export function describe(status, {secure = true, now = Date.now()} = {}) {
   }
 }
 
+const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+const lapText = frames => (frames / 60).toFixed(2) + ' s';
+/**
+ * The leaderboard line (X1): the three fastest verified first laps on this
+ * track and physics, where this page's best stands, and how its last
+ * verification went.
+ */
+export function describeBoard(board, {mine = new Set(), last = null} = {}) {
+  if (!board) return '';
+  const top = board.entries.slice(0, 3).map((e, i) => `${i + 1}. ${lapText(e.lapFrames)}${mine.has(e.id) ? ' (yours)' : ''}`);
+  const at = board.entries.findIndex(e => mine.has(e.id));
+  let text = top.length ? `Fastest verified laps here: ${top.join(' · ')}` : 'No verified laps on this track yet';
+  if (at >= 3) text += ` · yours: ${ordinal(at + 1)}`;
+  if (last && last.track === board.track) {
+    text += last.lapFrames.length ? ` · your last car verified: ${lapText(last.lapFrames[0])}`
+      : ' · your last car did not repeat its lap when the service drove it';
+  }
+  return text;
+}
+
 /** Waits for the panel header (uiPanels.js builds it), up to `ms`. */
 async function panelHeader(doc, ms) {
   const deadline = Date.now() + ms;
@@ -68,11 +89,11 @@ async function panelHeader(doc, ms) {
 }
 
 /**
- * Mounts the control. Returns {setStatus, ready} (ready resolves to the row
- * element, or null when it is not shown).
+ * Mounts the control. Returns {setStatus, setBoard, ready} (ready resolves to
+ * the row element, or null when it is not shown).
  */
 export function mountMemoryControl({mode, available, secure = true, onChoose, confirm: ask = text => globalThis.confirm?.(text) ?? false, doc = globalThis.document}) {
-  let row = null, textEl = null, retryEl = null, statusEl = null, pill = null, last = null, ticker = null;
+  let row = null, textEl = null, retryEl = null, statusEl = null, boardEl = null, pill = null, last = null, ticker = null, boardText = '';
   const render = () => {
     if (!last) return;
     const {text, retry, offline} = describe(last, {secure});
@@ -109,6 +130,10 @@ export function mountMemoryControl({mode, available, secure = true, onChoose, co
       }, 1000);
     }
   };
+  const setBoard = (board, about) => {
+    boardText = describeBoard(board, about);
+    if (boardEl) { boardEl.textContent = boardText; boardEl.hidden = !boardText; }
+  };
   const ready = (async () => {
     if (!doc || (!available && mode !== 'shared')) return null;
     const header = await panelHeader(doc, 10_000);
@@ -130,11 +155,15 @@ export function mountMemoryControl({mode, available, secure = true, onChoose, co
       '</span>',
       '<button type="button" class="rv-memory-switch" data-rv="memory-switch" hidden>Switch (reloads the page)</button>',
       '<span class="rv-memory-status" data-rv="memory-status"><span data-rv="memory-text" role="status" aria-live="polite"></span><span data-rv="memory-retry" aria-hidden="true"></span></span>',
+      '<span class="rv-memory-board" data-rv="memory-board" hidden></span>',
     ].join('');
     header.insertAdjacentElement('afterend', row);
     statusEl = row.querySelector('[data-rv="memory-status"]');
     textEl = row.querySelector('[data-rv="memory-text"]');
     retryEl = row.querySelector('[data-rv="memory-retry"]');
+    boardEl = row.querySelector('[data-rv="memory-board"]');
+    boardEl.textContent = boardText;
+    boardEl.hidden = !boardText;
     const button = row.querySelector('[data-rv="memory-switch"]');
     const chosen = () => row.querySelector('input[name="rv-memory"]:checked')?.value || mode;
     for (const input of row.querySelectorAll('input[name="rv-memory"]')) {
@@ -155,5 +184,5 @@ export function mountMemoryControl({mode, available, secure = true, onChoose, co
     if (last) render();
     return row;
   })();
-  return {setStatus, ready};
+  return {setStatus, setBoard, ready};
 }

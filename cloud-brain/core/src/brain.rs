@@ -16,10 +16,15 @@
 //! feedback is kept per contributor and combined by a trimmed mean; a
 //! contributor's reports about their own brains are not evidence. Each
 //! contributor has a daily quota (`Config::quota`).
+//!
+//! Verified runs (X1): the service drives a brain on a track a page sends;
+//! in the brain's own context the run is what it is served with
+//! (`Brain::served_fitness`), and its feedback there is measured against it.
 
-use crate::wire::{self, clamp, plain, Context, Contribution, Meta, Reason, Recall, Refused, PROTOCOL, BRAIN_SCHEMA};
+use crate::wire::{self, clamp, plain, Board, Context, Contribution, Meta, Reason, Recall, Refused, Verify, BRAIN_SCHEMA, PROTOCOL};
 use ruvector_core::types::{DbOptions, DistanceMetric, SearchQuery, VectorEntry};
 use ruvector_core::VectorDB;
+use vectorvroom_sim as sim;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
@@ -166,13 +171,56 @@ pub struct FeedbackRow {
     pub updated: u64,
 }
 
+/// A verified run (X1): a brain the service ran itself on a track, in a
+/// context (profile and physics, collisions off).
+#[derive(Clone, Debug, PartialEq)]
+pub struct VerifiedRow {
+    pub brain: String,
+    /// The track key (`wire::geometry_key`) of the geometry it ran on.
+    pub track: String,
+    pub profile: String,
+    pub max_speed: f64,
+    pub traction: f64,
+    pub seconds: f64,
+    /// Gates passed plus laps × gates, as the game scores it.
+    pub fitness: f64,
+    pub laps: u64,
+    /// The frame its first lap ended at (60 a second).
+    pub lap_frames: Option<u64>,
+    pub frames: u64,
+    /// Who asked (`contributor_id`; empty once they are forgotten).
+    pub contributor: String,
+    pub created: u64,
+}
+
+impl VerifiedRow {
+    /// The learning context it ran in.
+    pub fn context(&self) -> Context {
+        Context {
+            version: 1,
+            profile: self.profile.clone(),
+            track: self.track.clone(),
+            max_speed: self.max_speed,
+            traction: self.traction,
+            seconds: self.seconds,
+            collisions: "off".into(),
+        }
+    }
+    /// Same brain, track, profile and physics.
+    fn same_run(&self, other: &VerifiedRow) -> bool {
+        self.brain == other.brain && self.context() == other.context()
+    }
+}
+
 /// One row as the store loads it back, in this order: every track, every
-/// brain, every feedback row (by brain, the most recently updated first),
-/// then the contribution counts of the last 24 hours' minutes.
+/// brain, every verified run, every feedback row (by brain, the most
+/// recently updated first), then the contribution counts of the last 24
+/// hours' minutes.
 #[derive(Clone, Debug)]
 pub enum Loaded {
     Track(TrackRow),
     Brain(BrainRow),
+    Verified(VerifiedRow),
     Feedback(FeedbackRow),
     /// (minute since the epoch, contributions in it)
     Minute(u64, u64),
@@ -188,7 +236,7 @@ pub trait Store {
     fn put_track(&mut self, row: &TrackRow) -> Result<()>;
     fn delete_track(&mut self, id: &str) -> Result<()>;
     fn put_brain(&mut self, row: &BrainRow, vector: &[f32]) -> Result<()>;
-    /// The brain and its feedback rows.
+    /// The brain, its feedback rows and its verified runs.
     fn delete_brain(&mut self, id: &str) -> Result<()>;
     /// Writes a feedback record. A slot with an empty id keeps the id the
     /// store holds for its tag (an error when it holds none).
@@ -217,9 +265,26 @@ pub trait Store {
     /// The weights and meta (JSON) of these brains (None for one the store
     /// does not hold).
     fn brain_rows(&self, ids: &[&str]) -> Result<Vec<Option<StoredBrain>>>;
-    /// Deletes every brain `contributor` contributed, and their feedback
-    /// rows; returns their ids.
+    /// Deletes every brain `contributor` contributed, their feedback rows and
+    /// verified runs; returns their ids.
     fn delete_brains_of(&mut self, contributor: &str) -> Result<Vec<String>>;
+    /// Stores a verified run, replacing the brain's earlier run with the same
+    /// track, profile and physics.
+    fn put_verified(&mut self, row: &VerifiedRow) -> Result<()>;
+    fn delete_verified(&mut self, row: &VerifiedRow) -> Result<()>;
+    /// A brain's verified runs.
+    fn verified_of(&self, brain: &str) -> Result<Vec<VerifiedRow>>;
+    /// The best `limit` verified runs with a lap on a track and physics, of
+    /// brains the store holds: the fastest first lap first, then the highest
+    /// fitness, then the earliest.
+    fn board(&self, board: &Board, limit: usize) -> Result<Vec<VerifiedRow>>;
+    /// Takes a contributor's id off the runs they asked for.
+    fn anonymize_verified(&mut self, contributor: &str) -> Result<()>;
+    /// The digest (`wire::geometry_digest`) of the geometry a track key is
+    /// pinned to (X1), if it is.
+    fn pinned(&self, track: &str) -> Result<Option<String>>;
+    /// Pins a track key to a geometry's digest, unless it is pinned already.
+    fn pin(&mut self, track: &str, digest: &str, now: u64) -> Result<()>;
 }
 
 /// A contributor's id: 128 bits of SHA-256 of their token. The token itself
@@ -305,8 +370,9 @@ pub struct Feedback {
 pub struct PoolEntry {
     pub id: String,
     pub vector: String,
-    /// Its trusted fitness (`Brain::trusted_fitness`), not its claim: the
-    /// browser ranks its replica by this number.
+    /// Its trusted fitness (`Brain::trusted_fitness`), not its claim; in its
+    /// own context, its verified run when it has one (X1). The browser ranks
+    /// its replica by this number.
     pub fitness: f64,
     pub score: f64,
     /// The cosine similarity of the query's track to the track the brain was
@@ -344,6 +410,89 @@ pub struct Stats {
     pub contributors_today: usize,
     pub contributions24h: usize,
 }
+
+/// POST /v1/verify (X1): the service's own run of the brain.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VerifyAnswer {
+    pub protocol: u32,
+    pub id: String,
+    /// The track key of the geometry, as the page computes it.
+    pub track: String,
+    /// Whether it is the context's own track key: only then does the run
+    /// count for the brain's standing.
+    pub matched: bool,
+    pub fitness: f64,
+    pub laps: u64,
+    /// The frame each lap ended at (60 a second).
+    pub lap_frames: Vec<u64>,
+    pub crashed_at: Option<u64>,
+    pub frames: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardEntry {
+    pub id: String,
+    pub lap_frames: u64,
+    pub laps: u64,
+    pub fitness: f64,
+    pub profile: String,
+    pub verified: u64,
+}
+
+/// GET /v1/leaderboard (X1).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardAnswer {
+    pub protocol: u32,
+    pub track: String,
+    pub max_speed: f64,
+    pub traction: f64,
+    pub entries: Vec<BoardEntry>,
+}
+
+/// A verification refused by the service: past the quota, or a brain it
+/// does not hold.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Refusal {
+    Limited(Limited),
+    Reason(Reason),
+}
+
+/// Verified runs kept per brain (the most recent; the one that decides its
+/// standing is always kept).
+pub const VERIFIED_PER_BRAIN: usize = 4;
+/// Segments a verification may examine a frame, on average (`sim::Car::work`):
+/// the ten presets take at most 37 (cloud-brain/sim/tests/traces.rs); a
+/// track made to be costly (every wall in every ray's way) takes 1 500 to
+/// 4 200 and is stopped there, refused as `track-geometry`
+/// (cloud-brain/sim/tests/cost.rs). So a verification of 120 s examines at
+/// most 4.3 million segments: ~35 ms natively.
+pub const VERIFY_WORK_PER_FRAME: u64 = 600;
+/// The game's ten presets (trackPresets.js): their track keys, pinned to
+/// their geometries' digests when the brain opens, so no other geometry
+/// with one of these keys is ever run (tests/fixtures/cloud-brain-sim/
+/// presets.json; core/tests/verify.rs checks them).
+pub const PRESET_TRACKS: [(&str, &str); 10] = [
+    ("e9755c3b-fb81e227-361", "29f23c581b29b3c06eb6c5d517ff1e3d41a6455075e63f8398c0b891cbe29798"), // Rectangle
+    ("96ff5062-616f3b8a-625", "bd633c66911fbfbc1aa0fd495d5e8b2578356b30d45e03d3ca7b16cc0441471e"), // Oval
+    ("94be22ad-37921907-481", "9d53f3cdc81d3c2c19ea7662f7467d7b1ceea415908887285eaee3e8598fc389"), // Triangle
+    ("1d59b5-4cf7b02d-395", "6e25204811130ffa6e75f407c120fad694ac1631e85edd23204e4d17f2f1f1d5"), // Hexagon
+    ("708f8911-67df7f8f-357", "58aed7dc47b56849bdf4441c57818c685e75699109bad585482b433aff660e1b"), // Pentagon
+    ("fc723ff0-f51029ae-857", "ed0a8035dbfee97731068c730d474bad5f83097a5710c4a21de30fbcf74daf34"), // Monza
+    ("bcab1c44-1624d792-876", "94193696d579f7e38a40a06d3db9002ef3ab200c79945f9f173590af0a0a3fdb"), // Silverstone
+    ("e6b8bc72-c21f7a7e-814", "37b8758be9818373b45946ba377c66d2d963e1782aaab1329bbebfb701745871"), // Monaco
+    ("baaecd6e-cb8aab76-878", "9bf3a2271e33ebb633aea23bfd5939559328f86f6350454bc1feb5abe6c1b297"), // Spa
+    ("8e44e624-7de97438-936", "7d3e9d12af1a68d2c970b9a7721e1c7b23788c5fbf96e46842b3fc150dbc8c46"), // Suzuka
+];
+/// Verifications run a minute, for everyone together: the object answers
+/// one request at a time, and one takes up to ~0.1 s under wrangler dev (a
+/// usual one ~18 ms), so at most ~3 s of a minute. Past it, `rate-limited`
+/// until the next minute (counted in memory: a restart starts over).
+pub const VERIFY_PER_MINUTE: u32 = 30;
+/// Entries on a leaderboard.
+pub const BOARD_SIZE: usize = 20;
 
 /// POST /v1/forget: the brains deleted, and the feedback records the
 /// contributor's values were taken out of.
@@ -551,6 +700,16 @@ impl Aggregate {
         trimmed_mean(self.values()).unwrap_or(0.0)
     }
 
+    /// The weight measured against `fitness` (a verified run's, X1): the
+    /// trimmed mean, over the contributors with a value, of how their last
+    /// mean compares with it. So rows measured against a claim made low on
+    /// purpose do not lift a brain once the service has run it.
+    fn weight_against(&self, fitness: f64) -> f64 {
+        let n = self.counted as usize;
+        trimmed_mean((0..n).filter(|i| self.value[*i] != NO_VALUE).filter_map(|i| from_bf16(self.baseline[i])).map(|mean| offspring_feedback(mean, fitness)))
+            .unwrap_or(0.0)
+    }
+
     /// What the offspring showed: the trimmed mean of the mean fitness each
     /// contributor with a value reported last (None without one). In a
     /// brain's own context this is what its claim is held to.
@@ -634,6 +793,9 @@ struct BrainRecord {
     /// `short32` of its contributor: their feedback about it is not evidence.
     owner: u32,
     created: u64,
+    /// Its fitness as the service ran it in its own context (X1): what it
+    /// is served with in that context, in place of its claim.
+    verified: Option<f64>,
 }
 
 impl BrainRecord {
@@ -646,6 +808,7 @@ impl BrainRecord {
             matching: context.map(Match::of),
             owner: short32(contributor),
             created,
+            verified: None,
         }
     }
 }
@@ -701,6 +864,8 @@ pub struct Brain {
     /// (minute, contributions) for the last 24 hours: at most 1 440 entries,
     /// however many requests arrive.
     minutes: VecDeque<(u64, u64)>,
+    /// (minute, verifications run in it), for everyone (X1).
+    verify_minute: (u64, u32),
 }
 
 impl Brain {
@@ -717,6 +882,7 @@ impl Brain {
             dynamics_db: index(wire::DYNAMICS_DIM),
             feedback: HashMap::new(),
             minutes: VecDeque::new(),
+            verify_minute: (0, 0),
         };
         let this_minute = now / MINUTE_MS;
         let (mut bad_tracks, mut bad_brains, mut bad_feedback) = (Vec::new(), Vec::new(), Vec::new());
@@ -746,6 +912,13 @@ impl Brain {
                     }
                     let record = BrainRecord::new(plain(b.fitness), track, &wire::clean_brain_meta(Some(&meta)), &b.contributor, b.created);
                     brain.brains.insert(b.id, record);
+                }
+                Loaded::Verified(v) => {
+                    // The run that decides a brain's standing: in its own context.
+                    let own = context_hash(&v.context());
+                    if let Some(b) = brain.brains.get_mut(&v.brain).filter(|b| b.own == Some(own)) {
+                        b.verified = Some(plain(v.fitness));
+                    }
                 }
                 Loaded::Feedback(f) => {
                     let key = u64::from_str_radix(&f.context_key, 16).ok();
@@ -782,6 +955,12 @@ impl Brain {
         }
         minutes.sort_unstable();
         brain.minutes = minutes.into();
+        // The presets' keys are their geometries' (X1), before anyone asks.
+        for (key, digest) in PRESET_TRACKS {
+            if store.pinned(key)?.is_none() {
+                store.pin(key, digest, now)?;
+            }
+        }
         Ok(brain)
     }
 
@@ -924,11 +1103,33 @@ impl Brain {
         Ok(Some(row.id))
     }
 
-    /// Whether `corroborators` other contributors have reported the brain's
-    /// offspring in its own context (where each row is measured against its
-    /// claim).
+    /// Whether the brain's claim is backed: `corroborators` other
+    /// contributors reported its offspring in its own context (where each
+    /// row is measured against its claim). A verified run (X1) does not
+    /// corroborate: its contributor chooses the track it ran on, and a track
+    /// anyone can make up protects nothing.
     fn corroborated(&self, id: &str, b: &BrainRecord) -> bool {
         b.own.and_then(|k| self.aggregate(id, &k)).map_or(0, Aggregate::valued) >= self.config.corroborators
+    }
+
+    /// The fitness a brain is served and ranked with in a recall whose
+    /// context hashes to `query`: in its own context, the service's run of
+    /// it when there is one (X1: the claim and its quarantine no longer
+    /// count there); anywhere else, its trusted fitness.
+    fn served_fitness(&self, id: &str, b: &BrainRecord, query: u64) -> f64 {
+        match b.verified {
+            Some(verified) if b.own == Some(query) => verified,
+            _ => self.trusted_fitness(id, b),
+        }
+    }
+
+    /// The feedback weight of a brain in a context: against its verified
+    /// fitness in its own context once it has one (X1), else as reported.
+    fn weight_in(&self, id: &str, b: &BrainRecord, key: u64) -> f64 {
+        self.aggregate(id, &key).map_or(0.0, |a| match b.verified {
+            Some(verified) if b.own == Some(key) => a.weight_against(verified),
+            _ => a.weight(),
+        })
     }
 
     /// The fitness a brain is ranked, valued and served with (D7). A claim
@@ -960,9 +1161,9 @@ impl Brain {
     /// count once).
     fn value(&self, id: &str, b: &BrainRecord) -> f64 {
         let (mut sum, mut count) = (0.0, 0.0);
-        for a in self.feedback.get(id).into_iter().flat_map(|m| m.values()) {
+        for (key, a) in self.feedback.get(id).into_iter().flat_map(|m| m.iter()) {
             let n = a.valued() as f64;
-            sum += a.weight() * n;
+            sum += self.weight_in(id, b, *key) * n;
             count += n;
         }
         let weight = if count > 0.0 { sum / count } else { 0.0 };
@@ -1034,7 +1235,9 @@ impl Brain {
             return Ok(Ok(()));
         }
         let key = context_hash(&row.context);
-        let claim = (brain.own == Some(key)).then_some(brain.fitness);
+        // In its own context rows are measured against its claim, or its
+        // verified fitness once the service has run it (X1).
+        let claim = (brain.own == Some(key)).then_some(brain.verified.unwrap_or(brain.fitness));
         let own = brain.own;
         let contexts = self.feedback.entry(row.id.clone()).or_default();
         // A new context over the cap replaces the weakest one (fewest
@@ -1074,6 +1277,9 @@ impl Brain {
         for id in &gone {
             self.unlink(id)?;
         }
+        // Runs they asked the service for stay (they are the service's own),
+        // without their id.
+        store.anonymize_verified(contributor)?;
         // The records with a slot of the contributor's tag are in memory. A
         // few (a token that reported little, or nothing: a tag's share of the
         // records) are each read by key; more (a heavy contributor, or a
@@ -1111,6 +1317,118 @@ impl Brain {
         Ok(ForgetAnswer { protocol: PROTOCOL, brains: gone.len(), feedback: changed })
     }
 
+    /// POST /v1/verify (X1): runs a brain the service holds on the page's
+    /// track, alone, in the given context (as the page's trial worker runs
+    /// it: sensors every frame, main.js's start pose), and keeps the result.
+    /// In the brain's own context the run is its fitness from then on.
+    pub fn verify(&mut self, v: Verify, contributor: &str, now: u64, store: &mut dyn Store) -> Result<std::result::Result<VerifyAnswer, Refusal>> {
+        if !self.brains.contains_key(&v.id) {
+            return Ok(Err(Refusal::Reason(Reason::BrainUnknown)));
+        }
+        let g = &v.geometry;
+        let pt = |p: &[f64; 2]| sim::Point { x: p[0], y: p[1] };
+        let gates: Vec<sim::Segment> = g.checkpoints.iter().map(|c| [pt(&c[0]), pt(&c[1])]).collect();
+        let track = sim::Track::new(g.width, g.height, &g.inner.iter().map(pt).collect::<Vec<_>>(), &g.outer.iter().map(pt).collect::<Vec<_>>(), &gates);
+        // The start pose as main.js finds it (with musl's atan2, which can be
+        // an ulp from V8's: on the ten presets, every traced run drives the
+        // same from either, sim/tests/traces.rs).
+        let Some(pose) = track.start() else { return Ok(Err(Refusal::Reason(Reason::TrackGeometry))) };
+        let Some(brain) = sim::Brain::from_flat(&v.vector) else { return Ok(Err(Refusal::Reason(Reason::BrainEncoding))) };
+        // A key is two 32-bit hashes: the first geometry run under it (or a
+        // preset's) is the only one ever run under it, so a second geometry
+        // made to share a track's key never counts in that track's contexts.
+        let (key, digest) = (wire::geometry_key(g), wire::geometry_digest(g));
+        let pinned = store.pinned(&key)?;
+        if pinned.as_ref().is_some_and(|d| *d != digest) {
+            return Ok(Err(Refusal::Reason(Reason::TrackGeometry)));
+        }
+        let minute = now / MINUTE_MS;
+        let ran = if self.verify_minute.0 == minute { self.verify_minute.1 } else { 0 };
+        if ran >= VERIFY_PER_MINUTE {
+            return Ok(Err(Refusal::Limited(Limited { retry_after: (MINUTE_MS - now % MINUTE_MS).div_ceil(1000) })));
+        }
+        if let Some(limited) = self.admit(contributor, Usage { requests: 1, brains: 1, feedback: 0 }, now, store)? {
+            return Ok(Err(Refusal::Limited(limited)));
+        }
+        self.verify_minute = (minute, ran + 1);
+        let settings = sim::Settings { max_speed: v.context.max_speed, traction: v.context.traction, profile: sim::Profile::from_id(&v.context.profile) };
+        let frames = (v.context.seconds * 60.0).floor() as u64;
+        let outcome = sim::run_within(&track, pose, brain, settings, frames, frames * VERIFY_WORK_PER_FRAME, |_, _| {});
+        if outcome.over_budget {
+            return Ok(Err(Refusal::Reason(Reason::TrackGeometry)));
+        }
+        if pinned.is_none() {
+            store.pin(&key, &digest, now)?;
+        }
+        let row = VerifiedRow {
+            brain: v.id.clone(),
+            track: key.clone(),
+            profile: v.context.profile.clone(),
+            max_speed: v.context.max_speed,
+            traction: v.context.traction,
+            seconds: v.context.seconds,
+            fitness: outcome.fitness,
+            laps: u64::from(outcome.laps),
+            lap_frames: outcome.lap_frames.first().copied(),
+            frames: outcome.frames,
+            contributor: contributor.to_string(),
+            created: now,
+        };
+        store.put_verified(&row)?;
+        let own = self.brains.get(&v.id).and_then(|b| b.own);
+        let deciding = own == Some(context_hash(&row.context()));
+        // At most VERIFIED_PER_BRAIN runs a brain: the oldest go, never the
+        // one in its own context.
+        let mut runs = store.verified_of(&v.id)?;
+        if runs.len() > VERIFIED_PER_BRAIN {
+            runs.sort_by(|a, b| (a.created, &a.track, &a.profile).cmp(&(b.created, &b.track, &b.profile)));
+            let mut over = runs.len() - VERIFIED_PER_BRAIN;
+            for old in &runs {
+                if over == 0 {
+                    break;
+                }
+                if own == Some(context_hash(&old.context())) || old.same_run(&row) {
+                    continue;
+                }
+                store.delete_verified(old)?;
+                over -= 1;
+            }
+        }
+        if deciding {
+            if let Some(b) = self.brains.get_mut(&v.id) {
+                b.verified = Some(plain(outcome.fitness));
+            }
+        }
+        Ok(Ok(VerifyAnswer {
+            protocol: PROTOCOL,
+            id: v.id,
+            matched: key == v.context.track,
+            track: key,
+            fitness: plain(outcome.fitness),
+            laps: u64::from(outcome.laps),
+            lap_frames: outcome.lap_frames,
+            crashed_at: outcome.crashed_at,
+            frames: outcome.frames,
+        }))
+    }
+
+    /// GET /v1/leaderboard (X1): the fastest verified first laps on a track
+    /// and physics, of brains the service holds.
+    pub fn leaderboard(&self, board: &Board, store: &dyn Store) -> Result<BoardAnswer> {
+        // A brain once, at its best run (it may have one a profile or length).
+        let mut seen = HashSet::new();
+        let entries = store
+            .board(board, BOARD_SIZE * VERIFIED_PER_BRAIN)?
+            .into_iter()
+            .filter(|r| self.brains.contains_key(&r.brain) && seen.insert(r.brain.clone()))
+            .filter_map(|r| {
+                Some(BoardEntry { lap_frames: r.lap_frames?, id: r.brain, laps: r.laps, fitness: plain(r.fitness), profile: r.profile, verified: r.created })
+            })
+            .take(BOARD_SIZE)
+            .collect();
+        Ok(BoardAnswer { protocol: PROTOCOL, track: board.track.clone(), max_speed: board.max_speed, traction: board.traction, entries })
+    }
+
     /// Takes the contributor's slot out of one record, when the stored
     /// record (`held`) holds it by their full id: 1 when it did.
     fn forget_in(&mut self, brain: &str, key: u64, contributor: &str, held: &[Slot], store: &mut dyn Store) -> Result<usize> {
@@ -1137,7 +1455,7 @@ impl Brain {
 
     /// POST /v1/recall: the brains of the nearest tracks (every brain when
     /// none is near), ranked as the browser ranks its own memory, with each
-    /// brain's trusted fitness; best k.
+    /// brain's served fitness (`Brain::served_fitness`); best k.
     pub fn recall(&self, r: &Recall, store: &dyn Store) -> Result<RecallAnswer> {
         let mut candidates: HashMap<&str, f64> = HashMap::new();
         {
@@ -1165,10 +1483,10 @@ impl Brain {
             .into_iter()
             .filter_map(|(id, track_sim)| Some((id, track_sim, self.brains.get(id)?)))
             .map(|(id, track_sim, b)| {
-                let fitness = self.trusted_fitness(id, b);
+                let fitness = self.served_fitness(id, b, query_key);
                 let track_term = 0.5 + 0.5 * track_sim;
                 let dynamics_term = if dynamics_active { 1.0 + DYNAMICS_TERM_WEIGHT * dynamics_sim.get(id).copied().unwrap_or(0.0) } else { 1.0 };
-                let weight = self.aggregate(id, &query_key).map_or(0.0, Aggregate::weight);
+                let weight = self.weight_in(id, b, query_key);
                 let score = track_term * fit_term(fitness) * dynamics_term * factor(b.matching.as_ref(), &query) * (1.0 + FEEDBACK_TERM_WEIGHT * weight);
                 (id, score, track_sim, fitness)
             })
@@ -1182,8 +1500,9 @@ impl Brain {
             // A brain whose weights the store lost is left out, never sent bad.
             let Some((vector, meta)) = row.filter(|(v, _)| wire::brain_problem(Some(v)).is_none() && wire::brain_id(v) == id) else { continue };
             let meta = serde_json::from_str::<serde_json::Value>(&meta).map(|m| wire::clean_brain_meta(Some(&m))).unwrap_or_default();
+            let weight = self.brains.get(id).map_or(0.0, |b| self.weight_in(id, b, query_key));
             let feedback = self.aggregate(id, &query_key).map_or(Feedback { weight: 0.0, count: 0, contributors: 0 }, |a| Feedback {
-                weight: a.weight(),
+                weight,
                 count: u64::from(a.count).min(wire::limits::COUNT as u64),
                 contributors: a.counted as usize,
             });
@@ -1256,6 +1575,9 @@ pub struct MemStore {
     /// minute → contributions
     pub minutes: std::collections::BTreeMap<u64, u64>,
     pub contributors: HashMap<String, ContributorRow>,
+    pub verified: Vec<VerifiedRow>,
+    /// track key → the digest of its geometry (X1).
+    pub pins: HashMap<String, String>,
     /// Fail the n-th write from now (tests of a store that breaks mid-request).
     pub fail_after: Option<usize>,
     /// Feedback records read by `feedback_slots` and `records_of`, and the
@@ -1288,6 +1610,7 @@ impl Store for MemStore {
         feedback.sort_by(|a, b| a.brain.cmp(&b.brain).then(b.updated.cmp(&a.updated)).then(a.context_key.cmp(&b.context_key)));
         tracks.into_iter().try_for_each(|t| sink(Loaded::Track(t.clone())))?;
         brains.into_iter().try_for_each(|b| sink(Loaded::Brain(b.clone())))?;
+        self.verified.iter().try_for_each(|v| sink(Loaded::Verified(v.clone())))?;
         // As the SQL store, the context is not loaded back.
         feedback.into_iter().try_for_each(|f| sink(Loaded::Feedback(FeedbackRow { context: None, ..f.clone() })))?;
         self.minutes.range(since_minute + 1..).try_for_each(|(m, c)| sink(Loaded::Minute(*m, *c)))
@@ -1311,6 +1634,7 @@ impl Store for MemStore {
         self.write()?;
         self.brains.remove(id);
         self.feedback.retain(|k, _| k.0 != id);
+        self.verified.retain(|v| v.brain != id);
         Ok(())
     }
     fn put_feedback(&mut self, row: &FeedbackRow) -> Result<()> {
@@ -1389,6 +1713,48 @@ impl Store for MemStore {
         self.feedback.retain(|k, _| !ids.contains(&k.0));
         self.write()?;
         self.brains.retain(|id, _| !ids.contains(id));
+        self.verified.retain(|v| !ids.contains(&v.brain));
         Ok(ids)
+    }
+    fn put_verified(&mut self, row: &VerifiedRow) -> Result<()> {
+        self.write()?;
+        self.verified.retain(|v| !v.same_run(row));
+        self.verified.push(row.clone());
+        Ok(())
+    }
+    fn delete_verified(&mut self, row: &VerifiedRow) -> Result<()> {
+        self.write()?;
+        self.verified.retain(|v| !v.same_run(row));
+        Ok(())
+    }
+    fn verified_of(&self, brain: &str) -> Result<Vec<VerifiedRow>> {
+        Ok(self.verified.iter().filter(|v| v.brain == brain).cloned().collect())
+    }
+    fn board(&self, board: &Board, limit: usize) -> Result<Vec<VerifiedRow>> {
+        let mut rows: Vec<VerifiedRow> = self
+            .verified
+            .iter()
+            .filter(|v| v.track == board.track && v.max_speed == board.max_speed && v.traction == board.traction && v.lap_frames.is_some())
+            .filter(|v| self.brains.contains_key(&v.brain))
+            .cloned()
+            .collect();
+        rows.sort_by(|a, b| a.lap_frames.cmp(&b.lap_frames).then(b.fitness.total_cmp(&a.fitness)).then(a.created.cmp(&b.created)).then(a.brain.cmp(&b.brain)));
+        rows.truncate(limit);
+        Ok(rows)
+    }
+    fn anonymize_verified(&mut self, contributor: &str) -> Result<()> {
+        self.write()?;
+        for v in self.verified.iter_mut().filter(|v| v.contributor == contributor) {
+            v.contributor.clear();
+        }
+        Ok(())
+    }
+    fn pinned(&self, track: &str) -> Result<Option<String>> {
+        Ok(self.pins.get(track).cloned())
+    }
+    fn pin(&mut self, track: &str, digest: &str, _now: u64) -> Result<()> {
+        self.write()?;
+        self.pins.entry(track.to_string()).or_insert_with(|| digest.to_string());
+        Ok(())
     }
 }

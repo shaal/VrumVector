@@ -266,7 +266,8 @@ for fast feedback):
 ### Privacy
 
 Shared: network weights, fitness/laps, the track's CNN embedding (not its
-geometry), driving summaries, learning context. An anonymous random token
+geometry), driving summaries, learning context; when a car drives a lap, the
+track's walls and gates, so the service can drive it again (X1). An anonymous random token
 (128-bit, localStorage) identifies a contributor for quotas and "forget me"; the
 server stores only its SHA-256. IPs are used transiently for rate limiting and
 not stored. The toggle says what is sent before the first upload.
@@ -589,7 +590,7 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
 
 ## Later: other ideas (optional)
 
-- [ ] **X1 — Verified laps and a global leaderboard.** A Rust crate `vv-sim`
+- [x] **X1 — Verified laps and a global leaderboard.** A Rust crate `vv-sim`
   ports the deterministic core (car physics, rays, the 10-16-4 forward pass),
   checked against golden traces from `sim-worker.js` (tolerance, not bit
   equality: JS runs in f64, and `Math.sin` differs across engines). The object
@@ -599,6 +600,34 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   hours. Risk: simulator drift between JS and Rust; CPU per verification
   (one lap is a few million operations: fine on Paid, tight on Free).
   depends: CB4
+  - [x] `cloud-brain/sim` (crate `vectorvroom-sim`): car.js, sensor.js,
+    spatialGrid.js, network.js, driver/profiles.js and main.js's start pose,
+    one car alone with sensors every frame; V8's `hypot` and fdlibm's `tanh`
+    bit for bit, musl's `sin`, `cos` and `atan2` (within 1 ulp of V8's).
+    Golden traces of the game's own scripts in Node
+    (`scripts/cloud-brain-sim-traces.mjs`: the five presets, random brains
+    and brains the game's learning loop evolved): every case drives
+    identically, from the browser's start pose and from the port's own (and
+    2 125 of 2 125 with 2 000 random brains and settings on all ten presets).
+  - [x] `POST /v1/verify` (a brain the service holds, the page's walls and
+    gates on the game's 3200 × 1800 canvas, its context with collisions off
+    and at most 120 s; the service finds the start pose): the run is kept
+    per brain, track key and physics (4 a brain); in the brain's own context
+    it is its fitness, past quarantine, and its feedback there is measured
+    against it; elsewhere, and for eviction, CB4's rules hold (a made-up
+    track protects nothing). The track key is the page's own
+    (`geometryKey`, now in graphics/state.js), computed in Rust; each key
+    runs one geometry (the first, by SHA-256; the presets' from the start).
+    A budget of 600 segments examined a frame stops a track made to be
+    costly. `GET /v1/leaderboard?track=&maxSpeed=&traction=`: the 20 fastest
+    verified first laps, a brain once. 6 verifications a minute per address,
+    30 a minute for everyone, the token's quota; SQL schema 3; forget takes
+    the token off its runs.
+  - [x] The browser: a brain archived after a lap on the page's track is
+    verified once sent (the 4 fastest wait; one every 10 s); the Memory
+    panel shows the leaderboard and how the last verification went; what is
+    sent says the track's walls and gates go with a lap.
+    (docs/validation/cloud-brain.md#x1-verified-laps-and-a-leaderboard)
 - [ ] **X2 — The brain trains while nobody is playing.** A DO alarm runs a few
   GA generations with `vv-sim` on the most-played tracks under a CPU budget and
   archives the results as `source: 'cloud'`. Value: high "wow"; visitors find a

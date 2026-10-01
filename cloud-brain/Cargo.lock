@@ -919,6 +919,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
+name = "ryu-js"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04d056b875a9d2e6cb9a61d127afee9ac5999b9f87bcb32079d1318e505be714"
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1236,10 +1242,21 @@ dependencies = [
  "base64",
  "getrandom 0.2.17",
  "ruvector-core",
+ "ryu-js",
  "serde",
  "serde_json",
  "sha2",
  "uuid",
+ "vectorvroom-sim",
+]
+
+[[package]]
+name = "vectorvroom-sim"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "libm",
+ "serde_json",
 ]
 
 [[package]]

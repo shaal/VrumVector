@@ -10,12 +10,17 @@
 //    wrangler dev): B, fresh, gets A's brains among its first seeds, and B's
 //    offspring feedback reaches A's pool (A's own reports about its own
 //    brains are not evidence, CB4), and A's brains are served with a
-//    neutral fitness until two others corroborate them.
+//    neutral fitness until two others corroborate them;
+// 5. a verified lap (X1), on the real service: a brain that drove a lap on
+//    the page's track is archived and sent, the service drives it on the
+//    page's walls and gates (the same lap as the game's own simulation), its
+//    fitness is then trusted in its context, and the Memory panel shows it
+//    on the leaderboard.
 //
 //   npm run test:cloud-brain:browser     (needs the cloud-brain toolchain for part 4)
 //   BROWSER=firefox (or webkit) runs it in that engine instead of Chromium.
 import assert from 'node:assert/strict';
-import {mkdtemp, mkdir, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, mkdir, readFile, rm, writeFile} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import * as playwright from 'playwright';
@@ -40,6 +45,7 @@ async function openPage(context, {endpoint, fake = null, query = '', consent = t
   const page = await context.newPage();
   page.setDefaultTimeout(60000);
   page.on('pageerror', e => errors.push(`${stage}: ${e.message}`));
+  page.on('console', m => { if (process.env.DEBUG_CONSOLE && /cloud|rror/.test(m.text())) console.error('[console]', stage, m.text()); });
   if (query.includes('brain=shared')) page.once('dialog', d => (consent ? d.accept() : d.dismiss()));
   await page.route('**/*', route => {
     const url = new URL(route.request().url());
@@ -200,11 +206,16 @@ try {
     assert.ok(sources.generation === 0 && sources.archive_recall > 0, JSON.stringify(sources));
     report.seedSources = sources;
     await train(page, 3);
-    // Trained brains and offspring feedback are pushed.
-    await page.evaluate(async () => { await window.__rvCloud.settled(); await window.__rvCloud.client.flush(); });
+    // Trained brains and offspring feedback are pushed. (A generation
+    // archives a brain only when it beats what this page holds: after the
+    // pulled pool's claims, 3 generations sometimes archive none; a few more.)
+    const flushed = () => page.evaluate(async () => { await window.__rvCloud.settled(); await window.__rvCloud.client.flush(); });
+    const pushedSoFar = () => fake.requests.filter(r => r.path === '/v1/contribute').flatMap(r => JSON.parse(r.body).brains).length;
+    await flushed();
+    for (let extra = 0; extra < 6 && !pushedSoFar(); extra++) { await train(page, 1); await flushed(); }
     const contributed = fake.requests.filter(r => r.path === '/v1/contribute').map(r => JSON.parse(r.body));
     const pushed = contributed.flatMap(b => b.brains);
-    assert.ok(pushed.length >= 1, 'brains pushed');
+    assert.ok(pushed.length >= 1, 'brains pushed: ' + JSON.stringify(fake.requests.map(r => r.path)));
     assert.ok(pushed.every(b => b.meta?.learning?.context && b.meta.source), 'with their context and source');
     const rows = contributed.flatMap(b => b.feedback);
     assert.ok(rows.length >= 1, 'offspring feedback pushed');
@@ -369,6 +380,8 @@ try {
     await a.evaluate(async () => { await window.__rvCloud.settled(); await window.__rvCloud.client.flush(); });
     const statsA = await (await fetch(`${REAL}/v1/stats`, {headers: {Origin: origin}})).json();
     assert.ok(statsA.brains >= 1, JSON.stringify(statsA));
+    // The leaderboard is read for the page's track (nothing verified yet).
+    await a.waitForFunction(() => /No verified laps on this track yet/.test(document.querySelector('[data-rv="memory-board"]')?.textContent || ''));
     // B, fresh: its first generation is seeded from A's brains.
     const b = await openPage(contextB, {endpoint: REAL, query: '?brain=shared'});
     await b.waitForFunction(() => window.__rvCloud?.accepted >= 1, {}, {timeout: 60000});
@@ -394,6 +407,46 @@ try {
     // One other contributor corroborates nothing yet: every claim is served as at most 0.
     assert.ok(poolA.every(p => p.fitness <= 0), JSON.stringify(poolA.slice(0, 5)));
     report.real = {statsA, seedsB, entriesWithFeedback: poolA.filter(p => p.feedback.contributors >= 1).length, pool: poolA.length};
+
+    // ─── 5. a verified lap (X1) ──────────────────────────────────────────
+    stage = 'a verified lap';
+    // A brain the game's own learning loop evolved on the Rectangle, and the
+    // lap the game's simulation drove with it (tests/fixtures/cloud-brain-sim).
+    const traces = JSON.parse(await readFile('tests/fixtures/cloud-brain-sim/traces.json', 'utf8'));
+    const lap = traces.cases.find(c => c.track === 'Rectangle' && c.outcome.laps > 0 && c.settings.seconds === 20 && c.settings.profile === 'balanced');
+    assert.ok(lap && lap.settings.maxSpeed === 15 && lap.settings.traction === 0.5, 'a lapping case in the page\'s physics');
+    const run = await a.evaluate(async ({vector, fitness}) => {
+      const s = window.__rvCloud, {decodeF32} = await import('./cloud/wire.js'), {cleanContext} = await import('./learning/policy.js');
+      const {geometryKey} = await import('./graphics/state.js');
+      const ctx = cleanContext({profile: 'balanced', track: geometryKey(road), maxSpeed: 15, traction: 0.5, seconds: 20, collisions: null});
+      const {unflatten} = await import('./brainCodec.js');
+      s.verifications = [];
+      // Archived as main.js archives an elite that drove a lap: the bridge's
+      // hook queues it for a verification.
+      window.__rvBridge.archiveBrain(unflatten(decodeF32(vector, 244)), fitness, window.currentTrackVec, 40, [], 16.6, undefined, {context: ctx, styleScore: 0});
+      await s.settled();
+      const waiting = s.verifications.length;
+      const answer = await s.tick();
+      const pool = await s.client.recall({trackVec: (await import('./cloud/session.js')).unit(window.currentTrackVec), context: ctx, k: 50});
+      return {answer, waiting, key: ctx.track, pageMaxSpeed: maxSpeed, pageTraction: traction,
+        served: pool.find(p => p.id === answer?.id)?.fitness ?? null, board: s.board};
+    }, {vector: lap.vector, fitness: 30});
+    assert.equal(run.key, traces.tracks.Rectangle.key, 'the page\'s default track is the fixture\'s Rectangle');
+    assert.equal(run.waiting, 1, 'queued for a verification');
+    assert.ok(run.answer?.ok && run.answer.matched, JSON.stringify(run.answer));
+    assert.deepEqual({fitness: run.answer.fitness, laps: run.answer.laps, lapFrames: run.answer.lapFrames, crashedAt: run.answer.crashedAt, frames: run.answer.frames},
+      lap.outcome, 'the service drove the lap the game drove');
+    assert.equal(run.served, lap.outcome.fitness, 'verified: its fitness is trusted, not quarantined (it claimed 30)');
+    assert.ok(run.pageMaxSpeed === 15 && run.pageTraction === 0.5);
+    assert.deepEqual(run.board.entries.map(e => [e.id, e.lapFrames]), [[run.answer.id, lap.outcome.lapFrames[0]]]);
+    await openPanel(a);
+    const line = await a.locator('[data-rv="memory-board"]').textContent();
+    assert.equal(line, `Fastest verified laps here: 1. ${(lap.outcome.lapFrames[0] / 60).toFixed(2)} s (yours) · your last car verified: ${(lap.outcome.lapFrames[0] / 60).toFixed(2)} s`);
+    await a.locator('[data-rv="memory"]').screenshot({path: `${out}/leaderboard.png`});
+    // B sees it too (not as its own).
+    const lineB = await b.evaluate(async () => { await window.__rvCloud.refreshBoard({force: true}); return document.querySelector('[data-rv="memory-board"]').textContent; });
+    assert.equal(lineB, `Fastest verified laps here: 1. ${(lap.outcome.lapFrames[0] / 60).toFixed(2)} s`);
+    report.verified = {answer: run.answer, served: run.served, line};
     await contextA.close(); await contextB.close();
   }
 

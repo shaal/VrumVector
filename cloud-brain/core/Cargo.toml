@@ -12,8 +12,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 base64 = "0.22"
 sha2 = "0.10"
+# The game's simulator, for verified laps (X1).
+vectorvroom-sim = { path = "../sim" }
 # Fetched by scripts/build-cloud-brain.sh (upstream 5356a84e2).
 ruvector-core = { path = "../.work/ruvector/crates/ruvector-core", default-features = false, features = ["memory-only"] }
+ryu-js = "1"
 
 # The wasm32-unknown-unknown fallback (docs/plan/cloud-brain.md, D1): its
 # random numbers come from JavaScript (ruvector-core's uuid and rand ask).

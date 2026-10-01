@@ -1,0 +1,9 @@
+{
+ "description": "7 201 frames: over 120 s.",
+ "route": "verify-response",
+ "body": "{\"protocol\":1,\"id\":\"brain_f7f8d1c4119a66e85d7ed05f290501dd\",\"track\":\"e9755c3b-fb81e227-361\",\"matched\":true,\"fitness\":16,\"laps\":2,\"lapFrames\":[512,1010],\"crashedAt\":null,\"frames\":7201}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

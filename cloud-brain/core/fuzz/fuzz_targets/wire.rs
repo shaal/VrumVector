@@ -1,11 +1,14 @@
-//! Any bytes through the three request parsers (CB1's rules, core/src/wire.rs):
-//! none panics, and whatever one accepts holds what the wire format promises.
+//! Any bytes through the request parsers (CB1's rules, core/src/wire.rs, and
+//! X1's verification and leaderboard query): none panics, and whatever one
+//! accepts holds what the wire format promises. A track a verification
+//! accepts is driven on for a few seconds: the simulator never panics on it.
 
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
 use serde_json::Value;
 use vectorvroom_brain_core::wire::{self, limits, Context, PROFILES};
+use vectorvroom_sim as sim;
 
 /// No -0 anywhere in a value (outputs never hold one).
 fn no_negative_zero(v: &Value) -> bool {
@@ -79,5 +82,35 @@ fuzz_target!(|data: &[u8]| {
     }
     if let Ok(token) = wire::parse_forget(data) {
         assert!(token.len() == 32 && token.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)));
+    }
+    if let Ok(v) = wire::parse_verify(data) {
+        assert!(v.token.len() == 32 && wire::brain_problem(Some(&v.vector)).is_none());
+        assert_eq!(v.id, wire::brain_id(&v.vector));
+        clean(&v.context);
+        assert!(v.context.collisions == "off" && v.context.seconds <= limits::VERIFY_SECONDS);
+        let g = &v.geometry;
+        let fine = |p: &[f64; 2]| p.iter().all(|x| x.is_finite() && x.abs() <= limits::COORDINATE && !(*x == 0.0 && x.is_sign_negative()));
+        assert!(g.width == limits::CANVAS_WIDTH && g.height == limits::CANVAS_HEIGHT);
+        assert!([&g.inner, &g.outer].iter().all(|l| (3..=limits::LOOP_POINTS).contains(&l.len()) && l.iter().all(fine)));
+        assert!((1..=limits::GATES).contains(&g.checkpoints.len()) && g.checkpoints.iter().flatten().all(fine));
+        assert!(wire::is_track_key(&wire::geometry_key(g)));
+        // Two seconds on it, alone, from its start pose (when it has one).
+        let pt = |p: &[f64; 2]| sim::Point { x: p[0], y: p[1] };
+        let gates: Vec<sim::Segment> = g.checkpoints.iter().map(|c| [pt(&c[0]), pt(&c[1])]).collect();
+        let inner: Vec<sim::Point> = g.inner.iter().map(pt).collect();
+        let outer: Vec<sim::Point> = g.outer.iter().map(pt).collect();
+        let track = sim::Track::new(g.width, g.height, &inner, &outer, &gates);
+        if let (Some(pose), Some(brain)) = (track.start(), sim::Brain::from_flat(&v.vector)) {
+            let settings = sim::Settings { max_speed: v.context.max_speed, traction: v.context.traction, profile: sim::Profile::from_id(&v.context.profile) };
+            let o = sim::run_within(&track, pose, brain, settings, 120, 120 * 600, |_, _| {});
+            assert!(o.frames <= 120 && o.fitness.is_finite() && o.lap_frames.len() == o.laps as usize);
+            // Stopped within a frame's work of its budget.
+            assert!(o.work <= 120 * 600 + 10 * (g.inner.len() + g.outer.len() + g.checkpoints.len() + 4) as u64, "{}", o.work);
+            assert!(o.lap_frames.windows(2).all(|w| w[0] < w[1]) && o.crashed_at.map_or(true, |f| f == o.frames));
+        }
+    }
+    if let Ok(b) = wire::parse_board(&String::from_utf8_lossy(data)) {
+        assert!(wire::is_track_key(&b.track));
+        assert!((1.0..=100.0).contains(&b.max_speed) && (0.0..=1.0).contains(&b.traction));
     }
 });

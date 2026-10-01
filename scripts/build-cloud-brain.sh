@@ -77,7 +77,7 @@ EOF
 fetch
 [[ "$mode" == --fetch ]] && exit 0
 cd "$ROOT/cloud-brain"
-cargo test --locked -p vectorvroom-brain-core
+cargo test --locked -p vectorvroom-brain-core -p vectorvroom-sim
 cargo check --locked -p vectorvroom-brain --target wasm32-unknown-unknown
 [[ "$mode" == --test ]] && exit 0
 bash build.sh

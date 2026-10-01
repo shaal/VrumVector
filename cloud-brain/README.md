@@ -49,17 +49,24 @@ build command runs `build.sh` in wrangler's working folder, which fetches the
 ruvector sources the first time.
 
 Routes: `GET /health`, `POST /v1/recall`, `POST /v1/contribute`,
-`GET /v1/stats`, `POST /v1/forget` (bodies and answers: [CB1](../docs/validation/cloud-brain.md#cb1-the-wire-format),
-[CB4](../docs/validation/cloud-brain.md#cb4-abuse-and-trust)).
+`GET /v1/stats`, `POST /v1/forget`, `POST /v1/verify`,
+`GET /v1/leaderboard` (bodies and answers: [CB1](../docs/validation/cloud-brain.md#cb1-the-wire-format),
+[CB4](../docs/validation/cloud-brain.md#cb4-abuse-and-trust),
+[X1](../docs/validation/cloud-brain.md#x1-verified-laps-and-a-leaderboard)).
+`sim/` is the game's simulation in Rust (crate `vectorvroom-sim`), which a
+verification drives; `node scripts/cloud-brain-sim-traces.mjs` remakes its
+golden traces from the game's own scripts (and the presets' keys the
+service pins, `--presets`).
 Variables: `DISABLE_BRAIN=true` answers every `/v1/` route with 503
 `disabled`; `ALLOW_LOCAL=true` allows `http://localhost:<port>` and
 `http://127.0.0.1:<port>` origins besides the deployed ones;
 `QUOTA_REQUESTS`, `QUOTA_BRAINS`, `QUOTA_FEEDBACK` set a contributor's
 daily quota (10 000, 5 000 and 50 000 by default; a string, a number or
 a boolean in `vars` all read). The per-address limits are the `ratelimits`
-bindings in `wrangler.jsonc` (20 contributions, 60 recalls, stats and
-health checks, and 3 forgets a minute; IPv6 by /64); `/health` says
-`limits: true` when all are bound.
+bindings in `wrangler.jsonc` (20 contributions, 60 recalls, stats,
+leaderboards and health checks, 3 forgets and 6 verifications a minute;
+IPv6 by /64); `/health` says `limits: true` when all are bound. The
+object runs at most 30 verifications a minute in all.
 
 ## Test
 
@@ -68,6 +75,7 @@ bash scripts/build-cloud-brain.sh --test   # native: cargo test (the CB1 fixture
 npm run test:cloud-brain:service           # the built Worker under wrangler dev
 node scripts/cloud-brain-load.mjs          # 20 000 brains: memory, latency, restart
 bash scripts/fuzz-cloud-brain.sh 600       # 10 minutes each of the wire and brain fuzz targets
+cargo test --release -p vectorvroom-sim -- --ignored --nocapture   # how long a verification takes
 ```
 
 `CLOUD_BRAIN_FEATURES=spike npm run dev -- --var CLOUD_BRAIN_SPIKE:1` adds

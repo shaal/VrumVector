@@ -1,0 +1,10 @@
+{
+ "description": "maxSpeed= (empty).",
+ "route": "leaderboard",
+ "body": "track=e9755c3b-fb81e227-361&maxSpeed=",
+ "expect": {
+  "ok": false,
+  "error": "leaderboard-query",
+  "status": 400
+ }
+}

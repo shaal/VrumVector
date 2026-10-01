@@ -1,13 +1,17 @@
 // The browser's cloud brain client (CB3 of docs/plan/cloud-brain.md):
 // cloud/mode.js, cloud/client.js and cloud/session.js against a fake of the
 // service (tests/helpers/cloud-brain-fake.mjs), with a fake clock and
-// storage; and the per-car origin that tags a clone of your driving.
+// storage; the per-car origin that tags a clone of your driving; and (X1)
+// verifications of brains that drove a lap, and the leaderboard.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as wire from '../AI-Car-Racer/cloud/wire.js';
 import {brainMode, saveBrainMode, consented, STORAGE_KEY} from '../AI-Car-Racer/cloud/mode.js';
 import {CloudBrainClient, contributorToken, OUTBOX_KEY, OUTBOX_LIMITS} from '../AI-Car-Racer/cloud/client.js';
-import {SharedSession, unit, PULL_EVERY, loadConfig} from '../AI-Car-Racer/cloud/session.js';
+import {readFileSync} from 'node:fs';
+import {SharedSession, unit, PULL_EVERY, BOARD_MS, loadConfig, pageGeometry, trackKeyOf} from '../AI-Car-Racer/cloud/session.js';
+import {describeBoard} from '../AI-Car-Racer/cloud/ui.js';
+import {geometryKey} from '../AI-Car-Racer/graphics/state.js';
 import {buildPopulation, FLAT_LENGTH} from '../AI-Car-Racer/learning/policy.js';
 import {createFakeCloudBrain} from './helpers/cloud-brain-fake.mjs';
 import {Simulation} from './helpers/simulation.mjs';
@@ -431,4 +435,181 @@ test('a session pulls again on a new learning context, and when the coach\'s cou
   generation = PULL_EVERY;
   await session.poll();
   assert.equal(pulls.length, 3, 'and the count goes on from there');
+});
+
+// ─── X1: verified laps and the leaderboard ────────────────────────────────
+const traces = JSON.parse(readFileSync(new URL('./fixtures/cloud-brain-sim/traces.json', import.meta.url), 'utf8'));
+const RECT = traces.tracks.Rectangle;
+const rectangle = {width: RECT.width, height: RECT.height, inner: RECT.inner, outer: RECT.outer, checkpoints: RECT.checkpoints};
+const lapContext = {...context, track: RECT.key};
+
+test('a verification sends the brain, its track and its context; a refusal waits without holding contributions', async () => {
+  const fake = createFakeCloudBrain(), clock = {t: 1_000_000}, client = clientFor(fake, {clock});
+  const vector = sine(DIMS.brain, 80);
+  await fake.seed([{vector, fitness: 30, track: null}]);
+  const r = await client.verify({vector, track: rectangle, context: lapContext});
+  assert.deepEqual({ok: r.ok, id: r.id, track: r.track, matched: r.matched, laps: r.laps, lapFrames: r.lapFrames},
+    {ok: true, id: await brainId(vector), track: RECT.key, matched: true, laps: 1, lapFrames: [600]});
+  const sent = JSON.parse(fake.requests.at(-1).body);
+  assert.deepEqual(Object.keys(sent).sort(), ['brainSchema', 'context', 'protocol', 'token', 'track', 'vector']);
+  assert.deepEqual(sent.track, rectangle);
+  const board = await client.leaderboard({track: RECT.key, maxSpeed: 15, traction: 0.5});
+  assert.deepEqual(board.entries.map(e => [e.id, e.lapFrames]), [[r.id, 600]]);
+  assert.equal(fake.requests.at(-1).path, '/v1/leaderboard');
+  // Another physics: another board.
+  assert.deepEqual((await client.leaderboard({track: RECT.key, maxSpeed: 12, traction: 0.5})).entries, []);
+  // A brain the service does not hold: a refusal, asked again only by the caller.
+  assert.deepEqual(await client.verify({vector: sine(DIMS.brain, 81), track: rectangle, context: lapContext}), {error: 'brain-unknown'});
+  // Busy: the next verification waits about a minute; contributions do not.
+  fake.refuse.verify = 'rate-limited';
+  assert.equal(await client.verify({vector, track: rectangle, context: lapContext}), null);
+  fake.refuse.verify = null;
+  const asked = fake.requests.length;
+  assert.equal(await client.verify({vector, track: rectangle, context: lapContext}), null);
+  assert.equal(fake.requests.length, asked, 'waiting: no request');
+  assert.ok(client.canTry('send') && client.canTry('read'));
+  clock.t += 72_001;
+  assert.equal((await client.verify({vector, track: rectangle, context: lapContext})).ok, true);
+  // A refusal of this page's version stops everything, as a contribution's does.
+  fake.refuse.verify = 'protocol';
+  assert.equal(await client.verify({vector, track: rectangle, context: lapContext}), null);
+  assert.equal(client.outdated, true);
+  assert.equal(await client.leaderboard({track: RECT.key, maxSpeed: 15, traction: 0.5}), null);
+});
+
+test('a session verifies a brain that drove a lap once it is sent, the fastest lap first, and reads the leaderboard', async () => {
+  const fake = createFakeCloudBrain(), clock = {t: 1_000_000}, client = clientFor(fake, {clock});
+  const bridge = {hooks: null, setCloudHooks(h) { this.hooks = h; }, brainVector: () => null, acceptCloudPool: () => 0};
+  let ctx = lapContext, geometry = rectangle;
+  const boards = [];
+  const session = new SharedSession({bridge, client, setInterval: null, page: {trackVec: () => null, dynamicsVec: () => null, context: () => ctx, generation: () => null,
+    geometry: () => geometry}});
+  session.onBoard = (board, about) => boards.push({ids: board.entries.map(e => e.id), mine: [...about.mine], last: about.last?.id ?? null});
+  await session.start();
+  await session.settled();
+  assert.equal(fake.requests.filter(r => r.path === '/v1/leaderboard').length, 1, 'read on start');
+  // Each archive is queued (or not) once its brain is in the outbox.
+  const archive = async (seed, meta) => {
+    bridge.hooks.onArchive({vector: sine(DIMS.brain, seed), fitness: 20, trackVec: null, meta: {generation: 1, learningContext: lapContext, ...meta}});
+    await session.settled();
+  };
+  // Not verified, each for its one reason: no lap, car collisions, over
+  // 120 s, another track, a track the service would refuse.
+  for (const [seed, meta, page] of [[90, {fastestLap: undefined}], [91, {learningContext: {...lapContext, collisions: 'on'}}],
+    [92, {learningContext: {...lapContext, seconds: 121}}], [93, {learningContext: {...lapContext, track: 'other'}}],
+    // (The canvas is not in the key: only the track's own check refuses this one.)
+    [94, {}, {...rectangle, width: 3199}]]) {
+    geometry = page || rectangle;
+    await archive(seed, {fastestLap: 9, ...meta});
+    assert.equal(session.verifications.length, 0, `seed ${seed}`);
+  }
+  geometry = rectangle;
+  // The same brain without its defect waits (120 s is allowed).
+  await archive(90, {fastestLap: 9, learningContext: {...lapContext, seconds: 120}});
+  assert.equal(session.verifications.length, 1);
+  session.verifications = [];
+  // Five laps: the four fastest wait.
+  for (const [seed, lap] of [[95, 14], [96, 11], [97, 13], [98, 16], [99, 12]]) await archive(seed, {fastestLap: lap});
+  assert.deepEqual(session.verifications.map(v => v.lap), [11, 12, 13, 14]);
+  // Not before its brain is sent.
+  assert.equal(await session.verifyNext(), null);
+  assert.equal(fake.requests.filter(r => r.path === '/v1/verify').length, 0);
+  // A tick: sent, then the fastest verified, and the leaderboard read again.
+  const r = await session.tick();
+  assert.equal(r.id, await brainId(sine(DIMS.brain, 96)));
+  assert.deepEqual(session.verifications.map(v => v.lap), [12, 13, 14]);
+  assert.deepEqual(boards.at(-1), {ids: [r.id], mine: [r.id], last: r.id});
+  // Archived again: not verified twice.
+  archive(96, {fastestLap: 11});
+  await session.settled();
+  assert.deepEqual(session.verifications.map(v => v.lap), [12, 13, 14]);
+  // A brain the service does not hold (evicted, say): three tries, then it goes.
+  fake.brains.delete(await brainId(sine(DIMS.brain, 99)));
+  for (let i = 0; i < 3; i++) assert.deepEqual(await session.verifyNext(), {error: 'brain-unknown'});
+  assert.deepEqual(session.verifications.map(v => v.lap), [13, 14]);
+  // One verification at a time.
+  const [one, two] = [session.verifyNext(), session.verifyNext()];
+  assert.equal(one, two);
+  await one;
+  assert.deepEqual(session.verifications.map(v => v.lap), [14]);
+  session.stop();
+});
+
+test('the leaderboard is read when the track or physics change, every minute, and a late answer for an old track is not shown', async () => {
+  const fake = createFakeCloudBrain(), clock = {t: 1_000_000}, client = clientFor(fake, {clock});
+  let ctx = lapContext;
+  const shown = [];
+  const session = new SharedSession({bridge: {setCloudHooks() {}}, client, setInterval: null, page: {trackVec: () => null, dynamicsVec: () => null, context: () => ctx, generation: () => null}});
+  session.onBoard = board => shown.push(board ? `${board.track}|${board.maxSpeed}` : null);
+  const reads = () => fake.requests.filter(r => r.path === '/v1/leaderboard').length;
+  await session.refreshBoard();
+  await session.refreshBoard();
+  assert.equal(reads(), 1, 'the same board within a minute: not read again');
+  clock.t += BOARD_MS;
+  await session.refreshBoard();
+  assert.equal(reads(), 2);
+  ctx = {...lapContext, maxSpeed: 12};
+  await session.refreshBoard();
+  assert.equal(reads(), 3, 'new physics: read at once');
+  // A context with no track key yet: nothing asked, and the old board goes.
+  ctx = {...lapContext, track: ''};
+  assert.equal(await session.refreshBoard({force: true}), null);
+  assert.equal(reads(), 3);
+  // The track changes while a read is on its way: that board is not shown.
+  ctx = lapContext;
+  const late = session.refreshBoard({force: true});
+  ctx = {...lapContext, maxSpeed: 10};
+  const now = session.refreshBoard();
+  assert.equal(await late, null);
+  await now;
+  // A read that answers after a later one (a forced read after a
+  // verification) is not shown either.
+  const slow = session.refreshBoard({force: true}), fast = session.refreshBoard({force: true});
+  assert.equal(await slow, null);
+  assert.ok(await fast);
+  // Moved on, and the read fails: the old track's board is not left up.
+  fake.down = 'offline';
+  ctx = {...lapContext, maxSpeed: 11};
+  assert.equal(await session.refreshBoard(), null);
+  assert.equal(session.board, null);
+  fake.down = null;
+  clock.t += 120_000;
+  // No track, then the same track again within the minute: read again.
+  ctx = {...lapContext, maxSpeed: 10};
+  await session.refreshBoard();
+  ctx = {...lapContext, track: ''};
+  await session.refreshBoard();
+  ctx = {...lapContext, maxSpeed: 10};
+  const before = reads();
+  assert.ok(await session.refreshBoard());
+  assert.equal(reads(), before + 1);
+  // Stopped while a read is on its way: it is not shown; after, nothing is read.
+  const inFlight = session.refreshBoard({force: true});
+  session.stop();
+  assert.equal(await inFlight, null);
+  const asked = reads();
+  assert.equal(await session.refreshBoard({force: true}), null);
+  assert.equal(reads(), asked, 'no read after stop');
+  // (null: the line is cleared when the board shown is no longer this page's.)
+  assert.deepEqual(shown, [`${RECT.key}|15`, `${RECT.key}|15`, null, `${RECT.key}|12`, null, `${RECT.key}|10`, `${RECT.key}|10`, null,
+    `${RECT.key}|10`, null, `${RECT.key}|10`]);
+});
+
+test('the page\'s track is main.js\'s road as the service needs it, and the leaderboard line says where your car stands', () => {
+  const p = (x, y) => ({x, y});
+  const road = {left: 0, top: 0, right: 3200, bottom: 1800, innerList: [p(1, 2), p(3, 4), p(5, 6)], outerList: [p(0, 0), p(9, 0), p(9, 9)], checkPointList: [[p(1, 1), p(2, 2)]]};
+  const g = pageGeometry(road);
+  assert.deepEqual(g, {width: 3200, height: 1800, inner: [[1, 2], [3, 4], [5, 6]], outer: [[0, 0], [9, 0], [9, 9]], checkpoints: [[[1, 1], [2, 2]]]});
+  assert.ok(wire.trackGeometry(g));
+  assert.equal(trackKeyOf(g), geometryKey(road), 'the key of what is sent is the page\'s own');
+  assert.equal(pageGeometry(null), null);
+  assert.equal(pageGeometry({...road, left: 5}), null, 'a road not at the canvas origin');
+  assert.equal(wire.trackGeometry(pageGeometry({...road, checkPointList: [[p(1, NaN), p(2, 2)]]})), null);
+  const board = {track: RECT.key, entries: ['a', 'b', 'c', 'd'].map((id, i) => ({id, lapFrames: 600 + 60 * i}))};
+  assert.equal(describeBoard(board, {mine: new Set(['b'])}), 'Fastest verified laps here: 1. 10.00 s · 2. 11.00 s (yours) · 3. 12.00 s');
+  assert.equal(describeBoard(board, {mine: new Set(['d']), last: {track: RECT.key, lapFrames: [780]}}),
+    'Fastest verified laps here: 1. 10.00 s · 2. 11.00 s · 3. 12.00 s · yours: 4th · your last car verified: 13.00 s');
+  assert.equal(describeBoard({track: RECT.key, entries: []}, {last: {track: RECT.key, lapFrames: []}}),
+    'No verified laps on this track yet · your last car did not repeat its lap when the service drove it');
+  assert.equal(describeBoard({track: RECT.key, entries: []}, {last: {track: 'elsewhere', lapFrames: []}}), 'No verified laps on this track yet');
 });

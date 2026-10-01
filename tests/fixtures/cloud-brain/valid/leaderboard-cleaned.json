@@ -1,0 +1,11 @@
+{
+ "description": "Numbers cleaned as a context: maxSpeed 500 is 100, traction -1 is 0, maxSpeed 0 the default.",
+ "route": "leaderboard",
+ "body": "traction=-1&maxSpeed=500&track=e9755c3b-fb81e227-361",
+ "expect": {
+  "ok": true,
+  "track": "e9755c3b-fb81e227-361",
+  "maxSpeed": 100,
+  "traction": 0
+ }
+}

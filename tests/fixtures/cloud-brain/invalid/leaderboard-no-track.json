@@ -1,0 +1,10 @@
+{
+ "description": "No track key.",
+ "route": "leaderboard",
+ "body": "maxSpeed=15",
+ "expect": {
+  "ok": false,
+  "error": "leaderboard-query",
+  "status": 400
+ }
+}

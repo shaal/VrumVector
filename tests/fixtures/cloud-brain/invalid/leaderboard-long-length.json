@@ -1,0 +1,10 @@
+{
+ "description": "A length of 10 digits (a body is at most 64 KB).",
+ "route": "leaderboard",
+ "body": "track=1-2-1234567890",
+ "expect": {
+  "ok": false,
+  "error": "leaderboard-query",
+  "status": 400
+ }
+}

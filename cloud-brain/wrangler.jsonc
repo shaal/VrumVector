@@ -20,7 +20,9 @@
   "ratelimits": [
     {"name": "WRITE_LIMIT", "namespace_id": "4201", "simple": {"limit": 20, "period": 60}},
     {"name": "READ_LIMIT", "namespace_id": "4202", "simple": {"limit": 60, "period": 60}},
-    {"name": "FORGET_LIMIT", "namespace_id": "4203", "simple": {"limit": 3, "period": 60}}
+    {"name": "FORGET_LIMIT", "namespace_id": "4203", "simple": {"limit": 3, "period": 60}},
+    // Verifications (X1): each runs the simulator, up to 120 s of driving.
+    {"name": "VERIFY_LIMIT", "namespace_id": "4204", "simple": {"limit": 6, "period": 60}}
   ],
   "migrations": [{"tag": "v1", "new_sqlite_classes": ["SharedBrain"]}]
 }
