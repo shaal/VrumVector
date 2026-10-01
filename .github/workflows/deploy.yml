@@ -115,14 +115,23 @@ jobs:
           node ../scripts/cloud-brain-health.mjs "$url" "$CLOUD_BRAIN_COMMIT"
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
+      # Only when the page's side did not change since the running brain's
+      # commit: a new page may call routes an older brain does not have.
       - name: Keep the running production brain
         id: brain-kept
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.brain.outcome != 'success'
         continue-on-error: true
+        shell: bash
         env:
           BRAIN_PRODUCTION: https://vectorvroom-brain.shaal.workers.dev
         run: |
-          node scripts/cloud-brain-health.mjs "$BRAIN_PRODUCTION"
+          running=$(curl -fsS --max-time 15 "$BRAIN_PRODUCTION/health" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).build?.commit||""))')
+          if [[ -z "$running" ]]; then echo "::error::The running production brain does not say its commit"; exit 1; fi
+          git fetch --quiet --no-tags --depth=1 origin "$running"
+          if ! git diff --quiet "$running" HEAD -- cloud-brain AI-Car-Racer/cloud; then
+            echo "::error::The page's cloud code changed since the running brain ($running): not keeping it"; exit 1
+          fi
+          node scripts/cloud-brain-health.mjs "$BRAIN_PRODUCTION" "$running"
           echo "url=$BRAIN_PRODUCTION" >> "$GITHUB_OUTPUT"
 
       - name: Configure live endpoint and stage static site

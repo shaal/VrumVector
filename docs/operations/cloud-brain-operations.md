@@ -84,8 +84,10 @@ Turn it back on with:
 npx wrangler secret delete DISABLE_BRAIN --name vectorvroom-brain
 ```
 
-and re-run the latest `main` deploy so the site offers Shared again. The
-data stays in the Durable Object either way. (Tried on the PR 55 preview:
+and push a new commit to `main` (an empty one will do) so the site offers
+Shared again. A re-run of the old run may not: it publishes the same
+release paths, which are cached as immutable. The data stays in the
+Durable Object either way. (Tried on the PR 55 preview:
 `brain:false` and 503 on `/v1/stats` within seconds, back after the delete.)
 
 ## Deploy and verify
@@ -107,10 +109,12 @@ Push to `main`. `.github/workflows/deploy.yml`:
    (not the version before). `/v1/stats` and a recall (a `text/plain` POST,
    as the page sends) must answer `https://vv.shaal.dev` with CORS.
 5. Writes the Worker origin into `AI-Car-Racer/cloud/config.json`. If this
-   run could not deploy one on `main`, it uses the running production brain
-   if that still answers. Otherwise it writes `null`, which hides the Shared
-   option. Then it publishes Pages. A brain failure fails the run after
-   Pages is published.
+   run could not deploy one on `main`, it keeps the running production
+   brain, but only if that still answers for its own commit and neither
+   `cloud-brain/` nor `AI-Car-Racer/cloud/` changed since that commit (a
+   new page may call routes an older brain lacks). Otherwise it writes
+   `null`, which hides the Shared option. Then it publishes Pages. A brain
+   failure fails the run after Pages is published.
 
 After a run, verify by hand:
 

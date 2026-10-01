@@ -695,8 +695,9 @@ The shared brain is deployed with the site, on Workers Paid (D2).
   POST, as the page sends) answer `https://vv.shaal.dev` with CORS (each
   tried for up to a minute). Then `AI-Car-Racer/cloud/config.json` gets the
   Worker's origin. When a `main` run cannot deploy one, it keeps the
-  running production brain if that still answers; otherwise `null` (the
-  Shared option is hidden). Pages is published either way, and a brain
+  running production brain only if that answers for its own commit and the
+  page's cloud code (`cloud-brain/`, `AI-Car-Racer/cloud/`) did not change
+  since; otherwise `null` (the Shared option is hidden). Pages is published either way, and a brain
   failure fails the run.
 - **The breaker** is a Worker secret (`DISABLE_BRAIN`): no build, and it
   stays through deploys (later health checks then fail on purpose).

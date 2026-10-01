@@ -52,7 +52,7 @@ const health = await check('/health', async () => {
   return null;
 });
 
-const stats = await check(`/v1/stats for ${SITE}`, async () => {
+const stats = health && await check(`/v1/stats for ${SITE}`, async () => {
   const res = await fetch(new URL('/v1/stats', base), {headers: {Origin: SITE}, signal: AbortSignal.timeout(15_000)});
   if (res.status !== 200) return `status ${res.status}`;
   if (res.headers.get('access-control-allow-origin') !== SITE) return `CORS: ${res.headers.get('access-control-allow-origin')}`;
