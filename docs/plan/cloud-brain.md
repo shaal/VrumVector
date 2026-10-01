@@ -270,7 +270,9 @@ geometry), driving summaries, learning context; when a car drives a lap, the
 track's walls and gates, so the service can drive it again (X1). An anonymous random token
 (128-bit, localStorage) identifies a contributor for quotas and "forget me"; the
 server stores only its SHA-256. IPs are used transiently for rate limiting and
-not stored. The toggle says what is sent before the first upload.
+not stored. The toggle says what is sent before the first upload. Forget
+also deletes the brains the service bred from the forgotten ones (X2: a
+child keeps most of its parent's weights).
 
 ### Cost and limits
 
@@ -628,13 +630,27 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
     panel shows the leaderboard and how the last verification went; what is
     sent says the track's walls and gates go with a lap.
     (docs/validation/cloud-brain.md#x1-verified-laps-and-a-leaderboard)
-- [ ] **X2 — The brain trains while nobody is playing.** A DO alarm runs a few
+- [x] **X2 — The brain trains while nobody is playing.** A DO alarm runs a few
   GA generations with `vv-sim` on the most-played tracks under a CPU budget and
   archives the results as `source: 'cloud'`. Value: high "wow"; visitors find a
   brain that improved overnight. Effort: ~6 hours after X1. Risk: CPU cost
   (bounded by the budget; 30M CPU-ms/month are included on Paid) and inheriting
   any `vv-sim` fidelity gap.
   depends: X1
+  - [x] `Brain::train`: on the presets the most players learned on (turns
+    among the three busiest contexts, counted by contributors), the 3 best
+    brains there and one not driven yet (each seed's run kept as verified),
+    and children of the best 4 (network.js-style mutation), within a
+    session's frames; a child that beats every seed is archived as
+    the service's own (contributor `cloud`, `source: 'cloud'`, filed on the
+    players' track, at most 50), its run verified: served at it in its own
+    context, a claim elsewhere. The presets' geometry is in the service
+    (presets.json); a player's track is never stored.
+  - [x] A Durable Object alarm runs a session every `TRAIN_EVERY_SECONDS`
+    while nobody contributed for `TRAIN_IDLE_MINUTES`, when `TRAIN_FRAMES`
+    is set (off by default, D2), idleness read from SQLite before the brain
+    is built; `/health` says `training`. 120 000 frames take ~0.1 s, a
+    rebuild at the caps ~1.1 s (docs/validation/cloud-brain.md#x2-the-brain-trains-while-nobody-is-playing).
 - [ ] **X3 — Race the cloud champion.** The best brain for your track drives a
   ghost car next to yours, simulated locally from its weights (no trajectory
   storage). Value: medium-high, immediate and visible. Effort: ~3 hours. Risk:

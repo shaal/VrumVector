@@ -697,6 +697,38 @@ pub struct Outcome {
     pub over_budget: bool,
 }
 
+impl Outcome {
+    /// Drove better than `other`: more fitness, or as much with an earlier
+    /// first lap (a run with a lap before one without).
+    pub fn beats(&self, other: &Outcome) -> bool {
+        let first = |o: &Outcome| o.lap_frames.first().copied().unwrap_or(u64::MAX);
+        self.fitness > other.fitness || (self.fitness == other.fitness && first(self) < first(other))
+    }
+
+    /// Its fastest lap in seconds as car.js keeps lap times: each lap's
+    /// time to 2 decimals (`toFixed(2)`), the first from the start, each
+    /// next one the time so far less the laps before it as kept.
+    pub fn fastest_lap(&self) -> Option<f64> {
+        let mut kept: Vec<f64> = Vec::new();
+        for frame in &self.lap_frames {
+            let so_far = *frame as f64 / 60.0 - kept.iter().sum::<f64>();
+            kept.push(to_fixed2(so_far));
+        }
+        kept.into_iter().reduce(f64::min)
+    }
+}
+
+/// `Number(x.toFixed(2))` for x ≥ 0: the nearest number with 2 decimals.
+/// A double is exactly halfway between two only when it is an odd number
+/// of eighths (x.125, x.375, ...): toFixed then takes the larger, where
+/// Rust's formatting takes the even one.
+fn to_fixed2(x: f64) -> f64 {
+    if (x * 8.0).fract() == 0.0 && (x * 4.0).fract() != 0.0 {
+        return (x * 100.0).ceil() / 100.0;
+    }
+    format!("{x:.2}").parse().unwrap_or(x)
+}
+
 /// Runs a brain alone on a track for `frames` frames (60 a second) from
 /// `pose`, calling `observe` after each frame. Stops early when the car
 /// crashes: a crashed car never changes again.

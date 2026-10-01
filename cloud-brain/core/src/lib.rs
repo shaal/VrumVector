@@ -3,4 +3,5 @@
 //! all of it is tested natively with `cargo test`.
 
 pub mod brain;
+pub mod presets;
 pub mod wire;

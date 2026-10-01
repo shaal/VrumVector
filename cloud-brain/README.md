@@ -67,6 +67,9 @@ bindings in `wrangler.jsonc` (20 contributions, 60 recalls, stats,
 leaderboards and health checks, 3 forgets and 6 verifications a minute;
 IPv6 by /64); `/health` says `limits: true` when all are bound. The
 object runs at most 30 verifications a minute in all.
+Cloud training (X2) is off unless `TRAIN_FRAMES` is set (frames a session,
+e.g. 120 000: about 0.1 s); `TRAIN_EVERY_SECONDS` (1 800) and
+`TRAIN_IDLE_MINUTES` (10) set when sessions run; `/health` says `training`.
 
 ## Test
 

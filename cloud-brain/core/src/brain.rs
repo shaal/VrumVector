@@ -21,7 +21,8 @@
 //! in the brain's own context the run is what it is served with
 //! (`Brain::served_fitness`), and its feedback there is measured against it.
 
-use crate::wire::{self, clamp, plain, Board, Context, Contribution, Meta, Reason, Recall, Refused, Verify, BRAIN_SCHEMA, PROTOCOL};
+use crate::presets;
+use crate::wire::{self, clamp, plain, Board, Context, Contribution, Learning, Meta, Reason, Recall, Refused, Verify, BRAIN_SCHEMA, PROTOCOL};
 use ruvector_core::types::{DbOptions, DistanceMetric, SearchQuery, VectorEntry};
 use ruvector_core::VectorDB;
 use vectorvroom_sim as sim;
@@ -285,6 +286,9 @@ pub trait Store {
     fn pinned(&self, track: &str) -> Result<Option<String>>;
     /// Pins a track key to a geometry's digest, unless it is pinned already.
     fn pin(&mut self, track: &str, digest: &str, now: u64) -> Result<()>;
+    /// The last minute a contribution was counted in (X2: is anyone
+    /// playing?), without building the brain.
+    fn last_contribution(&self) -> Result<Option<u64>>;
 }
 
 /// A contributor's id: 128 bits of SHA-256 of their token. The token itself
@@ -470,22 +474,65 @@ pub const VERIFIED_PER_BRAIN: usize = 4;
 /// (cloud-brain/sim/tests/cost.rs). So a verification of 120 s examines at
 /// most 4.3 million segments: ~35 ms natively.
 pub const VERIFY_WORK_PER_FRAME: u64 = 600;
-/// The game's ten presets (trackPresets.js): their track keys, pinned to
-/// their geometries' digests when the brain opens, so no other geometry
-/// with one of these keys is ever run (tests/fixtures/cloud-brain-sim/
-/// presets.json; core/tests/verify.rs checks them).
-pub const PRESET_TRACKS: [(&str, &str); 10] = [
-    ("e9755c3b-fb81e227-361", "29f23c581b29b3c06eb6c5d517ff1e3d41a6455075e63f8398c0b891cbe29798"), // Rectangle
-    ("96ff5062-616f3b8a-625", "bd633c66911fbfbc1aa0fd495d5e8b2578356b30d45e03d3ca7b16cc0441471e"), // Oval
-    ("94be22ad-37921907-481", "9d53f3cdc81d3c2c19ea7662f7467d7b1ceea415908887285eaee3e8598fc389"), // Triangle
-    ("1d59b5-4cf7b02d-395", "6e25204811130ffa6e75f407c120fad694ac1631e85edd23204e4d17f2f1f1d5"), // Hexagon
-    ("708f8911-67df7f8f-357", "58aed7dc47b56849bdf4441c57818c685e75699109bad585482b433aff660e1b"), // Pentagon
-    ("fc723ff0-f51029ae-857", "ed0a8035dbfee97731068c730d474bad5f83097a5710c4a21de30fbcf74daf34"), // Monza
-    ("bcab1c44-1624d792-876", "94193696d579f7e38a40a06d3db9002ef3ab200c79945f9f173590af0a0a3fdb"), // Silverstone
-    ("e6b8bc72-c21f7a7e-814", "37b8758be9818373b45946ba377c66d2d963e1782aaab1329bbebfb701745871"), // Monaco
-    ("baaecd6e-cb8aab76-878", "9bf3a2271e33ebb633aea23bfd5939559328f86f6350454bc1feb5abe6c1b297"), // Spa
-    ("8e44e624-7de97438-936", "7d3e9d12af1a68d2c970b9a7721e1c7b23788c5fbf96e46842b3fc150dbc8c46"), // Suzuka
-];
+/// Cloud training (X2): how much a session may do, and when.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Training {
+    /// Frames driven a session at most (each run counts all its frames).
+    pub frames: u64,
+    /// A session runs only when nobody has contributed for this long.
+    pub idle_minutes: u64,
+}
+
+/// What a training session did (`Brain::train`).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrainReport {
+    /// The preset's name.
+    pub track: String,
+    pub context: Context,
+    pub seeds: Vec<String>,
+    /// Runs driven (the seeds' included), and their frames.
+    pub runs: usize,
+    pub frames: u64,
+    /// The best seed's fitness, and the best of the session's.
+    pub seed_fitness: f64,
+    pub best_fitness: f64,
+    /// The brain archived, when a child beat every seed.
+    pub archived: Option<String>,
+}
+
+/// Brains a training session starts from, the best it breeds from (and
+/// keeps), and how far a child's weights move toward random ones, in turn.
+pub const TRAIN_SEEDS: usize = 4;
+const TRAIN_PARENTS: usize = 4;
+/// The busiest contexts sessions take turns on.
+pub const TRAIN_CONTEXTS: usize = 3;
+/// Brains of the service's own held at most.
+pub const CLOUD_BRAINS: usize = 50;
+const TRAIN_RATES: [f64; 3] = [0.05, 0.1, 0.2];
+
+/// xorshift64*: training's random numbers, the same for a seed natively and
+/// in Wasm.
+struct Xorshift(u64);
+impl Xorshift {
+    fn new(seed: u64) -> Self {
+        Xorshift(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1)
+    }
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+    }
+    /// In [0, 1).
+    fn unit(&mut self) -> f64 {
+        (self.next() >> 11) as f64 / (1u64 << 53) as f64
+    }
+}
+
+/// The service's own contributor id (X2): the brains its training makes.
+/// Not a token's (those are 32 hex digits), so no token can pass for it.
+pub const CLOUD_CONTRIBUTOR: &str = "cloud";
 /// Verifications run a minute, for everyone together: the object answers
 /// one request at a time, and one takes up to ~0.1 s under wrangler dev (a
 /// usual one ~18 ms), so at most ~3 s of a minute. Past it, `rate-limited`
@@ -796,19 +843,30 @@ struct BrainRecord {
     /// Its fitness as the service ran it in its own context (X1): what it
     /// is served with in that context, in place of its claim.
     verified: Option<f64>,
+    /// Its learning context when that has a track key (what `own` hashes):
+    /// cloud training (X2) groups brains by it.
+    context: Option<Context>,
+    /// Made by the service's own training (X2, `CLOUD_CONTRIBUTOR`). Its
+    /// run in its own context is its verified run, served there as any
+    /// verified run is; elsewhere its fitness is a claim like a player's
+    /// (its seeds' track and context were the players' to choose).
+    cloud: bool,
 }
 
 impl BrainRecord {
     fn new(fitness: f64, track: Option<String>, meta: &Meta, contributor: &str, created: u64) -> Self {
         let context = meta.learning.as_ref().map(|l| &l.context);
+        let own_context = context.filter(|c| !c.track.is_empty());
         BrainRecord {
             fitness,
             track,
-            own: context.filter(|c| !c.track.is_empty()).map(context_hash),
+            own: own_context.map(context_hash),
             matching: context.map(Match::of),
             owner: short32(contributor),
             created,
             verified: None,
+            context: own_context.cloned(),
+            cloud: contributor == CLOUD_CONTRIBUTOR,
         }
     }
 }
@@ -956,9 +1014,9 @@ impl Brain {
         minutes.sort_unstable();
         brain.minutes = minutes.into();
         // The presets' keys are their geometries' (X1), before anyone asks.
-        for (key, digest) in PRESET_TRACKS {
-            if store.pinned(key)?.is_none() {
-                store.pin(key, digest, now)?;
+        for p in presets::presets() {
+            if store.pinned(&p.key)?.is_none() {
+                store.pin(&p.key, &p.digest, now)?;
             }
         }
         Ok(brain)
@@ -1155,7 +1213,8 @@ impl Brain {
         }
     }
 
-    /// How much a brain is worth keeping: its trusted fitness, adjusted by
+    /// How much a brain is worth keeping: its trusted fitness (or its run on
+    /// a preset, verified in its own context), adjusted by
     /// how its offspring did (the mean of its feedback weights, each context
     /// weighed by its contributors with a value: one contributor's many rows
     /// count once).
@@ -1167,7 +1226,14 @@ impl Brain {
             count += n;
         }
         let weight = if count > 0.0 { sum / count } else { 0.0 };
-        fit_term(self.trusted_fitness(id, b)) * (1.0 + FEEDBACK_TERM_WEIGHT * weight)
+        // A run the service drove on a preset, in the brain's own context,
+        // is what it is worth (a preset is no one's to make up: X1 pins its
+        // geometry); any other fitness is its trusted fitness.
+        let fitness = match (b.verified, &b.context) {
+            (Some(run), Some(c)) if presets::by_key(&c.track).is_some() => run,
+            _ => self.trusted_fitness(id, b),
+        };
+        fit_term(fitness) * (1.0 + FEEDBACK_TERM_WEIGHT * weight)
     }
 
     /// Takes a brain out of memory (the store is written by the caller).
@@ -1273,9 +1339,30 @@ impl Brain {
     /// quota: forgetting must work on a busy day (the per-address limit
     /// still counts it), and it writes no usage.
     pub fn forget(&mut self, contributor: &str, store: &mut dyn Store) -> Result<ForgetAnswer> {
-        let gone = store.delete_brains_of(contributor)?;
+        let mut gone = store.delete_brains_of(contributor)?;
         for id in &gone {
             self.unlink(id)?;
+        }
+        // The service's brains bred from theirs (X2) go too, and those bred
+        // from those: a child keeps most of its parent's weights.
+        let mut parents: HashSet<String> = gone.iter().cloned().collect();
+        while !parents.is_empty() {
+            let cloud: Vec<String> = self.brains.iter().filter(|(_, b)| b.cloud).map(|(id, _)| id.clone()).collect();
+            let rows = store.brain_rows(&cloud.iter().map(String::as_str).collect::<Vec<_>>())?;
+            let bred: Vec<String> = cloud
+                .into_iter()
+                .zip(rows)
+                .filter_map(|(id, row)| {
+                    let meta = serde_json::from_str::<serde_json::Value>(&row?.1).ok()?;
+                    wire::clean_brain_meta(Some(&meta)).parent_ids?.iter().any(|p| parents.contains(p)).then_some(id)
+                })
+                .collect();
+            for id in &bred {
+                store.delete_brain(id)?;
+                self.unlink(id)?;
+            }
+            parents = bred.iter().cloned().collect();
+            gone.extend(bred);
         }
         // Runs they asked the service for stay (they are the service's own),
         // without their id.
@@ -1374,31 +1461,7 @@ impl Brain {
             contributor: contributor.to_string(),
             created: now,
         };
-        store.put_verified(&row)?;
-        let own = self.brains.get(&v.id).and_then(|b| b.own);
-        let deciding = own == Some(context_hash(&row.context()));
-        // At most VERIFIED_PER_BRAIN runs a brain: the oldest go, never the
-        // one in its own context.
-        let mut runs = store.verified_of(&v.id)?;
-        if runs.len() > VERIFIED_PER_BRAIN {
-            runs.sort_by(|a, b| (a.created, &a.track, &a.profile).cmp(&(b.created, &b.track, &b.profile)));
-            let mut over = runs.len() - VERIFIED_PER_BRAIN;
-            for old in &runs {
-                if over == 0 {
-                    break;
-                }
-                if own == Some(context_hash(&old.context())) || old.same_run(&row) {
-                    continue;
-                }
-                store.delete_verified(old)?;
-                over -= 1;
-            }
-        }
-        if deciding {
-            if let Some(b) = self.brains.get_mut(&v.id) {
-                b.verified = Some(plain(outcome.fitness));
-            }
-        }
+        self.keep_run(&row, store)?;
         Ok(Ok(VerifyAnswer {
             protocol: PROTOCOL,
             id: v.id,
@@ -1410,6 +1473,35 @@ impl Brain {
             crashed_at: outcome.crashed_at,
             frames: outcome.frames,
         }))
+    }
+
+    /// Keeps a run the service drove (a verification's, or training's): at
+    /// most VERIFIED_PER_BRAIN a brain, the oldest going first but never the
+    /// one in its own context; in its own context it is its standing.
+    fn keep_run(&mut self, row: &VerifiedRow, store: &mut dyn Store) -> Result<()> {
+        store.put_verified(row)?;
+        let own = self.brains.get(&row.brain).and_then(|b| b.own);
+        let mut runs = store.verified_of(&row.brain)?;
+        if runs.len() > VERIFIED_PER_BRAIN {
+            runs.sort_by(|a, b| (a.created, &a.track, &a.profile).cmp(&(b.created, &b.track, &b.profile)));
+            let mut over = runs.len() - VERIFIED_PER_BRAIN;
+            for old in &runs {
+                if over == 0 {
+                    break;
+                }
+                if own == Some(context_hash(&old.context())) || old.same_run(row) {
+                    continue;
+                }
+                store.delete_verified(old)?;
+                over -= 1;
+            }
+        }
+        if own == Some(context_hash(&row.context())) {
+            if let Some(b) = self.brains.get_mut(&row.brain) {
+                b.verified = Some(plain(row.fitness));
+            }
+        }
+        Ok(())
     }
 
     /// GET /v1/leaderboard (X1): the fastest verified first laps on a track
@@ -1427,6 +1519,213 @@ impl Brain {
             .take(BOARD_SIZE)
             .collect();
         Ok(BoardAnswer { protocol: PROTOCOL, track: board.track.clone(), max_speed: board.max_speed, traction: board.traction, entries })
+    }
+
+    /// Cloud training (X2), one session: in one of the three learning
+    /// contexts on a preset the most players' brains learned in (collisions
+    /// off, at most 120 s; which one turns with `seed`), the best
+    /// `TRAIN_SEEDS` brains there (by what they are
+    /// served with in that context) are driven, then children of the best
+    /// two, each the parent's weights moved toward random ones as network.js
+    /// `mutate` does (amounts 0.05, 0.1, 0.2 in turn), until `t.frames`
+    /// frames are used. A child that drove better than every seed (more
+    /// fitness, or as much with an earlier first lap) is archived as a brain
+    /// of the service's own (`CLOUD_CONTRIBUTOR`, source `cloud`), with its
+    /// run as its verified run. Only while nobody has contributed for
+    /// `t.idle_minutes`. Deterministic for a `seed`. None: nothing to do.
+    pub fn train(&mut self, t: Training, now: u64, seed: u64, store: &mut dyn Store) -> Result<Option<TrainReport>> {
+        if !Brain::idle(t, now, self.minutes.back().map(|(m, _)| *m)) {
+            return Ok(None);
+        }
+        // The busiest presets and contexts: the most players learned in them
+        // (contributors, not brains: one token's many brains count once);
+        // ties to the most brains, then the lowest hash; the session's turn
+        // picks.
+        let mut groups: HashMap<u64, (HashSet<u32>, usize, Context, &'static presets::Preset)> = HashMap::new();
+        for b in self.brains.values().filter(|b| !b.cloud) {
+            let Some(c) = b.context.as_ref().filter(|c| c.collisions == "off" && c.seconds <= wire::limits::VERIFY_SECONDS) else { continue };
+            let Some(p) = presets::by_key(&c.track) else { continue };
+            let g = groups.entry(context_hash(c)).or_insert_with(|| (HashSet::new(), 0, c.clone(), p));
+            g.0.insert(b.owner);
+            g.1 += 1;
+        }
+        let mut groups: Vec<(u64, (u64, Context, &'static presets::Preset))> =
+            groups.into_iter().map(|(k, (who, n, c, p))| (k, (((who.len() as u64) << 32) | (n as u64).min(u64::from(u32::MAX)), c, p))).collect();
+        groups.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(&b.0)));
+        groups.truncate(TRAIN_CONTEXTS);
+        if groups.is_empty() {
+            return Ok(None);
+        }
+        let turn = (seed % groups.len() as u64) as usize;
+        let (key, (_, context, preset)) = groups.swap_remove(turn);
+        // The seeds: the best served there (a run the service drove counts as
+        // it is; then the highest claims), and one brain not driven yet,
+        // chosen at random: its run is kept, so each session tries one more
+        // and none waits behind claims forever.
+        let mut seeds: Vec<(&str, f64, f64, bool)> = self
+            .brains
+            .iter()
+            .filter(|(_, b)| b.own == Some(key))
+            .map(|(id, b)| (id.as_str(), self.served_fitness(id, b, key), b.fitness, b.verified.is_some()))
+            .collect();
+        seeds.sort_by(|a, b| b.1.total_cmp(&a.1).then(b.2.total_cmp(&a.2)).then(a.0.cmp(b.0)));
+        let mut random = Xorshift::new(seed);
+        let mut seed_ids: Vec<String> = seeds.iter().take(TRAIN_SEEDS - 1).map(|s| s.0.to_string()).collect();
+        let untried: Vec<&str> = seeds.iter().skip(TRAIN_SEEDS - 1).filter(|s| !s.3).map(|s| s.0).collect();
+        if !untried.is_empty() {
+            seed_ids.push(untried[(random.next() % untried.len() as u64) as usize].to_string());
+        } else if let Some(next) = seeds.get(TRAIN_SEEDS - 1) {
+            seed_ids.push(next.0.to_string());
+        }
+        let rows = store.brain_rows(&seed_ids.iter().map(String::as_str).collect::<Vec<_>>())?;
+
+        let g = &preset.geometry;
+        let pt = |p: &[f64; 2]| sim::Point { x: p[0], y: p[1] };
+        let gates: Vec<sim::Segment> = g.checkpoints.iter().map(|c| [pt(&c[0]), pt(&c[1])]).collect();
+        let track = sim::Track::new(g.width, g.height, &g.inner.iter().map(pt).collect::<Vec<_>>(), &g.outer.iter().map(pt).collect::<Vec<_>>(), &gates);
+        let Some(pose) = track.start() else { return Ok(None) };
+        let settings = sim::Settings { max_speed: context.max_speed, traction: context.traction, profile: sim::Profile::from_id(&context.profile) };
+        let per_run = ((context.seconds * 60.0).floor() as u64).max(1);
+        let mut left = t.frames;
+        let mut drive = |v: &[f32]| -> Option<sim::Outcome> {
+            if left < per_run {
+                return None;
+            }
+            left -= per_run;
+            let o = sim::run_within(&track, pose, sim::Brain::from_flat(v)?, settings, per_run, per_run * VERIFY_WORK_PER_FRAME, |_, _| {});
+            (!o.over_budget).then_some(o)
+        };
+        let run_row = |brain: &str, o: &sim::Outcome| VerifiedRow {
+            brain: brain.to_string(),
+            track: preset.key.clone(),
+            profile: context.profile.clone(),
+            max_speed: context.max_speed,
+            traction: context.traction,
+            seconds: context.seconds,
+            fitness: o.fitness,
+            laps: u64::from(o.laps),
+            lap_frames: o.lap_frames.first().copied(),
+            frames: o.frames,
+            contributor: CLOUD_CONTRIBUTOR.into(),
+            created: now,
+        };
+        // (vector, outcome, the seed it descends from, mutations since)
+        let mut pool: Vec<(Vec<f32>, sim::Outcome, usize, u64)> = Vec::new();
+        let mut generations: Vec<u64> = Vec::new();
+        let mut seed_runs: Vec<VerifiedRow> = Vec::new();
+        for (i, row) in rows.into_iter().enumerate() {
+            let generation = row.as_ref().and_then(|(_, meta)| serde_json::from_str::<serde_json::Value>(meta).ok()).and_then(|m| wire::clean_brain_meta(Some(&m)).generation);
+            generations.push(generation.unwrap_or(0));
+            let Some((vector, _)) = row else { continue };
+            if let Some(o) = drive(&vector) {
+                seed_runs.push(run_row(&seed_ids[i], &o));
+                pool.push((vector, o, i, 0));
+            }
+        }
+        let rank = |pool: &mut Vec<(Vec<f32>, sim::Outcome, usize, u64)>| {
+            pool.sort_by(|a, b| if a.1.beats(&b.1) { std::cmp::Ordering::Less } else if b.1.beats(&a.1) { std::cmp::Ordering::Greater } else { std::cmp::Ordering::Equal });
+        };
+        rank(&mut pool);
+        let Some(seed_best) = pool.first().map(|p| p.1.clone()) else { return Ok(None) };
+        let mut runs = pool.len();
+        let mut best_child: Option<(Vec<f32>, sim::Outcome, usize, u64)> = None;
+        loop {
+            // A parent among the best so far.
+            let parent = &pool[(random.next() % pool.len().min(TRAIN_PARENTS) as u64) as usize];
+            let rate = TRAIN_RATES[runs % TRAIN_RATES.len()];
+            let child: Vec<f32> = parent.0.iter().map(|w| (f64::from(*w) + (random.unit() * 2.0 - 1.0 - f64::from(*w)) * rate) as f32).collect();
+            let (lineage, depth) = (parent.2, parent.3 + 1);
+            let Some(o) = drive(&child) else { break };
+            runs += 1;
+            if o.beats(&seed_best) && best_child.as_ref().map_or(true, |b| o.beats(&b.1)) {
+                best_child = Some((child.clone(), o.clone(), lineage, depth));
+            }
+            pool.push((child, o, lineage, depth));
+            rank(&mut pool);
+            pool.truncate(TRAIN_PARENTS);
+        }
+        // The seeds' runs are runs the service drove, on a preset, in their
+        // own context: kept as such (so the next session ranks them by them).
+        for row in &seed_runs {
+            self.keep_run(row, store)?;
+        }
+        let mut report = TrainReport {
+            track: preset.name.clone(),
+            context: context.clone(),
+            seeds: seed_ids.clone(),
+            runs,
+            frames: t.frames - left,
+            seed_fitness: plain(seed_best.fitness),
+            best_fitness: plain(best_child.as_ref().map_or(seed_best.fitness, |b| b.1.fitness)),
+            archived: None,
+        };
+        let Some((vector, outcome, lineage, depth)) = best_child else { return Ok(Some(report)) };
+        let id = wire::brain_id(&vector);
+        if self.brains.contains_key(&id) || wire::brain_problem(Some(&vector)).is_some() {
+            return Ok(Some(report));
+        }
+        let parent = &seed_ids[lineage];
+        // Filed on the track the most players in this context file their
+        // brains on (one token cannot move it), ties to the most brains,
+        // then the lowest id.
+        let mut filed: HashMap<&str, (HashSet<u32>, usize)> = HashMap::new();
+        for b in self.brains.values().filter(|b| !b.cloud && b.own == Some(key)) {
+            if let Some(t) = b.track.as_deref().filter(|t| self.tracks.contains_key(*t)) {
+                let f = filed.entry(t).or_default();
+                f.0.insert(b.owner);
+                f.1 += 1;
+            }
+        }
+        let track_id = filed.into_iter().max_by(|a, b| (a.1 .0.len(), a.1 .1).cmp(&(b.1 .0.len(), b.1 .1)).then(b.0.cmp(a.0))).map(|(t, _)| t.to_string());
+        let meta = Meta {
+            // Its seed's generation and the mutations since; the seed is its
+            // parent (the brains between were never kept).
+            generation: Some(generations.get(lineage).copied().unwrap_or(0) + depth),
+            parent_ids: Some(vec![parent.clone()]),
+            fastest_lap: outcome.fastest_lap().map(plain),
+            source: Some("cloud".into()),
+            learning: Some(Learning { context: context.clone(), style_score: 0.0, driving: None }),
+        };
+        let fitness = plain(outcome.fitness);
+        let row = BrainRow {
+            id: id.clone(),
+            fitness,
+            track: track_id.clone(),
+            dynamics: None,
+            meta: serde_json::to_string(&meta).map_err(|e| StoreError(e.to_string()))?,
+            contributor: CLOUD_CONTRIBUTOR.into(),
+            created: now,
+        };
+        store.put_brain(&row, &vector)?;
+        if let Some(t) = &track_id {
+            if let Some(record) = self.tracks.get_mut(t) {
+                record.brains.insert(id.clone());
+            }
+        }
+        self.brains.insert(id.clone(), BrainRecord::new(fitness, track_id, &meta, CLOUD_CONTRIBUTOR, now));
+        // Its run is its verified run (the service drove it, on a preset).
+        self.keep_run(&run_row(&id, &outcome), store)?;
+        // At most CLOUD_BRAINS of the service's own: the weakest (then the
+        // oldest) goes, so sessions never fill the store.
+        let mut cloud: Vec<(&str, f64, u64)> = self.brains.iter().filter(|(_, b)| b.cloud).map(|(i, b)| (i.as_str(), b.fitness, b.created)).collect();
+        if cloud.len() > CLOUD_BRAINS {
+            cloud.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.2.cmp(&b.2)).then(a.0.cmp(b.0)));
+            let gone: Vec<String> = cloud.iter().take(cloud.len() - CLOUD_BRAINS).map(|c| c.0.to_string()).collect();
+            for g in gone {
+                store.delete_brain(&g)?;
+                self.unlink(&g)?;
+            }
+        }
+        self.evict(std::slice::from_ref(&id), store)?;
+        report.archived = self.brains.contains_key(&id).then_some(id);
+        Ok(Some(report))
+    }
+
+    /// Whether nobody has contributed for `t.idle_minutes` (the last
+    /// contribution's minute given): a training session may run. The Worker
+    /// asks it of the store before building the brain.
+    pub fn idle(t: Training, now: u64, last_contribution: Option<u64>) -> bool {
+        last_contribution.map_or(true, |m| m + t.idle_minutes <= now / MINUTE_MS)
     }
 
     /// Takes the contributor's slot out of one record, when the stored
@@ -1756,5 +2055,8 @@ impl Store for MemStore {
         self.write()?;
         self.pins.entry(track.to_string()).or_insert_with(|| digest.to_string());
         Ok(())
+    }
+    fn last_contribution(&self) -> Result<Option<u64>> {
+        Ok(self.minutes.keys().next_back().copied())
     }
 }

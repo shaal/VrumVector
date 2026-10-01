@@ -10,6 +10,10 @@
 //! contributor's brains or slots, answers hold no -0 and fit 256 KiB, and a
 //! rebuild answers as the live brain did.
 //!
+//! X2: training sessions (small budgets) among the requests: what they
+//! archive is the service's, its run its verified run (served in its own
+//! context only), at most CLOUD_BRAINS of them.
+//!
 //! X1: verifications on the golden traces' tracks (and a few hostile ones),
 //! of random brains and of brains the game evolved there (they lap), and
 //! leaderboards. A brain verified in its own context is served its verified
@@ -26,7 +30,8 @@ use libfuzzer_sys::fuzz_target;
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::sync::OnceLock;
-use vectorvroom_brain_core::brain::{context_hash, contributor_id, tag, Brain, Config, MemStore, Refusal, Usage, BOARD_SIZE, MAX_CONTEXTS_PER_BRAIN, MAX_CONTRIBUTORS, PRESET_TRACKS, VERIFIED_PER_BRAIN};
+use vectorvroom_brain_core::brain::{context_hash, contributor_id, tag, Brain, Config, MemStore, Refusal, Training, Usage, BOARD_SIZE, CLOUD_BRAINS, CLOUD_CONTRIBUTOR, MAX_CONTEXTS_PER_BRAIN, MAX_CONTRIBUTORS, VERIFIED_PER_BRAIN};
+use vectorvroom_brain_core::presets::presets;
 use vectorvroom_brain_core::wire::{self, encode_f32, limits, parse_board, parse_contribute, parse_recall, parse_verify};
 
 const T0: u64 = 1_790_000_000_000;
@@ -56,6 +61,7 @@ enum Op {
     Forget { who: u8 },
     Verify { who: u8, brain: u8, track: u8, context: u8 },
     Board { track: u8, context: u8 },
+    Train { frames: u16, seed: u8 },
     Wait { ms: u32 },
     Reopen,
     Bytes(Vec<u8>),
@@ -189,6 +195,11 @@ impl World {
         let id = e["id"].as_str().unwrap();
         let (row, _) = &self.store.brains[id];
         let served = e["fitness"].as_f64().unwrap();
+        // The service's own (X2): its run is its verified run (served in its
+        // own context only, as any verified run, below).
+        if row.contributor == CLOUD_CONTRIBUTOR {
+            assert!(self.store.verified.iter().any(|r| r.brain == id && r.fitness == row.fitness && r.contributor == CLOUD_CONTRIBUTOR));
+        }
         let meta: Value = serde_json::from_str(&row.meta).unwrap();
         let own = wire::clean_brain_meta(Some(&meta)).learning.map(|l| l.context).filter(|c| !c.track.is_empty());
         if let Some(run) = own.as_ref().filter(|o| context_hash(o) == query).and_then(|o| self.store.verified.iter().find(|r| r.brain == id && context_hash(&r.context()) == context_hash(o))) {
@@ -237,7 +248,7 @@ impl World {
         assert!(runs.values().all(|n| *n <= VERIFIED_PER_BRAIN));
         // Every run's key is pinned; the presets' to their own geometries.
         assert!(self.store.verified.iter().all(|r| self.store.pins.contains_key(&r.track)));
-        assert!(PRESET_TRACKS.iter().all(|(k, d)| self.store.pins.get(*k).map(String::as_str) == Some(*d)));
+        assert!(presets().iter().all(|p| self.store.pins.get(&p.key) == Some(&p.digest)));
     }
 
     /// A leaderboard: at most 20 held brains with a lap, the fastest first lap first.
@@ -348,6 +359,19 @@ fuzz_target!(|ops: Vec<Op>| {
             }
             Op::Board { track, context } => {
                 w.board(track, context);
+            }
+            Op::Train { frames, seed } => {
+                // A small session (up to 3 runs of 20 s), right after the last
+                // request: training never waits for idleness here.
+                let t = Training { frames: u64::from(frames) % 3_601, idle_minutes: 0 };
+                let before: Vec<String> = w.store.brains.keys().cloned().collect();
+                if let Some(r) = w.brain.train(t, w.now, u64::from(seed), &mut w.store).unwrap() {
+                    assert!(r.frames <= t.frames && r.best_fitness >= r.seed_fitness);
+                    if let Some(id) = &r.archived {
+                        assert!(!before.contains(id) && w.store.brains[id].0.contributor == CLOUD_CONTRIBUTOR);
+                    }
+                    assert!(w.store.brains.values().filter(|(b, _)| b.contributor == CLOUD_CONTRIBUTOR).count() <= CLOUD_BRAINS);
+                }
             }
             Op::Wait { ms } => w.now += u64::from(ms) * 64,
             Op::Reopen => {

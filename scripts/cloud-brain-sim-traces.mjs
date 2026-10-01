@@ -10,9 +10,10 @@
 //   node scripts/cloud-brain-sim-traces.mjs [--out tests/fixtures/cloud-brain-sim/traces.json] [--extra N]
 //   node scripts/cloud-brain-sim-traces.mjs --presets
 //
-// Both write tests/fixtures/cloud-brain-sim/presets.json: the ten presets'
-// walls and gates, with the page's key and the SHA-256 of the text it
-// hashes (the service pins the presets' keys to them); --presets only that.
+// Both write cloud-brain/core/src/presets.json: the ten presets' walls and
+// gates, with the page's key and the SHA-256 of the text it hashes (the
+// service embeds them: it pins their keys, X1, and trains on them, X2);
+// --presets only that.
 //
 // Each case records every frame's controls, the state every 30 frames (and
 // at the end), each frame where an output was within 1e-9 of flipping, and
@@ -41,7 +42,7 @@ const W = 3200, H = 1800;
 
 // The presets as a verification sends them, their keys and digests.
 const presetRoad = p => ({innerList: p.points, outerList: p.points2, checkPointList: p.checkPointListEditor});
-const presetsOut = path.join(root, 'tests/fixtures/cloud-brain-sim/presets.json');
+const presetsOut = path.join(root, 'cloud-brain/core/src/presets.json');
 await mkdir(path.dirname(presetsOut), {recursive: true});
 await writeFile(presetsOut, JSON.stringify(Object.fromEntries(PRESETS.map(p => [p.name, {
   width: W, height: H, inner: p.points.map(q => [q.x, q.y]), outer: p.points2.map(q => [q.x, q.y]),

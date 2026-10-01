@@ -732,10 +732,12 @@ page's track, serves the result as the brain's fitness in its own context
   fitness: the claim and the quarantine no longer count. Its contributors'
   reports in that context are measured against the run, not the claim (a
   claim made low on purpose would make every offspring look better). In
-  every other context, and for eviction and each track's protected best,
-  CB4's rules hold: the brain's contributor chooses the track it ran on, and
-  a track anyone can make up (one gate under a parked car counts a lap every
-  frame, in the game too) protects nothing elsewhere. Runs in other
+  every other context, and for each track's protected best, CB4's rules
+  hold: the brain's contributor chooses the track it ran on, and a track
+  anyone can make up (one gate under a parked car counts a lap every frame,
+  in the game too) protects nothing elsewhere. For eviction a run counts
+  only on a preset (X2: no one can make up a preset, its geometry is
+  pinned); elsewhere the brain is worth its trusted fitness. Runs in other
   contexts count only on the leaderboard. A brain keeps 4 runs (the oldest
   go first, never the one in its own context); they go with the brain;
   forget takes the token's id off the runs it asked for (`verified` and
@@ -818,3 +820,99 @@ is at the limit and longer ones do not fit (D2).
 - The queue keeps the 4 brains with the fastest laps the browser saw; the
   leaderboard ranks the first lap the service drove.
 - The client does not read `Retry-After` (as in CB4).
+
+## X2: the brain trains while nobody is playing
+
+The service breeds brains itself: while nobody contributes, a Durable
+Object alarm drives children of the best brains on the busiest presets with
+X1's simulator, and keeps one that drove better than all of them.
+
+### What it does
+
+- **A session** (`Brain::train`, cloud-brain/core/src/brain.rs). The
+  learning contexts on one of the ten presets that the most players learned
+  in (contributors, not brains: one token's many brains count once;
+  collisions off, at most 120 s): sessions take turns on the three
+  busiest. There the seeds are driven: the 3 brains served best in that
+  context (a run the service drove counts as it is; then the highest
+  claims) and one not driven yet, chosen at random. Each seed's run is kept
+  as a verified run (the service drove it on a preset in its own context),
+  so every session tries one more brain and ranks the rest by how they
+  drove, and no brain waits behind claims forever. Then children of the 4
+  best so far, each the parent's weights moved toward random ones as
+  network.js `mutate` does (by 0.05, 0.1 and 0.2 in turn), until the
+  session's frames are used. A child that drove better than every seed
+  (more fitness, or as much with an earlier first lap: `Outcome::beats`) is
+  archived: a brain of the service's own (contributor `cloud`, which no
+  token's id can be: those are 32 hex digits), `source: 'cloud'`, the seed
+  it descends from as its parent and that seed's generation plus the
+  mutations since as its generation, its fastest lap as car.js keeps lap
+  times, filed on the track the most players in that context file their
+  brains on (not its parent's: one token cannot choose it), its run its
+  verified run. At most 50 are kept: the weakest goes first. Random numbers
+  come from the session's time (xorshift64*): the same time, the same
+  session.
+- **Trust.** A cloud brain is served at its run in its own context, as any
+  verified run is (X1), and is worth it for eviction (a run on a preset,
+  as a player's verified there is). Elsewhere its fitness is a claim like a
+  player's, quarantined until two players corroborate it: its
+  seeds, their track vector and their context were the players' to choose,
+  so trusting it everywhere would serve a brain bred for the Rectangle at
+  the top of the Oval's pool. Forgetting a token also deletes the brains
+  the service bred from that token's brains (and from those): a child
+  keeps most of its parent's weights.
+- **Only presets.** The ten presets' walls and gates are in the service
+  (`cloud-brain/core/src/presets.json`, `presets.rs`; X1 pins their keys from
+  them now). A player's own track is never stored, so it is never trained
+  on.
+- **When.** `TRAIN_FRAMES` turns it on (frames a session; off by default:
+  its CPU is part of D2); the alarm is set on the first request an instance
+  serves, then after each session, every `TRAIN_EVERY_SECONDS` (1 800 by
+  default; 1 s to a week). A session runs only when nobody has contributed
+  for `TRAIN_IDLE_MINUTES` (10 by default; recalls and verifications do not
+  count as playing), and not while the breaker is on; that is read from
+  SQLite first, so a brain not in memory is built only for a session that
+  runs. A session drives at most 1 200 000 frames. A store error empties
+  the brain, as a request's does, and so does a panic (caught); the
+  schedule goes on. `/health` says `training`. Each session logs its report
+  and time.
+- **The browser** needs nothing new: a pulled brain is already tagged
+  `cloud` in the replica, and seeds the next generation like any other.
+
+### Measured
+
+| | |
+|---|---|
+| A session of 120 000 frames (100 runs of 20 s) | 68 ms native (release, Apple M3 Max); 71 to 108 ms under `wrangler dev` (10 sessions in two runs) |
+| Twelve sessions natively on the Rectangle (`core/tests/train.rs`; 50 runs each), ten sets of session seeds | nine of ten beat the seeds' best of 6 (the brain the game's learning loop evolved), to 7, 8, 9, 10 or 11 (the pinned set: to 9, 4 brains archived); one stayed at 6. Breeding from the best 2 instead of 4, all ten improved, to 7 to 9 |
+| The Worker with training on (`TRAIN_FRAMES` 120 000, a session a second) | a cloud brain in the pool 2 to 6 s after the contribution, at fitness 6 or 7 |
+
+At 120 000 frames every 30 minutes a day of sessions takes about 5 s of
+CPU, plus a rebuild of the brain whenever the object was evicted while
+idle (Cloudflare evicts an idle object after a minute or two): 1.1 s at
+20 000 brains (CB4), so up to about 1 minute of CPU a day at the caps
+(Paid includes 30 million CPU-ms a month). The Workers Free plan's 10 ms a
+request fits neither a rebuild nor a useful session (D2).
+
+### Evidence
+
+| Claim | Test |
+|---|---|
+| Sessions | `cargo test` (`core/tests/train.rs`, 11 tests): twelve sessions on the busiest preset (the Rectangle, the players' context) beat the seeds and archive brains of the service's (source, the seed it descends from by its weights, generation, track key, fastest lap as car.js keeps it, a verified run equal to its fitness and on the leaderboard at its first lap, served at it in its context and quarantined in another, the same when a stranger verifies it, the seeds' runs kept, kept by a rebuild and by a forget of an unrelated token; a forget of the seeds' contributor takes every brain bred from theirs); a brain never driven gets its turn among ten claiming more; a first session names the seed it bred from, not the first seed; the twelve sessions pinned (each one's best and what it archived); one token's five brains neither make their context the busiest (three players' is) nor choose the track what is bred is filed on (two players' is); the service's own brains do not make a context busy, and what a session archives at the store's cap makes room; at most 50 brains of the service's, the weakest gone first; at the cap, brains with a run on the Rectangle (the service's, and a player's verified one) outlast quarantined claims; none while someone contributed in the last 10 minutes; a session uses at most its frames (none under one run, the seeds only with their frames); the same seed, the same sessions; only presets, never a player's track, a context with collisions or one over 120 s; sessions take turns on the busiest contexts, the busiest first. `sim/tests/cost.rs`: `Outcome::beats` and the fastest lap (car.js's 10.11 for laps at frames 607 and 1 214). `core/tests/verify.rs`: the presets the service embeds are the page's (keys and digests Node computed) |
+| The Worker | `npm run test:cloud-brain:service` (18 tests): a second `wrangler dev` with training on: `/health` says so; the Rectangle brains contributed, a brain of the service's appears in the pool, bred from one of them, at least as good as the best, its fitness confirmed by a stranger's verification; the sessions' reports logged; with training off (the first Worker) `/health` says `training: false` |
+| Fuzzing | `bash scripts/fuzz-cloud-brain.sh 300 brain`: training sessions (up to 3 runs of 20 s) among the request sequences; after every step a cloud brain has a verified run equal to its fitness and is served by the rules every brain is (its run in its own context, a quarantined claim elsewhere), at most 50 are held, a session never uses more than its frames nor archives worse than its seeds, and every earlier invariant holds. On the final code, 5 minutes: 25 541 sequences, clean (32 181 before the reviews' fixes) |
+| Reviews | Two adversarial reviews (trust and abuse; correctness and spec) found: a cloud brain trusted in every context and filed on its parent's track vector (one token's seeds, filed under the Oval, made a Rectangle child rank first in the Oval's pool), fitness carried across run lengths, the busiest context counted by brains (one token could take every turn), cloud brains outliving better players' and never capped, the rebuild left out of the CPU figures, seeds that skipped every brain not yet driven (the best one never driven), car.js's lap times not matched for a second lap, the parent and generation of the seed rather than the lineage, forget leaving near-copies of a forgotten player's brains, a pool that changed nothing, a panic that would stop the schedule, and 8 mutants the tests let through. All are fixed and tested above (the reviewers' own probes now show the Oval player's brain first and the cloud brain quarantined there; each of the 8 mutants fails a test) |
+
+### Limits
+
+- Sessions are small: a mutation-only search from the best brains, with no
+  crossover and no learning signal but the run. It improves brains slowly
+  (a few fitness points over many sessions) where they already drive, and
+  not always (one set of twelve sessions in ten stayed where it began).
+- Only the ten presets, and only contexts the service can run alone.
+- The alarm runs only after an instance served a request; a Worker nobody
+  calls after a deploy does not train until someone does.
+- At the cap, brains with a run on a preset (the service's and players'
+  verified ones) outlast brains whose claims are quarantined.
+- Any player can send `source: 'cloud'` in a brain's meta (the browser tags
+  pulled brains so); the service's own are told by their contributor.
