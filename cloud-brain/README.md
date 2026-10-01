@@ -4,7 +4,9 @@ One shared vector memory for VectorVroom, as a Rust Worker with a SQLite
 Durable Object ([plan](../docs/plan/cloud-brain.md), [results](../docs/validation/cloud-brain.md),
 [spike](../docs/validation/cloud-brain-spike.md)). It is built for
 `wasm32-unknown-emscripten` with `worker-build --emscripten`, an experimental
-preview. Nothing here is deployed yet.
+preview. `.github/workflows/deploy.yml` deploys it as `vectorvroom-brain`
+(Workers Paid); the runbook is
+[docs/operations/cloud-brain-operations.md](../docs/operations/cloud-brain-operations.md).
 
 - `core/`: the service without the Workers runtime (the wire format of
   `AI-Car-Racer/cloud/wire.js` in Rust, the brain, ranking, feedback, caps and

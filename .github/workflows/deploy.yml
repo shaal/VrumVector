@@ -62,15 +62,92 @@ jobs:
             deploy --config multiplayer/wrangler.jsonc
             --name=${{ github.event_name == 'pull_request' && format('vectorvroom-live-pr-{0}', github.event.pull_request.number) || 'vectorvroom-live' }}
 
+      # The cloud brain (docs/plan/cloud-brain.md, CB5): a Rust Worker built
+      # for wasm32-unknown-emscripten with its own pinned toolchain and
+      # wrangler (cloud-brain/package.json). Production (vectorvroom-brain)
+      # deploys from main only, after its tests: it holds the shared data,
+      # and an SQL migration cannot be rolled back. A PR gets
+      # vectorvroom-brain-pr-<n>, with its own Durable Object; any other run
+      # deploys no brain. It needs the Workers Paid plan (D2): wrangler.jsonc
+      # sets limits.cpu_ms. The page offers Shared only when a brain answers
+      # /health for the commit just built (or, if this run could not deploy
+      # one on main, when the running production brain still answers).
+      - uses: ./.github/actions/cloud-brain-toolchain
+        id: brain-toolchain
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        continue-on-error: true
+        with:
+          name: deploy
+          target-cache: 'true'
+
+      - name: Install the cloud brain's wrangler
+        id: brain-wrangler
+        if: steps.brain-toolchain.outcome == 'success'
+        continue-on-error: true
+        working-directory: cloud-brain
+        run: npm ci
+
+      - name: Test the cloud brain before production
+        id: brain-tests
+        if: github.event_name != 'pull_request' && steps.brain-wrangler.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          bash scripts/build-cloud-brain.sh --test
+          npm run test:cloud-brain:service
+
+      - name: Deploy the cloud brain
+        id: brain
+        if: steps.brain-wrangler.outcome == 'success' && (github.event_name == 'pull_request' || steps.brain-tests.outcome == 'success')
+        continue-on-error: true
+        working-directory: cloud-brain
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_WORKERS_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # /health reports it, so the check below waits for this build.
+          CLOUD_BRAIN_COMMIT: ${{ github.sha }}
+          BRAIN_NAME: ${{ github.event_name == 'pull_request' && format('vectorvroom-brain-pr-{0}', github.event.pull_request.number) || 'vectorvroom-brain' }}
+        run: |
+          npx wrangler deploy --name "$BRAIN_NAME" 2>&1 | tee deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          if [[ -z "$url" ]]; then echo "::error::No workers.dev URL in the deploy output"; exit 1; fi
+          node ../scripts/cloud-brain-health.mjs "$url" "$CLOUD_BRAIN_COMMIT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      # Only when the page's side did not change since the running brain's
+      # commit: a new page may call routes an older brain does not have.
+      - name: Keep the running production brain
+        id: brain-kept
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.brain.outcome != 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          BRAIN_PRODUCTION: https://vectorvroom-brain.shaal.workers.dev
+        run: |
+          running=$(curl -fsS --max-time 15 "$BRAIN_PRODUCTION/health" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).build?.commit||""))')
+          if [[ -z "$running" ]]; then echo "::error::The running production brain does not say its commit"; exit 1; fi
+          git fetch --quiet --no-tags --depth=1 origin "$running"
+          if ! git diff --quiet "$running" HEAD -- cloud-brain AI-Car-Racer/cloud; then
+            echo "::error::The page's cloud code changed since the running brain ($running): not keeping it"; exit 1
+          fi
+          node scripts/cloud-brain-health.mjs "$BRAIN_PRODUCTION" "$running"
+          echo "url=$BRAIN_PRODUCTION" >> "$GITHUB_OUTPUT"
+
       - name: Configure live endpoint and stage static site
         env:
           LIVE_ENDPOINT: ${{ steps.live.outputs.deployment-url }}
+          BRAIN_ENDPOINT: ${{ steps.brain.outputs.url || steps.brain-kept.outputs.url || '' }}
         run: |
           node --input-type=module -e '
             import {writeFileSync} from "node:fs";
             const endpoint = process.env.LIVE_ENDPOINT ? new URL(process.env.LIVE_ENDPOINT) : null;
             if (endpoint && endpoint.protocol !== "https:") throw new Error("Invalid multiplayer endpoint");
             writeFileSync("AI-Car-Racer/multiplayer/config.json", JSON.stringify({endpoint:endpoint?.origin ?? null}) + "\n");
+            // The cloud brain: null hides the Shared option (no brain answered).
+            const brain = process.env.BRAIN_ENDPOINT ? new URL(process.env.BRAIN_ENDPOINT) : null;
+            if (brain && brain.protocol !== "https:") throw new Error("Invalid cloud brain endpoint");
+            writeFileSync("AI-Car-Racer/cloud/config.json", JSON.stringify({endpoint:brain?.origin ?? null}) + "\n");
           '
           mkdir -p .pages-upload
           rsync -a --exclude='.git' --exclude='.github' --exclude='.pages-upload' --exclude='.wrangler' --exclude='node_modules' --exclude='test-results' --exclude='/multiplayer' --exclude='/cloud-brain' --exclude='/tests' --exclude='/scripts' --exclude='/ruvector' ./ .pages-upload/
@@ -97,9 +174,16 @@ jobs:
           echo "- Branch: \`${{ github.head_ref || github.ref_name }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Deployment URL: ${{ steps.deploy.outputs.deployment-url }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Alias URL: ${{ steps.deploy.outputs.pages-deployment-alias-url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Cloud brain: ${{ steps.brain.outputs.url || (steps.brain-kept.outputs.url && format('{0} (kept: this run did not deploy one)', steps.brain-kept.outputs.url)) || 'none answered (Shared hidden)' }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report multiplayer deployment failure
         if: steps.live.outcome == 'failure'
         run: |
           echo "::error::The static preview is deployed, but the live multiplayer service could not deploy. Check the service step above. Cloudflare Workers access is required; an optional CLOUDFLARE_WORKERS_API_TOKEN can be provided separately from the Pages token."
+          exit 1
+
+      - name: Report cloud brain deployment failure
+        if: steps.brain-toolchain.outcome == 'failure' || steps.brain-wrangler.outcome == 'failure' || steps.brain-tests.outcome == 'failure' || steps.brain.outcome == 'failure'
+        run: |
+          echo "::error::The cloud brain was not deployed (its toolchain, tests, deploy or /health check failed). The site points at ${{ steps.brain-kept.outputs.url || 'no brain: the Shared option is hidden' }}. Check the cloud brain steps above and docs/operations/cloud-brain-operations.md (the Workers Paid plan, CLOUDFLARE_WORKERS_API_TOKEN with Workers Scripts: Edit)."
           exit 1

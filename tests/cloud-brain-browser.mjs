@@ -439,14 +439,23 @@ try {
       window.__rvBridge.archiveBrain(unflatten(decodeF32(vector, 244)), fitness, window.currentTrackVec, 40, [], 16.6, undefined, {context: ctx, styleScore: 0});
       await s.settled();
       const waiting = s.verifications.length;
-      const answer = await s.tick();
+      // Sent, then verified: a backoff (A and B share one address and its
+      // limits) or a busy service only delays it.
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      let answer = null;
+      for (let i = 0; i < 60 && !answer; i++) {
+        while (!s.client.canTry('send')) await sleep(250);
+        answer = await s.tick();
+        if (!answer) await sleep(2000);
+      }
       const pool = await s.client.recall({trackVec: (await import('./cloud/session.js')).unit(window.currentTrackVec), context: ctx, k: 50});
       return {answer, waiting, key: ctx.track, pageMaxSpeed: maxSpeed, pageTraction: traction,
-        served: pool.find(p => p.id === answer?.id)?.fitness ?? null, board: s.board};
+        served: pool?.find(p => p.id === answer?.id)?.fitness ?? null, board: s.board,
+        client: {status: s.client.status, backoff: s.client.backoff, pending: s.client.pending(), left: s.verifications.length}};
     }, {vector: lap.vector, fitness: 30});
     assert.equal(run.key, traces.tracks.Rectangle.key, 'the page\'s default track is the fixture\'s Rectangle');
     assert.equal(run.waiting, 1, 'queued for a verification');
-    assert.ok(run.answer?.ok && run.answer.matched, JSON.stringify(run.answer));
+    assert.ok(run.answer?.ok && run.answer.matched, JSON.stringify({answer: run.answer, client: run.client}));
     assert.deepEqual({fitness: run.answer.fitness, laps: run.answer.laps, lapFrames: run.answer.lapFrames, crashedAt: run.answer.crashedAt, frames: run.answer.frames},
       lap.outcome, 'the service drove the lap the game drove');
     assert.equal(run.served, lap.outcome.fitness, 'verified: its fitness is trusted, not quarantined (it claimed 30)');
@@ -524,16 +533,22 @@ try {
       const g = window.AdaptiveGates.wallSignature();
       const s = window.__rvCloud;
       const cps = [[{x: 1600, y: 300}, {x: 1600, y: 700}], [{x: 2450, y: 900}, {x: 3100, y: 900}], [{x: 1600, y: 1100}, {x: 1600, y: 1500}], [{x: 250, y: 900}, {x: 650, y: 900}]];
-      // A's own send may be in flight (one at a time): after it, archive and
-      // send in one step, so no training map replaces this one in between.
-      while (s.crashSending) await new Promise(r => setTimeout(r, 50));
-      s.crash = null;
-      window.__rvBridge.archiveCrashMap(m.map(x => x / n), {survival: 0.99, nDeaths: 8, generation: 3, geometrySig: g, walls: g, cps, measured: false});
-      if (s.crash !== null) throw new Error('an unmeasured layout was queued');
-      window.__rvBridge.archiveCrashMap(m.map(x => x / n), {survival: 0.95, nDeaths: 8, generation: 3, geometrySig: g, walls: g, cps});
-      s.crashSentAt = -Infinity;
-      if (!(await s.sendCrash())) throw new Error('the crash map was not sent');
-      return g;
+      // A's own send may be in flight (one at a time), or its send channel
+      // backing off (A and B share one address and its write limit): after
+      // that, archive and send in one step, so no training map replaces this
+      // one in between.
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      for (let attempt = 0; attempt < 30; attempt++) {
+        while (s.crashSending || !s.client.canTry('send')) await sleep(250);
+        s.crash = null;
+        window.__rvBridge.archiveCrashMap(m.map(x => x / n), {survival: 0.99, nDeaths: 8, generation: 3, geometrySig: g, walls: g, cps, measured: false});
+        if (s.crash !== null) throw new Error('an unmeasured layout was queued');
+        window.__rvBridge.archiveCrashMap(m.map(x => x / n), {survival: 0.95, nDeaths: 8, generation: 3, geometrySig: g, walls: g, cps});
+        s.crashSentAt = -Infinity;
+        if (await s.sendCrash()) return g;
+        await sleep(2000);
+      }
+      throw new Error(`the crash map was not sent: ${JSON.stringify(s.client.status)}`);
     });
     // B (same track) pulls: everyone's map and the layout for these walls.
     const crash = await b.evaluate(async () => {

@@ -1,0 +1,42 @@
+name: Cloud brain toolchain
+description: >-
+  The cloud brain Worker's pinned toolchain (cloud-brain/README.md): the Rust
+  beta with the Emscripten and wasm32-unknown-unknown targets, worker-build
+  0.8.7 and the Emscripten it provisions (about 1.7 GB, cached), and the
+  ruvector sources scripts/build-cloud-brain.sh fetches.
+inputs:
+  name:
+    description: The caller's cache name (each job keeps its own crates).
+    required: true
+  target-cache:
+    description: Also cache cloud-brain/target (true or false).
+    required: false
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: |
+          ~/.cargo/bin/worker-build
+          ~/.cargo/registry
+          ~/.cargo/git
+          ~/.cache/worker-build
+          cloud-brain/.work
+        key: cloud-brain-toolchain-${{ inputs.name }}-${{ runner.os }}-${{ hashFiles('cloud-brain/rust-toolchain.toml', 'cloud-brain/Cargo.lock', 'cloud-brain/build.sh', 'scripts/build-cloud-brain.sh', '.github/actions/cloud-brain-toolchain/action.yml') }}
+        restore-keys: cloud-brain-toolchain-${{ inputs.name }}-${{ runner.os }}-
+    - if: inputs.target-cache == 'true'
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: cloud-brain/target
+        key: cloud-brain-target-${{ inputs.name }}-${{ runner.os }}-${{ hashFiles('cloud-brain/rust-toolchain.toml', 'cloud-brain/Cargo.lock', 'cloud-brain/Cargo.toml', 'cloud-brain/src/**', 'cloud-brain/core/src/**', 'cloud-brain/core/Cargo.toml', 'cloud-brain/sim/src/**', 'cloud-brain/sim/Cargo.toml') }}
+        restore-keys: cloud-brain-target-${{ inputs.name }}-${{ runner.os }}-
+    - name: Install the pinned Rust beta and worker-build
+      shell: bash
+      run: |
+        rustup toolchain install beta-2026-09-27 --profile minimal \
+          --target wasm32-unknown-emscripten --target wasm32-unknown-unknown
+        if [[ "$(worker-build --version 2>/dev/null || true)" != "0.8.7" ]]; then
+          cargo install worker-build --version 0.8.7 --locked
+        fi
+        worker-build --version
