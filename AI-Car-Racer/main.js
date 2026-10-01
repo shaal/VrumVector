@@ -1369,6 +1369,8 @@ function begin(preservePause = false, resetPlayers = false){
         playerCar = new Car(startInfo.x, startInfo.y, 30, 50, "KEYS", maxSpeed, startInfo.heading);
         playerCar2 = new Car(startInfo.x, startInfo.y, 30, 50, "WASD", maxSpeed, startInfo.heading);
         window.LiveSession?.resetRace();
+        // The cloud champion's ghost starts over with you (X3, shared mode).
+        window.CloudGhost?.reset();
     }
     frameCount = 0;
     wallStart = performance.now();
@@ -1645,7 +1647,8 @@ function animate(){
         phase, road, snapshot: latestSnapshot, bestCar, generation,
         runSerial: presentationRunSerial, paused: pause, simSpeed,
         awaitingStart: !!window.__awaitingStart, startInfo,
-        players: [playerCar, playerCar2], maxSpeed, traction, invincible
+        players: [playerCar, playerCar2], maxSpeed, traction, invincible,
+        cloudGhost: window.CloudGhost?.pose() || null
     };
     window.LiveSession?.frame(presentationInfo);
     window.PlayerAssist?.frame(presentationInfo);
@@ -1722,6 +1725,7 @@ function animate(){
                 playerCar2.update(road.borders, road.checkPointList);
                 window.DemonstrationRecorder?.step(playerCar2);
                 window.LiveSession?.step(playerCar2, road.checkPointList);
+                window.CloudGhost?.step();
             }
         } else {
             // A paused human car must not catch up the paused time on Play.
@@ -1750,10 +1754,13 @@ function animate(){
             // Studio renders its own human cars. Classic Tilt needs projected
             // cars and labels; the flat view keeps its usual world-space quads.
             if (!gpuActive){
+                const ghost = window.CloudGhost?.pose();
                 if (DP?.state.view3d){
+                    if (ghost) DP.drawDriver(ctx,{...ghost,alpha:ghost.damaged?0.3:0.5},"#B388FF","Cloud champion");
                     DP.drawDriver(ctx,playerCar,"#E6194B");
                     DP.drawDriver(ctx,playerCar2,"#4FC3F7","You · WASD");
                 }else{
+                    window.CloudGhost?.draw(ctx);
                     if (playerCar) playerCar.draw(ctx,"#E6194B",true);
                     if (playerCar2) playerCar2.draw(ctx,"#4FC3F7",true);
                 }

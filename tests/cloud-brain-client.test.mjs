@@ -613,3 +613,158 @@ test('the page\'s track is main.js\'s road as the service needs it, and the lead
     'No verified laps on this track yet · your last car did not repeat its lap when the service drove it');
   assert.equal(describeBoard({track: RECT.key, entries: []}, {last: {track: 'elsewhere', lapFrames: []}}), 'No verified laps on this track yet');
 });
+
+// ─── X3: race the cloud champion ──────────────────────────────────────────
+import vm from 'node:vm';
+import {Ghost, chooseChampion, RESPAWN_FRAMES} from '../AI-Car-Racer/cloud/ghost.js';
+import {describeChampion} from '../AI-Car-Racer/cloud/ui.js';
+
+/** The game's classic scripts in a vm, as the trial worker runs them, and the Rectangle road. */
+function gameScope() {
+  const files = ['utils.js', 'spatialGrid.js', 'network.js', 'controls.js', 'sensor.js', 'driver/profiles.js', 'car.js'];
+  const scope = vm.createContext({Math, frameCount: 0, bestCar: null, traction: 0.5, invincible: false, SENSOR_STRIDE: 4, maxSpeed: 15});
+  for (const f of files) vm.runInContext(readFileSync(new URL(`../AI-Car-Racer/${f}`, import.meta.url), 'utf8'), scope, {filename: f});
+  vm.runInContext('globalThis.CarClass=Car;globalThis.GridClass=SpatialGrid;globalThis.NN=NeuralNetwork;', scope);
+  const W = 3200, H = 1800, pts = l => l.map(([x, y]) => ({x, y}));
+  const inner = pts(RECT.inner), outer = pts(RECT.outer), gates = RECT.checkpoints.map(g => pts(g));
+  const borders = [[{x: 0, y: 0}, {x: 0, y: H}], [{x: W, y: 0}, {x: W, y: H}], [{x: 0, y: 0}, {x: W, y: 0}], [{x: 0, y: H}, {x: W, y: H}]];
+  for (const loop of [inner, outer]) for (let i = 0; i < loop.length; i++) borders.push([loop[i], loop[(i + 1) % loop.length]]);
+  const road = {left: 0, right: W, top: 0, bottom: H, borders, checkPointList: gates, borderGrid: new scope.GridClass(W, H, 200), cpGrid: new scope.GridClass(W, H, 200)};
+  road.borderGrid.addSegments(borders); road.cpGrid.addSegments(gates);
+  scope.road = road;
+  const inflate = flat => {
+    const nn = new scope.NN([10, 16, 4]);
+    let at = 0;
+    for (const level of nn.levels) {
+      for (let j = 0; j < level.biases.length; j++) level.biases[j] = flat[at++];
+      for (let j = 0; j < level.weights.length; j++) level.weights[j] = flat[at++];
+    }
+    return nn;
+  };
+  return {scope, road, inflate};
+}
+const lapCase = traces.cases.find(c => c.track === 'Rectangle' && c.outcome.laps > 0 && c.settings.seconds === 20 && c.settings.profile === 'balanced');
+const lapVector = (() => { const raw = Buffer.from(lapCase.vector, 'base64'); return new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)); })();
+
+test('the champion is the fastest verified brain the pull brought, else the pool\'s best that learned on this track', () => {
+  const entry = (id, track = RECT.key, extra = {}) => ({id, vector: new Float32Array(244), fitness: 1, meta: {learning: {context: {profile: 'wild', track}}}, ...extra});
+  const pool = [entry('brain_far', '1-2-3'), entry('brain_a'), entry('brain_b'), entry('brain_c')];
+  const board = {track: RECT.key, entries: [{id: 'brain_z', lapFrames: 600, profile: 'calm'}, {id: 'brain_b', lapFrames: 650, profile: 'balanced'}, {id: 'brain_c', lapFrames: 700, profile: 'careful'}]};
+  // The fastest the pull brought (brain_z's weights did not come).
+  assert.deepEqual(chooseChampion(board, pool, RECT.key), {id: 'brain_b', vector: pool[2].vector, profile: 'balanced', lapFrames: 650, from: 'leaderboard'});
+  // No board, or another track's: the pool's best on this track, not the
+  // nearer track's brain ranked first.
+  assert.deepEqual(chooseChampion(null, pool, RECT.key), {id: 'brain_a', vector: pool[1].vector, profile: 'wild', lapFrames: null, from: 'pool'});
+  assert.equal(chooseChampion({...board, track: '1-2-3'}, pool, RECT.key).from, 'pool');
+  assert.equal(chooseChampion(null, [entry('brain_far', '1-2-3')], RECT.key), null, 'only other tracks\' brains');
+  assert.equal(chooseChampion(board, [], RECT.key), null);
+  assert.equal(chooseChampion(board, pool, ''), null, 'no track yet');
+  assert.equal(chooseChampion(board, [entry('brain_b', RECT.key, {vector: new Float32Array(3)})], RECT.key), null, 'no brain to drive');
+  // One label, pressed or not.
+  assert.equal(describeChampion({lapFrames: 998}), 'Race the cloud champion (16.63 s lap)');
+  assert.equal(describeChampion({lapFrames: 998}, {wanted: true}), 'Race the cloud champion (16.63 s lap)');
+  assert.equal(describeChampion({lapFrames: null}), 'Race the cloud champion');
+  assert.equal(describeChampion(null), '');
+  assert.equal(describeChampion(null, {wanted: true}), 'Race the cloud champion (waiting for one on this track)');
+});
+
+test('the ghost drives the champion\'s run: the game\'s car.js, sensing every frame, your physics, its profile', () => {
+  const {scope, road, inflate} = gameScope();
+  const start = lapCase.start, gates = road.checkPointList.length;
+  let speed = 15;
+  const ghost = new Ghost({Car: scope.CarClass, inflate, road: () => road, start: () => ({x: start.x, y: start.y, heading: start.angle}), maxSpeed: () => speed});
+  const champion = profile => ({id: 'brain_x', vector: lapVector, profile, lapFrames: null});
+  const drive = frames => { for (let f = 1; f <= frames; f++) { scope.frameCount = f * 7; ghost.step(); } return ghost.car.checkPointsCount + ghost.car.laps * gates; };
+  assert.equal(ghost.enable(true), false, 'no champion yet: wanted, not racing');
+  ghost.setChampion(champion('balanced'));
+  assert.equal(ghost.enabled, true, 'racing as soon as one comes');
+  // The page's frame counter runs on and its sensor stride is 4: the ghost
+  // still senses every frame, as the service's verification did.
+  assert.equal(drive(1200), lapCase.outcome.fitness);
+  assert.deepEqual(ghost.status().lapFrames, lapCase.outcome.lapFrames);
+  // Its profile and your physics: the traced careful run, and calm at 10 and 0.8.
+  const traced = (profile, maxSpeed, traction) => traces.cases.find(c => c.vector === lapCase.vector && c.settings.seconds === 20 && c.settings.profile === profile && c.settings.maxSpeed === maxSpeed && c.settings.traction === traction).outcome.fitness;
+  ghost.setChampion(null);
+  ghost.setChampion(champion('careful'));
+  assert.equal(drive(1200), traced('careful', 15, 0.5));
+  ghost.setChampion(null);
+  speed = 10; scope.traction = 0.8;
+  ghost.setChampion(champion('calm'));
+  assert.equal(drive(1200), traced('calm', 10, 0.8));
+  speed = 15; scope.traction = 0.5;
+  ghost.setChampion(null);
+  ghost.setChampion(champion('balanced'));
+  drive(100);
+  // Another champion while racing waits for the next start; the same one
+  // (its lap time known now) never restarts it and cancels the wait.
+  const frames = ghost.frames;
+  ghost.setChampion({id: 'brain_y', vector: new Float32Array(244), profile: 'calm', lapFrames: null});
+  ghost.setChampion({...champion('balanced'), lapFrames: 998});
+  assert.equal(ghost.frames, frames);
+  ghost.reset();
+  assert.equal(ghost.champion.id, 'brain_x', 'the wait was cancelled');
+  ghost.setChampion({id: 'brain_y', vector: new Float32Array(244), profile: 'calm', lapFrames: null});
+  ghost.reset();
+  assert.equal(ghost.champion.id, 'brain_y');
+  // None for this track: no car, the choice kept; one comes: racing again.
+  ghost.setChampion(null);
+  assert.equal(ghost.pose(), null);
+  ghost.setChampion(champion('balanced'));
+  assert.ok(ghost.pose(), 'racing again');
+  // Off: no car.
+  ghost.enable(false);
+  assert.equal(ghost.pose(), null);
+  ghost.step();
+  assert.equal(ghost.frames, 0);
+  // A wreck starts over after RESPAWN_FRAMES (as your car does).
+  ghost.enable(true);
+  ghost.setChampion({id: 'brain_w', vector: Float32Array.from({length: 244}, (_, i) => (i % 7) - 3), profile: 'reckless', lapFrames: null});
+  ghost.reset();
+  let crashedAt = null;
+  for (let f = 1; f <= 1200 && crashedAt === null; f++) { ghost.step(); if (ghost.car.damaged) crashedAt = ghost.frames; }
+  assert.ok(crashedAt, 'this brain crashes');
+  for (let f = 0; f < RESPAWN_FRAMES; f++) ghost.step();
+  assert.ok(!ghost.car.damaged && ghost.frames <= 1, `back at the start: ${ghost.frames}`);
+  // Without sensing every frame, the stride would have made another drive.
+  const plain = new scope.CarClass(start.x, start.y, 30, 50, 'AI', 15, start.angle);
+  plain.brain = inflate(lapVector);
+  const laps = [];
+  for (let f = 1; f <= 1200; f++) { scope.frameCount = f * 7; const before = plain.laps; plain.update(road.borders, road.checkPointList); if (plain.laps > before) laps.push(f); }
+  assert.notDeepEqual(laps, lapCase.outcome.lapFrames, 'the flag matters');
+});
+
+test('a session keeps its last pool and names the champion for its track: from the board when it holds one, cleared on another track', async () => {
+  const fake = createFakeCloudBrain(), clock = {t: 1_000_000}, client = clientFor(fake, {clock});
+  const other = sine(DIMS.brain, 140, 0.5), elsewhere = sine(DIMS.brain, 143, 0.5);
+  const track = unit(sine(DIMS.track, 141));
+  await fake.seed([{vector: lapVector, fitness: 6, track, meta: {learning: {context: lapContext}}}, {vector: other, fitness: 9, track, meta: {learning: {context: lapContext}}},
+    {vector: elsewhere, fitness: 99, track, meta: {learning: {context: {...lapContext, track: '1-2-3'}}}}]);
+  let trackVec = track, ctx = lapContext;
+  const champions = [];
+  const session = new SharedSession({bridge: {setCloudHooks() {}, acceptCloudPool: p => p.length}, client, setInterval: null,
+    page: {trackVec: () => trackVec, dynamicsVec: () => null, context: () => ctx, generation: () => null}});
+  session.onChampion = c => champions.push(c && [c.id, c.from, c.lapFrames]);
+  await session.maybePull({force: true});
+  // The pool's best on this track (the fake ranks by fitness; the 99 learned on another track).
+  assert.deepEqual(champions.at(-1), [await brainId(other), 'pool', null]);
+  // The lapping brain verified: the board's fastest is the champion, with its lap.
+  await client.verify({vector: lapVector, track: rectangle, context: lapContext});
+  await session.refreshBoard({force: true});
+  assert.deepEqual(champions.at(-1), [await brainId(lapVector), 'leaderboard', 600]);
+  // The same brain with its lap time known now: told (the label shows it).
+  fake.verified = [];
+  await session.refreshBoard({force: true});
+  const n = champions.length;
+  fake.brains.delete(await brainId(other));
+  await session.maybePull({force: true});
+  assert.deepEqual(champions.at(-1), [await brainId(lapVector), 'pool', null]);
+  await client.verify({vector: lapVector, track: rectangle, context: lapContext});
+  await session.refreshBoard({force: true});
+  assert.ok(champions.length > n + 1);
+  assert.deepEqual(champions.at(-1), [await brainId(lapVector), 'leaderboard', 600], 'same brain, its lap now');
+  // Another track: no champion until its pool comes.
+  trackVec = unit(sine(DIMS.track, 142));
+  fake.down = 'offline';
+  await session.maybePull();
+  assert.equal(champions.at(-1), null);
+});

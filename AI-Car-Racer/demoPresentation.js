@@ -557,7 +557,7 @@
   function drawDriver(ctx, pose, color, label) {
     if (!pose) return;
     ctx.save();
-    drawProjectedCar(ctx, pose.x, pose.y, pose.angle, color, pose.damaged ? 0.4 : 1, state.carHeight);
+    drawProjectedCar(ctx, pose.x, pose.y, pose.angle, color, pose.alpha ?? (pose.damaged ? 0.4 : 1), state.carHeight);
     const p = label && project(pose.x, pose.y, state.carHeight + 30);
     if (p) {
       ctx.globalAlpha = 1;

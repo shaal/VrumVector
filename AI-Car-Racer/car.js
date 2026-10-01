@@ -130,7 +130,7 @@ class Car{
             // still run #move() every step so simSpeed scales monotonically
             // and motion stays visually smooth — gating the whole update()
             // here made 5× per-car motion slower than 2×.
-            const isPrivileged = (this === bestCar) || (this.controlType !== 'AI');
+            const isPrivileged = (this === bestCar) || (this.controlType !== 'AI') || this.senseEveryFrame;
             const skipPerception = !isPrivileged
                 && typeof SENSOR_STRIDE !== 'undefined'
                 && SENSOR_STRIDE > 1

@@ -75,6 +75,8 @@ class CircuitStudio {
       this.liveLabels=document.createElement('div');this.liveLabels.className='live-driver-labels';this.host.append(this.liveLabels);
       this.players=[createCar(0xc55146),createCar(0x539bbb)];this.players.forEach(c=>{c.visible=false;this.scene.add(c);});
       this.ghostCars=[createCar(0x82e4c5,true),createCar(0xedb67a,true)];this.ghostCars.forEach(c=>{c.visible=false;this.scene.add(c);});
+      // The cloud champion's ghost (X3: cloud/ghost.js, shared mode).
+      this.cloudGhost=createCar(0xb388ff,true);this.cloudGhost.visible=false;this.scene.add(this.cloudGhost);
       this.pack=new T.InstancedMesh(new T.BoxGeometry(.94,.30,1.62),new T.MeshStandardMaterial({color:0xffffff,roughness:.55,metalness:.15}),1600);
       this.pack.setColorAt(0,new T.Color(0xffffff));
       this.pack.instanceMatrix.setUsage(T.DynamicDrawUsage);this.pack.frustumCulled=false;this.pack.count=0;this.pack.castShadow=true;this.scene.add(this.pack);
@@ -341,6 +343,8 @@ class CircuitStudio {
     this.pack.count=this.packWindows.count=count;this.pack.instanceMatrix.needsUpdate=true;this.packWindows.instanceMatrix.needsUpdate=true;
     if(this.pack.instanceColor)this.pack.instanceColor.needsUpdate=true;
     this.players.forEach((car,i)=>{const p=info.players[i];car.visible=finitePose(p)&&!this.replay&&(Math.abs(p.speed)>.01||(i===1&&this.followingPlayer));if(car.visible)this.placeCar(car,p,dt,[p.controls.forward,p.controls.left,p.controls.right,p.controls.reverse]);});
+    const cloud=info.cloudGhost;
+    this.cloudGhost.visible=finitePose(cloud)&&!this.replay;if(this.cloudGhost.visible)this.placeCar(this.cloudGhost,cloud,dt,null);
     this.ghostCars.forEach((car,i)=>{
       const run=this.archive.runs.filter(r=>r!==this.replay?.run)[i];
       const time=this.replay?this.replay.time:(snap?.frameCount||0)/60;
