@@ -18,7 +18,10 @@
 //    on the leaderboard;
 // 6. race the cloud champion (X3): that brain, pulled back, is the
 //    champion; the Memory panel's button starts its ghost, which drives the
-//    same lap in the page, and stops it.
+//    same lap in the page, and stops it;
+// 7. everyone's crash map (X4): a crash map A archives (with its gate
+//    layout) is sent; B's next pull brings it back: the Memory panel's
+//    toggle shows it under the cars, and adaptive gates get the layout.
 //
 //   npm run test:cloud-brain:browser     (needs the cloud-brain toolchain for part 4)
 //   BROWSER=firefox (or webkit) runs it in that engine instead of Chromium.
@@ -505,6 +508,60 @@ try {
     assert.deepEqual([r.enabled, r.pressed], [false, 'false']);
     assert.equal(await a.evaluate(() => window.CloudGhost.pose()), null);
     report.race = {champion: r.champion, lapFrames: ghost.status.lapFrames, seen};
+
+    // ─── 7. everyone's crash map (X4) ────────────────────────────────────
+    stage = 'everyone\'s crash map';
+    // A's training sends its own crash maps (main.js archives one each
+    // generation; at most one a minute goes).
+    await a.waitForFunction(() => window.__rvCloud.crashesSent > 0, {}, {timeout: 60000});
+    // Here its cars crash in two cells; archived as adaptive gates archive
+    // (the bridge's hook queues it), with a better layout than A's so far (a
+    // contributor keeps their best), and sent without waiting out the
+    // minute. Gates a generation did not drive (measured false) never go.
+    const geometry = await a.evaluate(async () => {
+      const m = new Float32Array(144); m[40] = Math.log1p(6); m[41] = Math.log1p(2);
+      const n = Math.hypot(...m);
+      const g = window.AdaptiveGates.wallSignature();
+      const s = window.__rvCloud;
+      const cps = [[{x: 1600, y: 300}, {x: 1600, y: 700}], [{x: 2450, y: 900}, {x: 3100, y: 900}], [{x: 1600, y: 1100}, {x: 1600, y: 1500}], [{x: 250, y: 900}, {x: 650, y: 900}]];
+      // A's own send may be in flight (one at a time): after it, archive and
+      // send in one step, so no training map replaces this one in between.
+      while (s.crashSending) await new Promise(r => setTimeout(r, 50));
+      s.crash = null;
+      window.__rvBridge.archiveCrashMap(m.map(x => x / n), {survival: 0.99, nDeaths: 8, generation: 3, geometrySig: g, walls: g, cps, measured: false});
+      if (s.crash !== null) throw new Error('an unmeasured layout was queued');
+      window.__rvBridge.archiveCrashMap(m.map(x => x / n), {survival: 0.95, nDeaths: 8, generation: 3, geometrySig: g, walls: g, cps});
+      s.crashSentAt = -Infinity;
+      if (!(await s.sendCrash())) throw new Error('the crash map was not sent');
+      return g;
+    });
+    // B (same track) pulls: everyone's map and the layout for these walls.
+    const crash = await b.evaluate(async () => {
+      const s = window.__rvCloud;
+      await s.maybePull({force: true});
+      await s.settled();
+      const shared = window.__rvBridge.sharedCrash();
+      const m = new Float32Array(144); m[40] = 1;
+      const hits = window.__rvBridge.recommendCrashLayouts(m, 5).filter(h => h.shared);
+      const button = document.querySelector('[data-rv="memory-crashes"]');
+      return {contributors: shared?.contributors, cell40: shared?.map?.[40], geometry: shared?.geometry, cosine: shared ? shared.map[40] : null,
+        hits: hits.map(h => ({survival: h.survival, gates: h.cps.length, sim: h.similarity, sig: h.geometrySig})),
+        label: button.hidden ? null : button.textContent};
+    });
+    assert.ok(crash.contributors >= 1 && crash.cell40 > 0, JSON.stringify(crash));
+    assert.equal(crash.geometry, geometry, 'the same walls');
+    assert.deepEqual(crash.hits.map(h => [h.survival, h.gates, h.sig])[0], [0.95, 4, geometry], JSON.stringify(crash.hits));
+    assert.ok(Math.abs(crash.hits[0].sim - crash.cosine) < 1e-6 && crash.cosine > 0, 'as alike as this map is to everyone\'s');
+    assert.match(crash.label, /^Show where everyone crashes here \(\d+ players?\)$/);
+    // Shown under the cars (the flat view draws it), then hidden.
+    await b.evaluate(() => { const o = window.SharedCrashOverlay, f = o.draw.bind(o); window.__drawn = 0; o.draw = (...x) => { if (o.shown) window.__drawn++; return f(...x); }; });
+    await openPanel(b);
+    await b.locator('[data-rv="memory-crashes"]').click();
+    await b.waitForFunction(() => window.__drawn > 0, {}, {timeout: 20000});
+    assert.equal(await b.locator('[data-rv="memory-crashes"]').getAttribute('aria-pressed'), 'true');
+    await b.locator('[data-rv="memory-crashes"]').click();
+    assert.equal(await b.evaluate(() => window.SharedCrashOverlay.shown), false);
+    report.crashes = crash;
     await contextA.close(); await contextB.close();
   }
 

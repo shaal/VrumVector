@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as wire from '../AI-Car-Racer/cloud/wire.js';
-import {brainMode, saveBrainMode, consented, STORAGE_KEY} from '../AI-Car-Racer/cloud/mode.js';
+import {brainMode, saveBrainMode, consented, consentedBefore, STORAGE_KEY, CONSENT_VERSION} from '../AI-Car-Racer/cloud/mode.js';
 import {CloudBrainClient, contributorToken, OUTBOX_KEY, OUTBOX_LIMITS} from '../AI-Car-Racer/cloud/client.js';
 import {readFileSync} from 'node:fs';
 import {SharedSession, unit, PULL_EVERY, BOARD_MS, loadConfig, pageGeometry, trackKeyOf} from '../AI-Car-Racer/cloud/session.js';
@@ -56,6 +56,17 @@ test('the mode: ?brain= wins and is saved, else the saved choice; shared needs a
   assert.equal(consented(storage), true, 'kept across switches');
   saveBrainMode('shared', {}, storage);
   assert.equal(consented(storage), true);
+  // A yes to an earlier text (before crash maps, X4) is asked again; the choice stays.
+  storage.setItem(STORAGE_KEY, JSON.stringify({mode: 'shared', consented: true}));
+  assert.equal(consented(storage), false);
+  assert.equal(consentedBefore(storage), true, 'asked with what changed');
+  assert.equal(brainMode({search: '?brain=shared', storage, secure: true}), 'shared');
+  assert.equal(consented(storage), false);
+  saveBrainMode('shared', {consent: true}, storage);
+  assert.equal(JSON.parse(storage.getItem(STORAGE_KEY)).consented, CONSENT_VERSION);
+  assert.equal(brainMode({search: '?brain=local', storage, secure: true}), 'local');
+  assert.equal(consented(storage), true, 'the version kept across switches');
+  assert.equal(consentedBefore(storage), false);
   storage.setItem(STORAGE_KEY, '{broken');
   assert.equal(brainMode({search: '', storage, secure: true}), 'local');
   assert.equal(brainMode({search: '?brain=shared', storage: null, secure: true}), 'shared', 'no storage: still usable');
@@ -767,4 +778,219 @@ test('a session keeps its last pool and names the champion for its track: from t
   fake.down = 'offline';
   await session.maybePull();
   assert.equal(champions.at(-1), null);
+});
+
+// ─── X4: everyone's crash map ─────────────────────────────────────────────
+import {crashToWire, CRASH_SEND_MS} from '../AI-Car-Racer/cloud/session.js';
+import {crashCells, CrashOverlay} from '../AI-Car-Racer/cloud/crashOverlay.js';
+import {describeCrashMap} from '../AI-Car-Racer/cloud/ui.js';
+
+const crashMapOf = cells => { const m = new Float32Array(wire.CRASH_DIM); for (const [i, n] of cells) m[i] = Math.log1p(n); const s = Math.hypot(...m); return m.map(x => x / s); };
+const gatesOf = x => [[{x, y: 300}, {x, y: 700}], [{x: 2000, y: 300}, {x: 2000, y: 700}]];
+
+test('a crash map the bridge archived goes on the wire as made, its layout when it reads', () => {
+  const track = sine(DIMS.track, 150, 3), map = crashMapOf([[10, 5], [20, 2]]);
+  const meta = {nDeaths: 9, survival: 0.6, cps: gatesOf(1000), walls: 'g1a2b', collisions: 'solid/k8'};
+  const w = crashToWire({map, meta}, track);
+  assert.ok(wire.isUnit(w.track) && w.map === map && w.deaths === 9 && w.collisions === 'solid/k8');
+  assert.deepEqual(w.layout, {geometry: 'g1a2b', survival: 0.6, gates: [[[1000, 300], [1000, 700]], [[2000, 300], [2000, 700]]]});
+  const sent = wire.parseCrashes(wire.crashesBody({token: TOKEN, ...w}));
+  assert.ok(sent.ok, JSON.stringify(sent).slice(0, 100));
+  // No layout without the walls' signature, or with a gate that does not read; the map still goes.
+  assert.equal(crashToWire({map, meta: {...meta, walls: 'nope'}}, track).layout, null);
+  assert.equal(crashToWire({map, meta: {...meta, walls: undefined, geometrySig: 'g1a2b'}}, track).layout, null, 'the walls alone, not adaptive gates\' signature');
+  assert.equal(crashToWire({map, meta: {...meta, cps: [[{x: 1, y: NaN}, {x: 2, y: 2}]]}}, track).layout, null);
+  assert.equal(crashToWire({map, meta: {nDeaths: 9}}, track).collisions, 'off');
+  // Nothing to send: no track, too few deaths, a map that is not one.
+  assert.equal(crashToWire({map, meta}, null), null);
+  assert.equal(crashToWire({map, meta: {...meta, nDeaths: 2}}, track), null);
+  assert.equal(crashToWire({map: map.map(x => x * 2), meta}, track), null);
+  assert.equal(crashToWire({map: map.map((x, i) => (i === 10 ? -x : x)), meta}, track), null);
+});
+
+test('a session sends the latest crash map at most once a minute and reads everyone\'s with each pull', async () => {
+  const fake = createFakeCloudBrain(), clock = {t: 1_000_000}, client = clientFor(fake, {clock});
+  const track = sine(DIMS.track, 151, 3);
+  const accepted = [];
+  const bridge = {hooks: null, setCloudHooks(h) { this.hooks = h; }, acceptCloudPool: () => 0, acceptSharedCrash: (s, about) => accepted.push({s, about})};
+  const shown = [];
+  const session = new SharedSession({bridge, client, setInterval: null,
+    page: {trackVec: () => track, dynamicsVec: () => null, context: () => lapContext, generation: () => null, geometrySig: () => 'g1a2b'}});
+  session.onCrashMap = s => shown.push(s.contributors);
+  await session.start();
+  const archive = (cells, x) => bridge.hooks.onCrash({map: crashMapOf(cells), meta: {nDeaths: 9, survival: 0.5, cps: gatesOf(x), walls: 'g1a2b'}});
+  const sends = () => fake.requests.filter(r => r.path === '/v1/crashes').length;
+  archive([[10, 5]], 1000);
+  archive([[11, 5]], 1100);
+  await session.tick();
+  assert.equal(sends(), 1, 'the latest of the two');
+  assert.equal(fake.crashes[0].map[11] > 0 && fake.crashes[0].map[10] === 0, true);
+  assert.equal(fake.crashes[0].layout.gates[0][0][0], 1100);
+  archive([[12, 5]], 1200);
+  await session.tick();
+  assert.equal(sends(), 1, 'within the minute: it waits');
+  clock.t += CRASH_SEND_MS;
+  await session.tick();
+  assert.equal(sends(), 2);
+  // Another player's map on this track: a pull brings everyone's, and the layouts for the walls.
+  fake.crashes.push({token: 'cd'.repeat(16), track: await wire.brainId(unit(track)), map: crashMapOf([[40, 3]]), deaths: 5, collisions: 'off',
+    layout: {geometry: 'g1a2b', survival: 0.9, gates: [[[500, 300], [500, 700]]]}});
+  await session.maybePull({force: true});
+  await session.settled();
+  const got = accepted.at(-1);
+  assert.ok(got.s.map[12] > 0 && got.s.map[40] > 0, 'theirs and ours');
+  assert.equal(got.s.contributors, 2);
+  assert.deepEqual(got.about, {geometry: 'g1a2b', collisions: 'off'});
+  assert.deepEqual(got.s.layouts.map(l => l.survival), [0.9, 0.5]);
+  assert.deepEqual(shown.at(-1), 2);
+  // A refusal (not a busy service) drops the map rather than retry it, and
+  // the next one still waits out the minute.
+  fake.refuse.crashes = 'crash-map';
+  archive([[13, 5]], 1300);
+  clock.t += CRASH_SEND_MS;
+  await session.tick();
+  assert.equal(session.crash, null);
+  const refusedAt = sends();
+  delete fake.refuse.crashes;
+  archive([[15, 5]], 1500);
+  clock.t += 10_000;
+  await session.tick();
+  assert.equal(sends(), refusedAt, 'within the minute after a refusal');
+  fake.refuse.crashes = 'crash-map';
+  // A busy service keeps it for later.
+  fake.refuse.crashes = 'rate-limited';
+  archive([[14, 5]], 1400);
+  clock.t += CRASH_SEND_MS;
+  await session.tick();
+  assert.ok(session.crash, 'kept');
+  session.stop();
+});
+
+test('a layout goes on the wire only when it reads: a survival in [0, 1], 1 to 64 gates; deaths 3 to a million', () => {
+  const track = sine(DIMS.track, 152, 3), map = crashMapOf([[10, 5]]);
+  const meta = {nDeaths: 9, survival: 0.6, cps: gatesOf(1000), walls: 'g1a2b'};
+  const layout = m => crashToWire({map, meta: {...meta, ...m}}, track)?.layout;
+  assert.equal(layout({survival: 1.01}), null);
+  assert.equal(layout({survival: -0.01}), null);
+  assert.equal(layout({survival: 'x'}), null);
+  assert.equal(layout({survival: 1}).survival, 1);
+  assert.equal(layout({survival: 0}).survival, 0);
+  assert.equal(layout({cps: []}), null);
+  assert.equal(layout({cps: Array.from({length: LIMITS.gates + 1}, () => gatesOf(5)[0])}), null);
+  assert.equal(layout({cps: Array.from({length: LIMITS.gates}, () => gatesOf(5)[0])}).gates.length, LIMITS.gates);
+  assert.equal(layout({cps: [[{x: 1, y: 1}]]}), null, 'a gate is two ends');
+  assert.equal(layout({cps: [[{x: 1, y: 1}, {x: LIMITS.coordinate * 2, y: 1}]]}), null);
+  assert.equal(layout({cps: 'nope'}), null);
+  assert.equal(crashToWire({map, meta: {...meta, nDeaths: 3}}, track).deaths, 3);
+  assert.equal(crashToWire({map, meta: {...meta, nDeaths: 1e6 + 1}}, track), null);
+  assert.equal(crashToWire({map, meta: {...meta, nDeaths: NaN}}, track), null);
+  assert.equal(crashToWire({map: Array.from(map), meta}, track), null, 'a Float32Array, as the bridge makes');
+  assert.equal(crashToWire({map: map.slice(0, 100), meta}, track), null);
+  assert.equal(crashToWire({map, meta}, new Float32Array(DIMS.track)), null, 'a track of zeros');
+});
+
+test('crash maps: one send at a time, the walls and mode they are for, and a service from before them', async () => {
+  const fake = createFakeCloudBrain(), clock = {t: 1_000_000}, client = clientFor(fake, {clock});
+  let track = sine(DIMS.track, 153, 3), geometry = 'g1a2b', ctx = {...lapContext, collisions: 'solid/k8'};
+  const accepted = [], shown = [];
+  const bridge = {hooks: null, setCloudHooks(h) { this.hooks = h; }, acceptCloudPool: () => 0, acceptSharedCrash: (s, about) => accepted.push({s, about})};
+  const session = new SharedSession({bridge, client, setInterval: null,
+    page: {trackVec: () => track, dynamicsVec: () => null, context: () => ctx, generation: () => null, geometrySig: () => geometry}});
+  session.onCrashMap = s => shown.push(s ? s.contributors : null);
+  await session.start();
+  const sends = () => fake.requests.filter(r => r.path === '/v1/crashes').length;
+  bridge.hooks.onCrash({map: crashMapOf([[10, 5]]), meta: {nDeaths: 9, collisions: 'solid/k8'}});
+  // Two ticks at once (a slow answer): one request.
+  await Promise.all([session.sendCrash(), session.sendCrash()]);
+  assert.equal(sends(), 1);
+  // The recall is for the context's collision mode and the walls.
+  await session.maybePull({force: true});
+  await session.settled();
+  const asked = wire.parseCrashRecall(fake.requests.filter(r => r.path === '/v1/crashes/recall').at(-1).body);
+  assert.deepEqual([asked.collisions, asked.geometry], ['solid/k8', 'g1a2b']);
+  assert.equal(accepted.at(-1).s.contributors, 1);
+  assert.deepEqual(accepted.at(-1).about, {geometry: 'g1a2b', collisions: 'solid/k8'});
+  // Another collision mode on the same walls, the network gone: the map
+  // shown is not this mode's, so it goes.
+  ctx = {...lapContext, collisions: 'off'};
+  fake.down = 'offline';
+  await session.maybePull();
+  await session.settled();
+  assert.equal(session.sharedCrash, null);
+  assert.equal(accepted.at(-1).s, null);
+  assert.equal(shown.at(-1), null);
+  // Back online, then other walls: the same.
+  fake.down = null;
+  clock.t += 120_000;
+  await session.maybePull({force: true});
+  await session.settled();
+  assert.equal(session.sharedCrash?.contributors, 0);
+  bridge.hooks.onCrash({map: crashMapOf([[10, 5]]), meta: {nDeaths: 9}});
+  clock.t += CRASH_SEND_MS;
+  await session.sendCrash();
+  await session.maybePull({force: true});
+  await session.settled();
+  assert.equal(session.sharedCrash.contributors, 1);
+  track = sine(DIMS.track, 154, 3);
+  geometry = 'gbeef';
+  fake.down = 'offline';
+  await session.maybePull();
+  await session.settled();
+  assert.equal(session.sharedCrash, null);
+  assert.equal(shown.at(-1), null);
+  // An answer for walls the page has left is not shown.
+  fake.down = null;
+  clock.t += 120_000;
+  const late = session.pullCrashes(sine(DIMS.track, 153, 3), {collisions: 'off'});
+  geometry = 'gcafe';
+  await session.maybePull({force: true});
+  assert.equal(await late, null);
+  await session.settled();
+  assert.notEqual(accepted.at(-1).about.geometry, 'g1a2b');
+  session.stop();
+  // A crash recall that reads ends a read backoff.
+  const reader = clientFor(fake, {clock});
+  fake.down = 'error';
+  assert.equal(await reader.recallCrashes({track: unit(track)}), null);
+  assert.equal(reader.canTry('read'), false);
+  fake.down = null;
+  clock.t += 60_000;
+  assert.ok(await reader.recallCrashes({track: unit(track)}));
+  assert.equal(reader.backoff.read.failures, 0);
+  // A service from before crash maps: they stop for this page, and nothing backs off.
+  const old = createFakeCloudBrain();
+  old.noCrashes = true;
+  const quiet = clientFor(old, {clock});
+  const t = sine(DIMS.track, 155, 3);
+  assert.equal(await quiet.sendCrash(crashToWire({map: crashMapOf([[1, 4]]), meta: {nDeaths: 4}}, t)), false);
+  assert.equal(await quiet.recallCrashes({track: wire.isUnit(t) ? t : Float32Array.from(t, x => x / Math.hypot(...t))}), null);
+  assert.equal(quiet.crashMaps, false);
+  assert.ok(quiet.canTry('send') && quiet.canTry('read'), 'no backoff');
+  const first = clientFor(old, {clock});
+  assert.equal(await first.recallCrashes({track: Float32Array.from(t, x => x / Math.hypot(...t))}), null);
+  assert.ok(first.crashMaps === false && first.canTry('read'), 'a recall finds out too');
+  const before = old.requests.length;
+  assert.equal(await quiet.recallCrashes({track: Float32Array.from(t, x => x / Math.hypot(...t))}), null);
+  assert.equal(old.requests.length, before, 'not asked again');
+});
+
+test('the overlay draws everyone\'s crashes cell by cell, the busiest strongest, and its toggle names the players', () => {
+  const cells = crashCells(crashMapOf([[0, 9], [17, 1]]));
+  assert.equal(cells.length, 2);
+  assert.deepEqual(cells[0], {x: 0, y: 0, w: 200, h: 200, alpha: 0.5});
+  assert.ok(cells[1].x === 200 && cells[1].y === 200 && cells[1].alpha < 0.5 && cells[1].alpha > 0);
+  assert.deepEqual(crashCells(null), []);
+  assert.deepEqual(crashCells(new Float32Array(144)), []);
+  const drawn = [];
+  const ctx = {save() {}, restore() {}, set fillStyle(v) {}, set globalAlpha(a) { drawn.push(['alpha', a]); }, fillRect: (...r) => drawn.push(r)};
+  const o = new CrashOverlay();
+  o.set(crashMapOf([[0, 9]]));
+  o.draw(ctx);
+  assert.equal(drawn.length, 0, 'hidden by default');
+  o.show(true);
+  o.draw(ctx);
+  assert.deepEqual(drawn, [['alpha', 0.5], [0, 0, 200, 200]]);
+  assert.equal(describeCrashMap({map: crashMapOf([[0, 1]]), contributors: 3}), 'Show where everyone crashes here (3 players)');
+  assert.equal(describeCrashMap({map: crashMapOf([[0, 1]]), contributors: 1}), 'Show where everyone crashes here (1 player)');
+  assert.equal(describeCrashMap({map: null, contributors: 0}), '');
 });

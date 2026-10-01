@@ -255,7 +255,7 @@ fn forget_takes_a_contributor_out() {
     f.contribute(&c, &body(&c, &[], rows(&[(3, 40.0)])), T0 + 3);
     assert_eq!(f.entry(3)["feedback"]["contributors"], 2);
     let answer = f.forget(&a);
-    assert_eq!(answer, json!({"protocol": 1, "brains": 2, "feedback": 2}));
+    assert_eq!(answer, json!({"protocol": 1, "brains": 2, "feedback": 2, "crashes": 0}));
     // A's brains and their feedback are gone; A's values are out of B's brains.
     assert!(!f.brain.contains(&id(1)) && !f.brain.contains(&id(2)));
     assert!(f.store.brains.values().all(|b| b.0.contributor != contributor_id(&a)));
@@ -270,7 +270,7 @@ fn forget_takes_a_contributor_out() {
     assert!(f.store.feedback.values().all(|r| r.context.as_deref().is_some_and(|c| c.contains("\"t1\""))));
     f.assert_rebuilds_the_same(T0 + 5);
     // Again: nothing left. And forget does not start the quota over.
-    assert_eq!(f.forget(&a), json!({"protocol": 1, "brains": 0, "feedback": 0}));
+    assert_eq!(f.forget(&a), json!({"protocol": 1, "brains": 0, "feedback": 0, "crashes": 0}));
     f.contribute(&a, &body(&a, &[], json!([])), T0 + 7);
     assert!(f.send(&a, &body(&a, &[], json!([])), T0 + 8).is_err(), "the fourth request of the day");
     assert!(f.store.contributors.contains_key(&contributor_id(&a)), "today's count stays until midnight");
@@ -353,7 +353,7 @@ fn forget_takes_out_only_the_contributors_own_slots_whatever_their_tag() {
     f.contribute(&c, &body(&c, &[], rows(&[(1, 49.0)])), T0 + 2);
     assert_eq!(num(&f.entry(1)["fitness"]), 48.5, "corroborated");
     // A token with the same tag as A, that never reported, forgets: nothing of A's goes.
-    assert_eq!(f.forget(&stranger), json!({"protocol": 1, "brains": 0, "feedback": 0}));
+    assert_eq!(f.forget(&stranger), json!({"protocol": 1, "brains": 0, "feedback": 0, "crashes": 0}));
     assert_eq!(f.entry(1)["feedback"]["contributors"], 2);
     assert_eq!(num(&f.entry(1)["fitness"]), 48.5);
     // A forgets: only A's slot goes.
@@ -450,7 +450,7 @@ fn forget_pages_through_every_record_a_contributor_is_in() {
     // C shares one of the records, which stays.
     f.contribute(&c, &body(&c, &[], rows(&[(1_000, 9.5)])), T0 + 500);
     assert_eq!(f.store.feedback.len(), 1_280);
-    assert_eq!(f.forget(&a), json!({"protocol": 1, "brains": 0, "feedback": 1_280}));
+    assert_eq!(f.forget(&a), json!({"protocol": 1, "brains": 0, "feedback": 1_280, "crashes": 0}));
     assert_eq!(f.store.feedback.len(), 1, "C's record stays, without A");
     assert!(f.store.feedback.values().all(|r| r.slots.iter().all(|s| s.id != contributor_id(&a))));
     f.assert_rebuilds_the_same(T0 + 501);

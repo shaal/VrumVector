@@ -1,6 +1,6 @@
 //! Any bytes through the request parsers (CB1's rules, core/src/wire.rs, and
 //! X1's verification and leaderboard query): none panics, and whatever one
-//! accepts holds what the wire format promises. A track a verification
+//! accepts holds what the wire format promises (crash maps, X4, too). A track a verification
 //! accepts is driven on for a few seconds: the simulator never panics on it.
 
 #![no_main]
@@ -108,6 +108,21 @@ fuzz_target!(|data: &[u8]| {
             assert!(o.work <= 120 * 600 + 10 * (g.inner.len() + g.outer.len() + g.checkpoints.len() + 4) as u64, "{}", o.work);
             assert!(o.lap_frames.windows(2).all(|w| w[0] < w[1]) && o.crashed_at.map_or(true, |f| f == o.frames));
         }
+    }
+    if let Ok(c) = wire::parse_crashes(data) {
+        assert!(c.token.len() == 32);
+        unit(&c.track, wire::TRACK_DIM);
+        assert!(c.map.len() == wire::CRASH_DIM && c.map.iter().all(|x| x.is_finite() && *x >= 0.0 && !(*x == 0.0 && x.is_sign_negative())) && wire::is_unit(&c.map));
+        assert!((3..=1_000_000).contains(&c.deaths));
+        assert!(c.collisions == "off" || c.collisions == "unknown" || c.collisions.split('/').all(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())));
+        if let Some(l) = &c.layout {
+            assert!(wire::is_geometry_sig(&l.geometry) && (0.0..=1.0).contains(&l.survival) && (1..=limits::GATES).contains(&l.gates.len()));
+            assert!(l.gates.iter().flatten().flatten().all(|x| x.is_finite() && x.abs() <= limits::COORDINATE));
+        }
+    }
+    if let Ok(r) = wire::parse_crash_recall(data) {
+        unit(&r.track, wire::TRACK_DIM);
+        assert!(r.geometry.as_deref().map_or(true, wire::is_geometry_sig));
     }
     if let Ok(b) = wire::parse_board(&String::from_utf8_lossy(data)) {
         assert!(wire::is_track_key(&b.track));

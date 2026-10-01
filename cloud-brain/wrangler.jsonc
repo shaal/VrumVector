@@ -12,13 +12,13 @@
   "build": {"command": "bash build.sh"},
   "durable_objects": {"bindings": [{"name": "BRAIN", "class_name": "SharedBrain"}]},
   // Per-address limits (CB4), counted by the front door before the object:
-  // contributions; recalls, stats and health checks; forgets (a forget can
-  // read every feedback record). A browser sends at most 6 contributions a
-  // minute (one every 10 s), so about 3 browsers can share an address at
-  // full rate. The address is a key (IPv6 by /64), never stored.
+  // contributions and crash maps; recalls, stats and health checks; forgets
+  // (a forget can read every feedback record). A browser sends at most 6
+  // contributions and 1 crash map a minute (X4), so 3 browsers can share an
+  // address at full rate. The address is a key (IPv6 by /64), never stored.
   // namespace_id: any number, unique among this account's rate limiters.
   "ratelimits": [
-    {"name": "WRITE_LIMIT", "namespace_id": "4201", "simple": {"limit": 20, "period": 60}},
+    {"name": "WRITE_LIMIT", "namespace_id": "4201", "simple": {"limit": 24, "period": 60}},
     {"name": "READ_LIMIT", "namespace_id": "4202", "simple": {"limit": 60, "period": 60}},
     {"name": "FORGET_LIMIT", "namespace_id": "4203", "simple": {"limit": 3, "period": 60}},
     // Verifications (X1): each runs the simulator, up to 120 s of driving.

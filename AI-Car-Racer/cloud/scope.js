@@ -25,7 +25,9 @@
     try { saved = JSON.parse(window.localStorage.getItem(KEY) || 'null'); } catch (e) { saved = null; }
     var params = new URLSearchParams(window.location.search), asked = params.get('brain');
     if (asked === 'shared' || asked === 'local') {
-      saved = asked === 'shared' ? {mode: 'shared', consented: !!(saved && saved.consented)} : {mode: 'local', consented: !!(saved && saved.consented)};
+      // The yes as given (cloud/mode.js CONSENT_VERSION: a version, not a flag).
+      var yes = (saved && saved.consented) || false;
+      saved = {mode: asked === 'shared' ? 'shared' : 'local', consented: yes};
       try { window.localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) { /* this page only */ }
       params.delete('brain');
       var query = params.toString();

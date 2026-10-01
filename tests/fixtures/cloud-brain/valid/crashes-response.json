@@ -1,0 +1,9 @@
+{
+ "description": "A crash map kept.",
+ "route": "crashes-response",
+ "body": "{\"protocol\":1,\"accepted\":true}",
+ "expect": {
+  "ok": true,
+  "accepted": true
+ }
+}

@@ -633,6 +633,8 @@ export function archiveCrashMap(crashVec, meta = {}) {
   // Wall-geometry signature — adaptive gates refuse to apply a layout whose
   // sig doesn't match the live track (stops Triangle gates on Rectangle).
   if (meta.geometrySig) m.geometrySig = String(meta.geometrySig);
+  // The walls alone (X4: what a shared layout is for).
+  if (meta.walls) m.walls = String(meta.walls);
   // Collision mode (car-collisions C4): adaptive gates recall a layout only
   // in the mode it was archived in. Untagged maps are from normal driving.
   const collisions = collisionsLabel(meta.collisions);
@@ -641,6 +643,12 @@ export function archiveCrashMap(crashVec, meta = {}) {
     const id = _crashDB.insert(crashVec, allocateVectorId('crash',crashVec,_crashMirror), m);
     _crashMirror.set(id, { vector: crashVec.slice(), meta: m });
     schedulePersist();
+    // X4 — shared mode: the map (and the layout it was measured with) goes
+    // to everyone's crash map. Not gates the generation did not run on
+    // (adaptive gates' next ones: measured false).
+    if (BRAIN_MODE === 'shared' && meta.measured !== false) {
+      try { _cloudHooks?.onCrash?.({map: crashVec.slice(), meta: m}); } catch (e) { console.warn('[cloud-brain] crash push failed', e); }
+    }
     return id;
   } catch (e) {
     console.warn('[crash-map] insert failed', e);
@@ -653,24 +661,53 @@ export function archiveCrashMap(crashVec, meta = {}) {
  * Score is cosine similarity in [0,1] (converted from VectorDB distance).
  */
 export function recommendCrashLayouts(crashVec, k = 5) {
-  if (!_useCrashMaps || !_crashDB || _crashMirror.size === 0) return [];
+  if (!_useCrashMaps || !_crashDB) return [];
   if (!(crashVec instanceof Float32Array) || crashVec.length !== CRASH_DIM) return [];
-  const kk = Math.max(1, Math.min(k | 0, _crashMirror.size));
-  let hits;
-  try {
-    hits = _crashDB.search(crashVec, kk);
-  } catch (e) {
-    console.warn('[crash-map] search failed', e);
-    return [];
+  let hits = [];
+  if (_crashMirror.size) {
+    try {
+      hits = _crashDB.search(crashVec, Math.max(1, Math.min(k | 0, _crashMirror.size))) || [];
+    } catch (e) {
+      console.warn('[crash-map] search failed', e);
+    }
   }
-  if (!hits || !hits.length) return [];
   // Score is cosine DISTANCE (1 - cos), as for tracks. Crash grids are
   // non-negative, so the former `1 - dist/2` never fell below 0.5 and the
   // adaptive-gate threshold admitted maps with cosine ≥ 0.10.
   const out = hits.map(h => crashLayoutFromHit(h, _crashMirror.get(h.id)));
+  out.push(...sharedCrashLayouts(crashVec));
   // Prefer high similarity, then high survival
   out.sort((a, b) => (b.similarity - a.similarity) || (b.survival - a.survival));
   return out;
+}
+
+// X4 — everyone's crash map for this track, and the layouts shared for its
+// walls (cloud/session.js recalls them in shared mode). A shared layout is a
+// candidate as a local one is: as alike as this generation's crash map is to
+// everyone's, for the walls and collision mode it was recalled for; adaptive
+// gates try it for a generation before keeping it. With no map there is
+// nothing to be alike to (the service sends layouts only with a map).
+let _sharedCrash = null;
+export function acceptSharedCrash(shared, {geometry = null, collisions = 'off'} = {}) {
+  _sharedCrash = shared && shared.map instanceof Float32Array && shared.map.length === CRASH_DIM
+    ? {map: shared.map, layouts: Array.isArray(shared.layouts) ? shared.layouts : [], geometry, collisions: collisionsLabel(collisions), contributors: shared.contributors | 0}
+    : null;
+}
+export function sharedCrash() {
+  return _sharedCrash;
+}
+function sharedCrashLayouts(crashVec) {
+  const s = _sharedCrash;
+  if (!s || !s.layouts.length || !s.geometry) return [];
+  let dot = 0;
+  for (let i = 0; i < CRASH_DIM; i++) dot += crashVec[i] * s.map[i];
+  const norm = Math.hypot(...crashVec);
+  const similarity = norm > 0 ? dot / norm : 0;
+  return s.layouts.map((l, i) => ({
+    id: 'shared:' + i, similarity, distance: 1 - similarity, survival: Number(l.survival) || 0, fitness: 0, generation: 0,
+    nGates: l.gates.length, nDeaths: 0, cps: l.gates.map(g => [{x: g[0][0], y: g[0][1]}, {x: g[1][0], y: g[1][1]}]),
+    causes: null, bottleneck: null, geometrySig: s.geometry, collisions: s.collisions, timestamp: 0, shared: true,
+  }));
 }
 
 export function crashMapCount() {

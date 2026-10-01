@@ -1,0 +1,9 @@
+{
+ "description": "No accepted.",
+ "route": "crashes-response",
+ "body": "{\"protocol\":1}",
+ "expect": {
+  "ok": false,
+  "error": "shape"
+ }
+}

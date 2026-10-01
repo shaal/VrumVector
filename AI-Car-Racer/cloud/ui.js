@@ -11,7 +11,7 @@
 const WHAT = [
   'Shared brain (beta): your cars learn from, and add to, one brain shared with everyone who turns this on.',
   '',
-  'Sent: the network weights of your best cars (a copy of your own driving too, when you use "Use my driving", marked as such), with their fitness, lap times, generation and lineage; how they drove (driving summaries and a 64-number driving signature); the track\'s embedding and a fingerprint of its shape; your learning settings; and the results of cars bred from shared brains. When a car drives a lap, the track\'s walls and checkpoints go with it, so the service can drive that car again and verify the lap for the leaderboard.',
+  'Sent: the network weights of your best cars (a copy of your own driving too, when you use "Use my driving", marked as such), with their fitness, lap times, generation and lineage; how they drove (driving summaries and a 64-number driving signature); the track\'s embedding and a fingerprint of its shape; your learning settings; and the results of cars bred from shared brains. When a car drives a lap, the track\'s walls and checkpoints go with it, so the service can drive that car again and verify the lap for the leaderboard. At most once a minute, where your cars crash on the track (a coarse 16 × 9 map, with the number of crashes and your Solid cars setting), the checkpoints they drove through, the share of cars that survived, and a fingerprint of the walls go to everyone\'s crash map. Adaptive gates may try checkpoints that others shared for the same walls for one generation, and keep them only when more of your cars survive.',
   'With them goes an anonymous random token made in this browser, which links your contributions to each other, not to you. The service sees your IP address while it answers and does not store it. Your recordings of driving are never sent.',
   '',
   'This browser\'s own memory and training are kept apart, unchanged.',
@@ -20,16 +20,18 @@ const WHAT = [
 export const DISCLOSURE = [...WHAT, 'Switch now (the page reloads)?'].join('\n');
 /** Asked when a link opened this page in shared mode: nothing is sent before a yes. */
 export const ARRIVAL_DISCLOSURE = [...WHAT, 'This link opened the shared brain. Use it? (Cancel returns to this browser\'s own memory.)'].join('\n');
+/** Asked when what is sent changed since the player's yes (cloud/mode.js CONSENT_VERSION). */
+export const CHANGED_DISCLOSURE = [...WHAT, 'What the shared brain sends has changed since you said yes. Keep using it? (Cancel returns to this browser\'s own memory.)'].join('\n');
 
 const STYLE = `
 .rv-memory{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin:6px 0 2px;font-size:12px}
 .rv-memory-label{opacity:.8}
 .rv-memory label{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
-.rv-memory-switch,.rv-memory-race{font:inherit;padding:2px 8px;cursor:pointer}
+.rv-memory-switch,.rv-memory-race,.rv-memory-crashes{font:inherit;padding:2px 8px;cursor:pointer}
 .rv-memory-status,.rv-memory-board{flex-basis:100%;opacity:.85}
 .rv-memory-status.rv-memory-offline{opacity:1;background:#6b3a12;color:#fff;border-radius:4px;padding:3px 6px}
 .rv-memory-pill{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:1300;background:#6b3a12;color:#fff;border-radius:999px;padding:4px 12px;font:12px/1.4 system-ui,-apple-system,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.3)}
-@media (pointer:coarse){.rv-memory label,.rv-memory-switch,.rv-memory-race{min-height:44px}}
+@media (pointer:coarse){.rv-memory label,.rv-memory-switch,.rv-memory-race,.rv-memory-crashes{min-height:44px}}
 `;
 
 /** The status line: {text} (announced when it changes), {retry} (not announced), {offline}. */
@@ -99,13 +101,23 @@ export function describeChampion(champion, {wanted = false} = {}) {
 }
 
 /**
+ * The crash overlay toggle's label (X4), the same shown or not (aria-pressed
+ * says which): how many players' crashes it shows. Empty: no toggle.
+ */
+export function describeCrashMap(shared) {
+  if (!shared?.map || !(shared.contributors > 0)) return '';
+  return `Show where everyone crashes here (${shared.contributors} ${shared.contributors === 1 ? 'player' : 'players'})`;
+}
+
+/**
  * Mounts the control. Returns {setStatus, setBoard, setChampion, onRace,
- * ready} (onRace: set by the caller, called when the race button is
+ * setCrashMap, onCrashToggle, ready} (onRace: set by the caller, called when the race button is
  * pressed; ready resolves to the row element, or null when it is not shown).
  */
 export function mountMemoryControl({mode, available, secure = true, onChoose, confirm: ask = text => globalThis.confirm?.(text) ?? false, doc = globalThis.document}) {
   let row = null, textEl = null, retryEl = null, statusEl = null, boardEl = null, raceEl = null, pill = null, last = null, ticker = null, boardText = '';
   let race = {text: '', wanted: false};
+  let crashesEl = null, crashes = {text: '', shown: false};
   const render = () => {
     if (!last) return;
     const {text, retry, offline} = describe(last, {secure});
@@ -156,7 +168,17 @@ export function mountMemoryControl({mode, available, secure = true, onChoose, co
     race = {text: describeChampion(champion, {wanted}), wanted: !!wanted};
     showRace();
   };
-  const control = {setStatus, setBoard, setChampion, onRace: null, ready: null};
+  const showCrashes = () => {
+    if (!crashesEl) return;
+    crashesEl.textContent = crashes.text;
+    crashesEl.hidden = !crashes.text;
+    crashesEl.setAttribute('aria-pressed', String(crashes.shown));
+  };
+  const setCrashMap = (shared, {shown = false} = {}) => {
+    crashes = {text: describeCrashMap(shared), shown: !!shown};
+    showCrashes();
+  };
+  const control = {setStatus, setBoard, setChampion, onRace: null, setCrashMap, onCrashToggle: null, ready: null};
   const ready = (async () => {
     if (!doc || (!available && mode !== 'shared')) return null;
     const header = await panelHeader(doc, 10_000);
@@ -180,6 +202,7 @@ export function mountMemoryControl({mode, available, secure = true, onChoose, co
       '<span class="rv-memory-status" data-rv="memory-status"><span data-rv="memory-text" role="status" aria-live="polite"></span><span data-rv="memory-retry" aria-hidden="true"></span></span>',
       '<span class="rv-memory-board" data-rv="memory-board" hidden></span>',
       '<button type="button" class="rv-memory-race" data-rv="memory-race" aria-pressed="false" hidden></button>',
+      '<button type="button" class="rv-memory-crashes" data-rv="memory-crashes" aria-pressed="false" hidden></button>',
     ].join('');
     header.insertAdjacentElement('afterend', row);
     statusEl = row.querySelector('[data-rv="memory-status"]');
@@ -191,6 +214,9 @@ export function mountMemoryControl({mode, available, secure = true, onChoose, co
     raceEl = row.querySelector('[data-rv="memory-race"]');
     raceEl.addEventListener('click', () => control.onRace?.());
     showRace();
+    crashesEl = row.querySelector('[data-rv="memory-crashes"]');
+    crashesEl.addEventListener('click', () => control.onCrashToggle?.());
+    showCrashes();
     const button = row.querySelector('[data-rv="memory-switch"]');
     const chosen = () => row.querySelector('input[name="rv-memory"]:checked')?.value || mode;
     for (const input of row.querySelectorAll('input[name="rv-memory"]')) {

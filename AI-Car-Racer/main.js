@@ -1047,7 +1047,10 @@ function handleGenEnd(m){
                     nGates: cps ? cps.length : 0,
                     cps: cps,
                     geometrySig: geoSig,
+                    walls: (window.AdaptiveGates && window.AdaptiveGates.wallSignature) ? window.AdaptiveGates.wallSignature() : null,
                     collisions: genEndCollisions(m).collisions,
+                    // X4: gates changed while the generation drove are not the ones it measured.
+                    measured: !(window.AdaptiveGates && window.AdaptiveGates.gatesChangedLastGen && window.AdaptiveGates.gatesChangedLastGen()),
                 });
             }
         }
@@ -1405,6 +1408,8 @@ function performBegin(N){
             borders, checkPointList
         });
         workerInited = true;
+        // X4: the generation starting now drives these gates.
+        try { window.AdaptiveGates?.onGatesSent?.(); } catch (_) {}
     }
     const collisions = collisionConfig();
     activeCollisions = collisions;
@@ -1662,6 +1667,9 @@ function animate(){
     if (!gpuActive && (!_pres || !_pres.drewRoad)){
         road.draw(ctx);
     }
+    // Where everyone crashes here (X4, shared mode): under the cars, on the
+    // flat view.
+    if (!gpuActive && !DP?.state.view3d) window.SharedCrashOverlay?.draw(ctx, {width: road.right, height: road.bottom});
     if (perfEnabled) _perfDraw += performance.now() - _perfT0;
 
     if(phase==3){

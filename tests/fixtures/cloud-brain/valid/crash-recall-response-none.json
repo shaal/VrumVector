@@ -1,0 +1,12 @@
+{
+ "description": "Nobody crashed here yet.",
+ "route": "crash-recall-response",
+ "body": "{\"protocol\":1,\"map\":null,\"contributors\":0,\"tracks\":0,\"layouts\":[]}",
+ "expect": {
+  "ok": true,
+  "map": false,
+  "contributors": 0,
+  "tracks": 0,
+  "survivals": []
+ }
+}

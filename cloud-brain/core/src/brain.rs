@@ -22,13 +22,13 @@
 //! (`Brain::served_fitness`), and its feedback there is measured against it.
 
 use crate::presets;
-use crate::wire::{self, clamp, plain, Board, Context, Contribution, Learning, Meta, Reason, Recall, Refused, Verify, BRAIN_SCHEMA, PROTOCOL};
+use crate::wire::{self, clamp, plain, Board, Context, Contribution, CrashLayout, CrashRecall, Crashes, Learning, Meta, Reason, Recall, Refused, Verify, BRAIN_SCHEMA, PROTOCOL};
 use ruvector_core::types::{DbOptions, DistanceMetric, SearchQuery, VectorEntry};
 use ruvector_core::VectorDB;
 use vectorvroom_sim as sim;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
 /// What one contributor sends in a UTC day: requests (contributions and
 /// forgets), brains, and feedback rows (the ones that parsed).
@@ -213,6 +213,20 @@ impl VerifiedRow {
     }
 }
 
+/// A contributor's crash map for a track and collision mode (X4): their
+/// latest, and the best gate layout they shared there (the walls' signature,
+/// the gates, the survival measured with them).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CrashRow {
+    pub track: String,
+    pub mode: String,
+    pub contributor: String,
+    pub map: Vec<f32>,
+    pub deaths: u64,
+    pub layout: Option<CrashLayout>,
+    pub updated: u64,
+}
+
 /// One row as the store loads it back, in this order: every track, every
 /// brain, every verified run, every feedback row (by brain, the most
 /// recently updated first), then the contribution counts of the last 24
@@ -235,6 +249,7 @@ pub trait Store {
     /// `since_minute` only: a rebuild never holds a second copy of the store.
     fn load(&self, since_minute: u64, sink: &mut dyn FnMut(Loaded) -> Result<()>) -> Result<()>;
     fn put_track(&mut self, row: &TrackRow) -> Result<()>;
+    /// Deletes a track, and its crash maps (X4).
     fn delete_track(&mut self, id: &str) -> Result<()>;
     fn put_brain(&mut self, row: &BrainRow, vector: &[f32]) -> Result<()>;
     /// The brain, its feedback rows and its verified runs.
@@ -289,6 +304,13 @@ pub trait Store {
     /// The last minute a contribution was counted in (X2: is anyone
     /// playing?), without building the brain.
     fn last_contribution(&self) -> Result<Option<u64>>;
+    /// The crash maps of a track (X4), in a collision mode or (None) in all.
+    fn crashes_of(&self, track: &str, mode: Option<&str>) -> Result<Vec<CrashRow>>;
+    /// Stores a contributor's crash map, replacing their row there.
+    fn put_crash(&mut self, row: &CrashRow) -> Result<()>;
+    fn delete_crash(&mut self, row: &CrashRow) -> Result<()>;
+    /// Deletes a contributor's crash maps; returns how many.
+    fn forget_crashes(&mut self, contributor: &str) -> Result<usize>;
 }
 
 /// A contributor's id: 128 bits of SHA-256 of their token. The token itself
@@ -530,6 +552,49 @@ impl Xorshift {
     }
 }
 
+/// Crash maps a track and collision mode keep (one a contributor, with their
+/// layout; the least recently sent goes first).
+pub const CRASH_CONTRIBUTORS: usize = 16;
+/// Collision modes a track keeps crash maps in (the mode with the fewest
+/// contributors goes first, then the least recently sent to: one token's
+/// made-up labels push out each other, not the players'): with
+/// CRASH_CONTRIBUTORS and the track cap, it bounds the table, whatever labels
+/// arrive.
+pub const CRASH_MODES: usize = 4;
+/// How near a track must be (cosine similarity of the embeddings) for its
+/// crash maps to count as this track's neighbourhood (X4).
+pub const CRASH_TRACK_SIM: f64 = 0.9;
+/// Layouts a recall gives, the best survival first.
+pub const CRASH_LAYOUTS: usize = 4;
+
+/// POST /v1/crashes's answer.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrashesAnswer {
+    pub protocol: u32,
+    pub accepted: bool,
+}
+
+/// A shared layout in a recall.
+#[derive(Clone, Debug, Serialize)]
+pub struct LayoutEntry {
+    pub gates: Vec<[[f64; 2]; 2]>,
+    pub survival: f64,
+}
+
+/// POST /v1/crashes/recall's answer: everyone's crash map on the nearest
+/// tracks (base64 of 144 numbers of length 1; null with none), how many
+/// contributors and tracks it is from, and the best layouts for the walls.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrashRecallAnswer {
+    pub protocol: u32,
+    pub map: Option<String>,
+    pub contributors: usize,
+    pub tracks: usize,
+    pub layouts: Vec<LayoutEntry>,
+}
+
 /// The service's own contributor id (X2): the brains its training makes.
 /// Not a token's (those are 32 hex digits), so no token can pass for it.
 pub const CLOUD_CONTRIBUTOR: &str = "cloud";
@@ -541,13 +606,14 @@ pub const VERIFY_PER_MINUTE: u32 = 30;
 /// Entries on a leaderboard.
 pub const BOARD_SIZE: usize = 20;
 
-/// POST /v1/forget: the brains deleted, and the feedback records the
-/// contributor's values were taken out of.
+/// POST /v1/forget: the brains deleted, the feedback records the
+/// contributor's values were taken out of, and their crash maps deleted (X4).
 #[derive(Clone, Debug, Serialize)]
 pub struct ForgetAnswer {
     pub protocol: u32,
     pub brains: usize,
     pub feedback: usize,
+    pub crashes: usize,
 }
 
 // ─── context match (the browser's learning/policy.js) ───────────────────────
@@ -1367,6 +1433,8 @@ impl Brain {
         // Runs they asked the service for stay (they are the service's own),
         // without their id.
         store.anonymize_verified(contributor)?;
+        // Their crash maps and layouts go (X4).
+        let crashes = store.forget_crashes(contributor)?;
         // The records with a slot of the contributor's tag are in memory. A
         // few (a token that reported little, or nothing: a tag's share of the
         // records) are each read by key; more (a heavy contributor, or a
@@ -1401,7 +1469,7 @@ impl Brain {
                 after = next;
             }
         }
-        Ok(ForgetAnswer { protocol: PROTOCOL, brains: gone.len(), feedback: changed })
+        Ok(ForgetAnswer { protocol: PROTOCOL, brains: gone.len(), feedback: changed, crashes })
     }
 
     /// POST /v1/verify (X1): runs a brain the service holds on the page's
@@ -1473,6 +1541,99 @@ impl Brain {
             crashed_at: outcome.crashed_at,
             frames: outcome.frames,
         }))
+    }
+
+    /// POST /v1/crashes (X4): a contributor's crash map for a track (the
+    /// track kept like a contribution's), their latest replacing their
+    /// earlier one there, with their gate layout when it survives at least as
+    /// well as the one they shared there for the same walls. A track keeps
+    /// CRASH_CONTRIBUTORS a collision mode (the least recently sent goes) and
+    /// CRASH_MODES modes (the one with the fewest contributors goes).
+    /// Counted as a request on the quota.
+    pub fn crashes(&mut self, c: Crashes, contributor: &str, now: u64, store: &mut dyn Store) -> Result<std::result::Result<CrashesAnswer, Limited>> {
+        if let Some(limited) = self.admit(contributor, Usage { requests: 1, brains: 0, feedback: 0 }, now, store)? {
+            return Ok(Err(limited));
+        }
+        let Some(track) = self.add_track(c.track, &[], now, store)? else { return Ok(Ok(CrashesAnswer { protocol: PROTOCOL, accepted: false })) };
+        let held = store.crashes_of(&track, None)?;
+        let mine = held.iter().find(|r| r.mode == c.collisions && r.contributor == contributor);
+        if mine.is_none() {
+            let same: Vec<&CrashRow> = held.iter().filter(|r| r.mode == c.collisions).collect();
+            if same.len() >= CRASH_CONTRIBUTORS {
+                if let Some(old) = same.iter().min_by(|a, b| (a.updated, &a.contributor).cmp(&(b.updated, &b.contributor))) {
+                    store.delete_crash(old)?;
+                }
+            } else if same.is_empty() {
+                // A mode new here: the mode with the fewest contributors (then
+                // the least recently sent to) makes room.
+                let mut modes: BTreeMap<&str, (usize, u64)> = BTreeMap::new();
+                for r in &held {
+                    let (n, last) = modes.entry(r.mode.as_str()).or_insert((0, 0));
+                    *n += 1;
+                    *last = (*last).max(r.updated);
+                }
+                if modes.len() >= CRASH_MODES {
+                    if let Some((&gone, _)) = modes.iter().min_by(|a, b| (a.1, a.0).cmp(&(b.1, b.0))) {
+                        for r in held.iter().filter(|r| r.mode == gone) {
+                            store.delete_crash(r)?;
+                        }
+                    }
+                }
+            }
+        }
+        let layout = match (c.layout, mine.and_then(|m| m.layout.clone())) {
+            (Some(new), Some(old)) if new.geometry == old.geometry && new.survival < old.survival => Some(old),
+            (new, old) => new.or(old),
+        };
+        store.put_crash(&CrashRow { track, mode: c.collisions, contributor: contributor.to_string(), map: c.map, deaths: c.deaths, layout, updated: now })?;
+        Ok(Ok(CrashesAnswer { protocol: PROTOCOL, accepted: true }))
+    }
+
+    /// POST /v1/crashes/recall (X4): the crash maps of the nearest tracks (at
+    /// least CRASH_TRACK_SIM alike) in the collision mode, one a contributor
+    /// (from the nearest track they sent one on), weighed by how alike its
+    /// track is, summed and scaled to length 1; and the best CRASH_LAYOUTS of
+    /// the layouts shared there for the walls (each contributor's best).
+    pub fn crash_recall(&self, r: &CrashRecall, store: &dyn Store) -> Result<CrashRecallAnswer> {
+        // In the order of `nearest` (the nearest track first, then by id):
+        // the same answer after a rebuild.
+        let mut votes: Vec<(f64, CrashRow)> = Vec::new();
+        let mut voted: HashSet<String> = HashSet::new();
+        let mut best: Vec<(String, CrashLayout)> = Vec::new();
+        for (track, distance) in nearest(&self.track_db, &r.track, TRACK_HITS)? {
+            let sim = 1.0 - f64::from(distance);
+            if sim < CRASH_TRACK_SIM {
+                continue;
+            }
+            let mut rows = store.crashes_of(&track, Some(&r.collisions))?;
+            rows.sort_by(|a, b| a.contributor.cmp(&b.contributor));
+            for row in rows {
+                if let (Some(walls), Some(l)) = (&r.geometry, &row.layout) {
+                    if &l.geometry == walls {
+                        match best.iter_mut().find(|(who, _)| *who == row.contributor) {
+                            Some((_, held)) if l.survival > held.survival => *held = l.clone(),
+                            Some(_) => {}
+                            None => best.push((row.contributor.clone(), l.clone())),
+                        }
+                    }
+                }
+                if voted.insert(row.contributor.clone()) {
+                    votes.push((sim, row));
+                }
+            }
+        }
+        let mut sum = vec![0f64; wire::CRASH_DIM];
+        for (sim, row) in &votes {
+            for (s, x) in sum.iter_mut().zip(&row.map) {
+                *s += sim * f64::from(*x);
+            }
+        }
+        let norm = sum.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let map = (norm > 0.0).then(|| wire::encode_f32(&sum.iter().map(|x| (x / norm) as f32 + 0.0).collect::<Vec<_>>()));
+        let tracks = votes.iter().map(|(_, row)| row.track.as_str()).collect::<HashSet<_>>().len();
+        best.sort_by(|a, b| b.1.survival.total_cmp(&a.1.survival).then(a.0.cmp(&b.0)));
+        let layouts = best.into_iter().take(CRASH_LAYOUTS).map(|(_, l)| LayoutEntry { gates: l.gates, survival: plain(l.survival) }).collect();
+        Ok(CrashRecallAnswer { protocol: PROTOCOL, map, contributors: votes.len(), tracks, layouts })
     }
 
     /// Keeps a run the service drove (a verification's, or training's): at
@@ -1877,6 +2038,8 @@ pub struct MemStore {
     pub verified: Vec<VerifiedRow>,
     /// track key → the digest of its geometry (X1).
     pub pins: HashMap<String, String>,
+    /// Crash maps, with their layouts (X4).
+    pub crashes: Vec<CrashRow>,
     /// Fail the n-th write from now (tests of a store that breaks mid-request).
     pub fail_after: Option<usize>,
     /// Feedback records read by `feedback_slots` and `records_of`, and the
@@ -1922,6 +2085,8 @@ impl Store for MemStore {
     fn delete_track(&mut self, id: &str) -> Result<()> {
         self.write()?;
         self.tracks.remove(id);
+        // Its crash maps go with it (X4).
+        self.crashes.retain(|r| r.track != id);
         Ok(())
     }
     fn put_brain(&mut self, row: &BrainRow, vector: &[f32]) -> Result<()> {
@@ -2058,5 +2223,25 @@ impl Store for MemStore {
     }
     fn last_contribution(&self) -> Result<Option<u64>> {
         Ok(self.minutes.keys().next_back().copied())
+    }
+    fn crashes_of(&self, track: &str, mode: Option<&str>) -> Result<Vec<CrashRow>> {
+        Ok(self.crashes.iter().filter(|r| r.track == track && mode.map_or(true, |m| r.mode == m)).cloned().collect())
+    }
+    fn put_crash(&mut self, row: &CrashRow) -> Result<()> {
+        self.write()?;
+        self.crashes.retain(|r| !(r.track == row.track && r.mode == row.mode && r.contributor == row.contributor));
+        self.crashes.push(row.clone());
+        Ok(())
+    }
+    fn delete_crash(&mut self, row: &CrashRow) -> Result<()> {
+        self.write()?;
+        self.crashes.retain(|r| !(r.track == row.track && r.mode == row.mode && r.contributor == row.contributor));
+        Ok(())
+    }
+    fn forget_crashes(&mut self, contributor: &str) -> Result<usize> {
+        self.write()?;
+        let before = self.crashes.len();
+        self.crashes.retain(|r| r.contributor != contributor);
+        Ok(before - self.crashes.len())
     }
 }

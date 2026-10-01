@@ -10,7 +10,9 @@
 // raw text (sent as its UTF-8 bytes); bodyBase64 is raw bytes, for bodies that
 // are not valid UTF-8. route is
 // contribute | recall | forget | verify | leaderboard (its body is the
-// query string) | recall-response | contribute-response | stats-response |
+// query string) | crashes | crash-recall (X4) | recall-response |
+// contribute-response | stats-response | crashes-response |
+// crash-recall-response |
 // verify-response | leaderboard-response | error-response. expect is {ok: false, error} for a refused
 // body, or what was accepted: ids, refused items with their reasons, and
 // (for some) the values read: cleaned meta and contexts, fitness values,
@@ -21,7 +23,7 @@
 // ranking uses too (memory null: a brain without a context).
 import {mkdir, writeFile, rm} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
-import {encodeF32, brainId, httpStatus, wireContext, PROTOCOL, BRAIN_SCHEMA, LIMITS, DIMS, REASONS} from '../AI-Car-Racer/cloud/wire.js';
+import {encodeF32, brainId, httpStatus, wireContext, PROTOCOL, BRAIN_SCHEMA, LIMITS, DIMS, REASONS, CRASH_DIM} from '../AI-Car-Racer/cloud/wire.js';
 import {matchContext} from '../AI-Car-Racer/learning/policy.js';
 
 function stream(seed) {
@@ -51,7 +53,7 @@ const wireBrain = (vector, extra = {}) => ({vector: encodeF32(vector), fitness: 
 const row = (id, extra = {}) => ({id, context: CONTEXT, meanFitness: 9.5, count: 12, ...extra});
 const recall = (track, extra = {}) => json({protocol: PROTOCOL, brainSchema: BRAIN_SCHEMA, track: encodeF32(track), context: CONTEXT, ...extra});
 const accepts = (accepted, extra = {}) => ({ok: true, accepted, rejected: [], feedbackAccepted: 0, feedbackRejected: [], ...extra});
-const REQUESTS = ['contribute', 'recall', 'forget', 'verify', 'leaderboard'];
+const REQUESTS = ['contribute', 'recall', 'forget', 'verify', 'leaderboard', 'crashes', 'crash-recall'];
 const refused = (description, route, body, error) => ({description, route, body,
   expect: REQUESTS.includes(route) ? {ok: false, error, status: httpStatus(error)} : {ok: false, error}});
 // A body given as bytes: parts are text (UTF-8) or lists of raw byte values.
@@ -504,6 +506,36 @@ export async function fixtures() {
   invalid['leaderboard-infinite'] = refused('traction=1e400: not finite.', 'leaderboard', `track=${KEY}&traction=1e400`, REASONS.leaderboardQuery);
   invalid['leaderboard-empty-number'] = refused('maxSpeed= (empty).', 'leaderboard', `track=${KEY}&maxSpeed=`, REASONS.leaderboardQuery);
 
+  // ─── crash maps (X4) ────────────────────────────────────────────────────
+  const CRASH_MAP = (() => { const m = new Float32Array(CRASH_DIM); m[10] = Math.log1p(5); m[20] = Math.log1p(2); const n = Math.hypot(...m); return m.map(x => x / n); })();
+  const LAYOUT = {geometry: 'g1a2b3c4d', survival: 0.75, gates: [[[1600, 300], [1600, 700]], [[2450, 900], [3100, 900]]]};
+  const crashesOf = (extra = {}) => ({protocol: PROTOCOL, token: TOKEN, track: encodeF32(track), map: encodeF32(CRASH_MAP), deaths: 12, ...extra});
+  const crashOk = (extra = {}) => ({ok: true, deaths: 12, collisions: 'off', layout: null, ...extra});
+  valid['crashes'] = {description: 'A crash map for a track (no brain format needed).', route: 'crashes', body: json(crashesOf()), expect: crashOk()};
+  valid['crashes-with-layout'] = {description: 'With the gate layout adaptive gates settled on, in a collision mode.', route: 'crashes',
+    body: json(crashesOf({collisions: 'SOLID/K08', layout: LAYOUT})), expect: crashOk({collisions: 'solid/k8', layout: {geometry: LAYOUT.geometry, survival: 0.75, gates: 2}})};
+  valid['crashes-mode-not-a-label'] = {description: 'A collision mode that is not a string: unknown.', route: 'crashes', body: json(crashesOf({collisions: 3})), expect: crashOk({collisions: 'unknown'})};
+  invalid['crashes-bad-token'] = refused('A short token.', 'crashes', json(crashesOf({token: 'abc'})), REASONS.token);
+  invalid['crashes-no-track'] = refused('No track.', 'crashes', json(crashesOf({track: null})), REASONS.track);
+  invalid['crashes-track-not-unit'] = refused('A track of length 2.', 'crashes', json(crashesOf({track: encodeF32(track.map(x => x * 2))})), REASONS.track);
+  invalid['crashes-negative-cell'] = refused('A cell below 0.', 'crashes', json(crashesOf({map: encodeF32(CRASH_MAP.map((x, i) => (i === 10 ? -x : x)))})), REASONS.crashMap);
+  invalid['crashes-map-not-unit'] = refused('A map of length 2.', 'crashes', json(crashesOf({map: encodeF32(CRASH_MAP.map(x => x * 2))})), REASONS.crashMap);
+  invalid['crashes-map-short'] = refused('100 cells.', 'crashes', json(crashesOf({map: encodeF32(CRASH_MAP.slice(0, 100))})), REASONS.crashMap);
+  invalid['crashes-two-deaths'] = refused('2 deaths (a map needs 3).', 'crashes', json(crashesOf({deaths: 2})), REASONS.crashMap);
+  invalid['crashes-track-before-map'] = refused('No track and no map: the track is checked first.', 'crashes', json(crashesOf({track: null, map: null})), REASONS.track);
+  invalid['crashes-layout-bad-walls'] = refused('Walls signed in capitals.', 'crashes', json(crashesOf({layout: {...LAYOUT, geometry: 'G1A'}})), REASONS.crashLayout);
+  invalid['crashes-layout-survival'] = refused('A survival of 1.5.', 'crashes', json(crashesOf({layout: {...LAYOUT, survival: 1.5}})), REASONS.crashLayout);
+  invalid['crashes-layout-65-gates'] = refused('65 gates.', 'crashes', json(crashesOf({layout: {...LAYOUT, gates: Array.from({length: 65}, () => LAYOUT.gates[0])}})), REASONS.crashLayout);
+  invalid['crashes-map-before-layout'] = refused('A bad map and a bad layout: the map is checked first.', 'crashes',
+    json(crashesOf({deaths: 2, layout: {...LAYOUT, survival: 2}})), REASONS.crashMap);
+  invalid['crashes-other-protocol'] = refused('Another protocol.', 'crashes', json(crashesOf({protocol: 2})), REASONS.protocol);
+  valid['crash-recall'] = {description: 'Everyone\'s crash map near a track.', route: 'crash-recall', body: json({protocol: PROTOCOL, track: encodeF32(track)}),
+    expect: {ok: true, collisions: 'off', geometry: null}};
+  valid['crash-recall-with-walls'] = {description: 'And the layouts shared for these walls, in a mode.', route: 'crash-recall',
+    body: json({protocol: PROTOCOL, track: encodeF32(track), collisions: 'solid/k8', geometry: 'g1a'}), expect: {ok: true, collisions: 'solid/k8', geometry: 'g1a'}};
+  invalid['crash-recall-bad-walls'] = refused('Walls that are not a signature.', 'crash-recall', json({protocol: PROTOCOL, track: encodeF32(track), geometry: 'nope'}), REASONS.crashLayout);
+  invalid['crash-recall-no-track'] = refused('No track.', 'crash-recall', json({protocol: PROTOCOL, geometry: 'g1'}), REASONS.track);
+
   // ─── answers ────────────────────────────────────────────────────────────
   const entry = async (v, i, extra = {}) => ({id: await id(v), vector: encodeF32(v), fitness: 10 - i, score: 1 - i / 100,
     meta: {generation: i, source: 'evolved', learning: {context: CONTEXT, styleScore: 0.5, driving: {averageSpeed: 0.5, smoothness: 0.5, crashed: false}}},
@@ -664,6 +696,16 @@ export async function fixtures() {
     json({protocol: PROTOCOL, track: KEY, maxSpeed: 15, traction: 0.5, entries: [...boardEntries, boardEntries[0]]}), REASONS.shape);
   invalid['leaderboard-response-no-lap'] = refused('An entry without a lap.', 'leaderboard-response',
     json({protocol: PROTOCOL, track: KEY, maxSpeed: 15, traction: 0.5, entries: [{...boardEntries[0], laps: 0}]}), REASONS.shape);
+  const crashAnswer = (extra = {}) => ({protocol: PROTOCOL, map: encodeF32(CRASH_MAP), contributors: 3, tracks: 2, layouts: [{gates: LAYOUT.gates, survival: 0.75}], ...extra});
+  valid['crash-recall-response'] = {description: 'Everyone\'s crash map, from 3 contributors on 2 tracks, and a layout.', route: 'crash-recall-response',
+    body: json(crashAnswer()), expect: {ok: true, map: true, contributors: 3, tracks: 2, survivals: [0.75]}};
+  valid['crash-recall-response-none'] = {description: 'Nobody crashed here yet.', route: 'crash-recall-response',
+    body: json(crashAnswer({map: null, contributors: 0, tracks: 0, layouts: []})), expect: {ok: true, map: false, contributors: 0, tracks: 0, survivals: []}};
+  invalid['crash-recall-response-bad-map'] = refused('A map of length 2.', 'crash-recall-response', json(crashAnswer({map: encodeF32(CRASH_MAP.map(x => x * 2))})), REASONS.shape);
+  invalid['crash-recall-response-5-layouts'] = refused('5 layouts (at most 4).', 'crash-recall-response',
+    json(crashAnswer({layouts: Array.from({length: 5}, () => ({gates: LAYOUT.gates, survival: 0.5}))})), REASONS.shape);
+  valid['crashes-response'] = {description: 'A crash map kept.', route: 'crashes-response', body: json({protocol: PROTOCOL, accepted: true}), expect: {ok: true, accepted: true}};
+  invalid['crashes-response-no-answer'] = refused('No accepted.', 'crashes-response', json({protocol: PROTOCOL}), REASONS.shape);
   valid['error-response-brain-unknown'] = {description: 'A verification of a brain the service does not hold (HTTP 400).', route: 'error-response',
     body: json({protocol: PROTOCOL, error: 'brain-unknown'}), expect: {ok: true, error: 'brain-unknown', status: 400}};
   invalid['stats-response-too-large'] = refused('A stats answer one byte over 256 KiB.', 'stats-response', answerSize(statsAnswer, LIMITS.responseBytes + 1), REASONS.bodyTooLarge);

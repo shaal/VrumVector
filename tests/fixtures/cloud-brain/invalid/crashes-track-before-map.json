@@ -1,0 +1,10 @@
+{
+ "description": "No track and no map: the track is checked first.",
+ "route": "crashes",
+ "body": "{\"protocol\":1,\"token\":\"0123456789abcdef0123456789abcdef\",\"track\":null,\"map\":null,\"deaths\":12}",
+ "expect": {
+  "ok": false,
+  "error": "track",
+  "status": 400
+ }
+}
