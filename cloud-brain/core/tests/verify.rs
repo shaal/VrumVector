@@ -6,7 +6,8 @@
 //! the service's run must give what the browser's own run gave.
 
 use serde_json::{json, Value};
-use vectorvroom_brain_core::brain::{contributor_id, Brain, Config, Limited, MemStore, Refusal, Usage, PRESET_TRACKS, QUOTA, VERIFIED_PER_BRAIN, VERIFY_PER_MINUTE, VERIFY_WORK_PER_FRAME};
+use vectorvroom_brain_core::brain::{contributor_id, Brain, Config, Limited, MemStore, Refusal, Usage, QUOTA, VERIFIED_PER_BRAIN, VERIFY_PER_MINUTE, VERIFY_WORK_PER_FRAME};
+use vectorvroom_brain_core::presets::presets;
 use vectorvroom_brain_core::wire::{self, encode_f32, geometry_digest, geometry_key, js_number, parse_board, parse_contribute, parse_recall, parse_verify, Reason};
 
 const T0: u64 = 1_790_000_000_000;
@@ -81,21 +82,21 @@ fn the_track_key_is_the_pages() {
 
 #[test]
 fn the_ten_presets_are_pinned_to_their_geometries_when_the_brain_opens() {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/cloud-brain-sim/presets.json");
-    let presets: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    let presets = presets.as_object().unwrap();
-    assert_eq!(presets.len(), PRESET_TRACKS.len());
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/presets.json");
+    let json: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let json = json.as_object().unwrap();
+    assert_eq!((json.len(), presets().len()), (10, 10));
     let probe = json!({"profile": "balanced", "track": "", "maxSpeed": 15, "traction": 0.5, "seconds": 20});
-    for (name, p) in presets {
+    for (name, p) in json {
         let g = parse_verify(&verify_body(OWNER, &[0.0; 244], p, &probe)).unwrap().geometry;
         let (key, digest) = (geometry_key(&g), geometry_digest(&g));
         // The page's key and the digest of the text it hashes (Node's).
         assert_eq!((key.as_str(), digest.as_str()), (p["key"].as_str().unwrap(), p["digest"].as_str().unwrap()), "{name}");
-        assert!(PRESET_TRACKS.contains(&(key.as_str(), digest.as_str())), "{name}");
+        assert!(presets().iter().any(|q| q.name == *name && q.key == key && q.digest == digest), "{name}");
     }
     let f = F::new(Config::default());
-    assert_eq!(f.store.pins.len(), PRESET_TRACKS.len());
-    assert!(PRESET_TRACKS.iter().all(|(k, d)| f.store.pins.get(*k).map(String::as_str) == Some(*d)));
+    assert_eq!(f.store.pins.len(), 10);
+    assert!(presets().iter().all(|p| f.store.pins.get(&p.key) == Some(&p.digest)));
 }
 
 #[test]

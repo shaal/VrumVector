@@ -22,9 +22,9 @@ export async function until(what, test, ms) {
 }
 
 /** Starts the Worker; `vars` become --var NAME:value. Returns {origin, stop, log}. */
-export async function startDev({port, persist, vars = {}, env = {}, settleMs = 3000}) {
+export async function startDev({port, persist, vars = {}, env = {}, settleMs = 3000, logLevel = 'warn'}) {
   await until(`port ${port} free`, async () => !(await listening(port)), 15_000);
-  const args = ['dev', '--port', String(port), '--ip', '127.0.0.1', '--persist-to', persist, '--log-level', 'warn'];
+  const args = ['dev', '--port', String(port), '--ip', '127.0.0.1', '--persist-to', persist, '--log-level', logLevel];
   for (const [name, value] of Object.entries(vars)) args.push('--var', `${name}:${value}`);
   const dev = spawn(wrangler, args, {cwd: dir, detached: true, env: {...process.env, ...env}, stdio: ['ignore', 'pipe', 'pipe']});
   let log = '';

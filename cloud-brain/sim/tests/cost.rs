@@ -78,3 +78,16 @@ fn how_long_the_costliest_verification_takes() {
         eprintln!("{name}, within the service's budget: stopped at frame {} after {:.0} ms", bounded.frames, started.elapsed().as_secs_f64() * 1e3);
     }
 }
+
+#[test]
+fn a_run_beats_another_by_fitness_then_by_its_first_lap_and_keeps_lap_times_as_car_js() {
+    let o = |fitness: f64, laps: &[u64]| vectorvroom_sim::Outcome { fitness, laps: laps.len() as u32, lap_frames: laps.to_vec(), crashed_at: None, frames: 1200, work: 0, over_budget: false };
+    assert!(o(7.0, &[]).beats(&o(6.0, &[998])));
+    assert!(o(6.0, &[900]).beats(&o(6.0, &[998])) && !o(6.0, &[998]).beats(&o(6.0, &[900])));
+    assert!(o(6.0, &[998]).beats(&o(6.0, &[])), "a lap before none");
+    assert!(!o(6.0, &[998]).beats(&o(6.0, &[998])));
+    // car.js: [round2(607/60)] = [10.12], then round2(1214/60 - 10.12) = 10.11.
+    assert_eq!(o(10.0, &[607, 1214]).fastest_lap(), Some(10.11));
+    assert_eq!(o(10.0, &[998]).fastest_lap(), Some(16.63));
+    assert_eq!(o(0.0, &[]).fastest_lap(), None);
+}

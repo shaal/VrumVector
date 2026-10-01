@@ -5,8 +5,9 @@
 // fixture over HTTP, answers read with the browser's own parsers, a
 // contribution coming back from a recall, feedback, stats, persistence
 // across a restart, quarantine of claims, forget, daily quotas, the token
-// never stored, the migration from SQL schema 1, and (X1) verified runs, the
-// leaderboard and what the costliest verification takes.
+// never stored, the migration from SQL schema 1, (X1) verified runs, the
+// leaderboard and what a costly track takes, and (X2) cloud training, on a
+// second Worker with it turned on.
 //
 //   npm run test:cloud-brain:service      (PORT=8881 by default)
 //
@@ -60,7 +61,7 @@ const context = {profile: 'balanced', track: 'service-test', maxSpeed: 15, tract
 test('health answers without an origin', async () => {
   const res = await call('/health', {origin: null});
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), {ok: true, protocol: 1, brain: true, limits: true,
+  assert.deepEqual(await res.json(), {ok: true, protocol: 1, brain: true, limits: true, training: false,
     build: {target: 'wasm32-unknown-emscripten', ruvector: '5356a84e2', spike: false}});
 });
 
@@ -388,6 +389,54 @@ test('a track made to be costly is stopped within its budget and refused', async
     assert.equal(res.status, 400);
     assert.deepEqual(wire.parseErrorResponse(await bytes(res)), {ok: true, error: 'track-geometry'});
     assert.ok(ms < 1000, `${ms} ms`);
+  }
+});
+
+test('while nobody plays, the service breeds a better brain on the busiest preset and serves it as its own', async () => {
+  // A second Worker, training on: a session every second (each up to
+  // 120 000 frames), right after the last contribution.
+  const store = await mkdtemp(path.join(os.tmpdir(), 'cloud-brain-train-'));
+  const trainer = await startDev({port: PORT + 1, persist: store, logLevel: 'log', vars: {ALLOW_LOCAL: 'true', TRAIN_FRAMES: '120000', TRAIN_EVERY_SECONDS: '1', TRAIN_IDLE_MINUTES: '0'}});
+  const at = (route, body) => fetch(trainer.origin + route, {method: body === undefined ? 'GET' : 'POST', body, signal: AbortSignal.timeout(30_000),
+    headers: {Origin: PAGE, 'Content-Type': 'text/plain', 'CF-Connecting-IP': nextAddress()}});
+  try {
+    assert.equal((await (await at('/health')).json()).training, true);
+    // The Rectangle brain the game's learning loop evolved (it laps: fitness
+    // 6), and the random ones, in its context.
+    const traces = JSON.parse(await readFile(new URL('./fixtures/cloud-brain-sim/traces.json', import.meta.url), 'utf8'));
+    const toVector = c => { const raw = Buffer.from(c.vector, 'base64'); return new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)); };
+    const rectangle = traces.cases.filter(c => c.track === 'Rectangle');
+    const evolved = rectangle.find(c => c.outcome.laps > 0 && c.settings.seconds === 20 && c.settings.profile === 'balanced');
+    const seeds = [evolved, ...rectangle.filter(c => c.brain.startsWith('random'))].map(toVector);
+    const ctx = {profile: 'balanced', track: traces.tracks.Rectangle.key, maxSpeed: 15, traction: 0.5, seconds: 20, collisions: 'off'};
+    const track = unit(DIMS.track, 91);
+    const ids = await Promise.all(seeds.map(v => brainId(v)));
+    assert.equal((await at('/v1/contribute', wire.contributeBody({token: TOKEN, tracks: [track],
+      brains: seeds.map(vector => wire.brainToWire({vector, fitness: 1, track: 0, meta: {generation: 3, learning: {context: ctx, styleScore: 0}}}))}))).status, 200);
+    // Sessions run on their own; a brain of the service's appears.
+    const started = performance.now();
+    let cloud = null;
+    while (!cloud && performance.now() - started < 150_000) {
+      await new Promise(r => setTimeout(r, 2000));
+      const pool = (await wire.parseRecallResponse(await bytes(await at('/v1/recall', wire.recallBody({trackVec: track, context: ctx, k: 64}))))).pool;
+      cloud = pool.find(p => p.meta.source === 'cloud') || null;
+    }
+    // A few more sessions, for their times (each logged with its report).
+    await new Promise(r => setTimeout(r, 4000));
+    const sessions = [...trainer.log().matchAll(/cloud brain: trained in (\d+) ms: (\{.*\})/g)].map(m => ({ms: Number(m[1]), ...JSON.parse(m[2])}));
+    console.log(`# a cloud brain after ${((performance.now() - started) / 1000).toFixed(0)} s: fitness ${cloud?.fitness}; ${sessions.length} sessions of ${sessions.map(s => s.frames).join('/')} frames in ${sessions.map(s => s.ms).join('/')} ms`);
+    assert.ok(sessions.length >= 1 && sessions.every(s => s.frames <= 120_000 && s.track === 'Rectangle'), JSON.stringify(sessions.slice(0, 2)));
+    assert.ok(cloud, 'a brain the service bred: ' + trainer.log().slice(-1500));
+    assert.ok(cloud.fitness >= evolved.outcome.fitness, `it drove at least as well as the best seed (${cloud.fitness})`);
+    assert.ok(!ids.includes(cloud.id) && ids.includes(cloud.meta.parentIds[0]), 'a new brain, bred from a seed');
+    assert.deepEqual(cloud.meta.learning.context.track, ctx.track);
+    // Anyone verifying it gets its fitness.
+    const v = wire.parseVerifyResponse(await bytes(await at('/v1/verify', wire.verifyBody({token: OTHER, vector: cloud.vector, track: {width: 3200, height: 1800,
+      inner: traces.tracks.Rectangle.inner, outer: traces.tracks.Rectangle.outer, checkpoints: traces.tracks.Rectangle.checkpoints}, context: ctx}))));
+    assert.equal(v.fitness, cloud.fitness);
+  } finally {
+    await trainer.stop();
+    await rm(store, {recursive: true, force: true});
   }
 });
 

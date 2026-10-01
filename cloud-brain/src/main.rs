@@ -13,7 +13,7 @@
 
 use brain::brain::{
     contributor_id, parse_slots, resolve_ids, slots_text, Brain, BrainRow, Config, FeedbackRow, Limited, Loaded, Page, Refusal, Result as StoreResult,
-    Slot, Store, StoreError, StoredBrain, TrackRow, Usage, VerifiedRow,
+    Slot, Store, StoreError, StoredBrain, TrackRow, Training, Usage, VerifiedRow,
 };
 use brain::wire::{self, error_body, Reason};
 use futures_util::StreamExt;
@@ -37,6 +37,8 @@ struct Health {
     /// Every per-address rate limiter is bound (CB4): without them the
     /// front door lets every request through (CB5's health check asks).
     limits: bool,
+    /// Cloud training is on (X2: TRAIN_FRAMES set).
+    training: bool,
     build: Build,
 }
 
@@ -300,6 +302,13 @@ pub struct SharedBrain {
     /// deploy by mistake still serves them to nobody.
     #[cfg_attr(not(feature = "spike"), allow(dead_code))]
     spike_enabled: bool,
+    /// Cloud training (X2): a session's budget and how often one runs (ms),
+    /// when TRAIN_FRAMES is set (off by default: its CPU is the plan's to
+    /// choose, D2).
+    training: Option<(Training, i64)>,
+    /// The training alarm is known to be set (checked once an instance; a
+    /// flag a panic cannot leave half-written).
+    alarm_checked: AssertUnwindSafe<std::cell::Cell<bool>>,
 }
 
 /// The SQL schema, one migration per version (`migrations` records which
@@ -383,13 +392,37 @@ impl DurableObject for SharedBrain {
         };
         let config = Config { quota, ..Config::default() };
         let limits = ["WRITE_LIMIT", "READ_LIMIT", "FORGET_LIMIT", "VERIFY_LIMIT"].iter().all(|name| env.rate_limiter(name).is_ok());
-        Self { state, init_error, disabled: flag(&env, "DISABLE_BRAIN"), limits, brain: AssertUnwindSafe(RefCell::new(None)), config, spike_enabled }
+        let frames = number(&env, "TRAIN_FRAMES", 0);
+        // At most ~1 s of CPU a session, and a session a week at least.
+        let frames = frames.min(TRAIN_FRAMES_MAX);
+        let training = (frames > 0).then(|| {
+            let t = Training { frames, idle_minutes: number(&env, "TRAIN_IDLE_MINUTES", 10).min(10_080) };
+            (t, number(&env, "TRAIN_EVERY_SECONDS", 1_800).clamp(1, 604_800) as i64 * 1_000)
+        });
+        Self {
+            state,
+            init_error,
+            disabled: flag(&env, "DISABLE_BRAIN"),
+            limits,
+            brain: AssertUnwindSafe(RefCell::new(None)),
+            config,
+            spike_enabled,
+            training,
+            alarm_checked: AssertUnwindSafe(std::cell::Cell::new(false)),
+        }
     }
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
         let url = req.url()?;
         if let (Method::Get, "/health") = (req.method(), url.path()) {
-            return Response::from_json(&Health { ok: self.init_error.is_none(), protocol: wire::PROTOCOL, brain: !self.disabled, limits: self.limits, build: build() });
+            return Response::from_json(&Health {
+                ok: self.init_error.is_none(),
+                protocol: wire::PROTOCOL,
+                brain: !self.disabled,
+                limits: self.limits,
+                training: self.training.is_some(),
+                build: build(),
+            });
         }
         #[cfg(feature = "spike")]
         if self.spike_enabled && url.path().starts_with("/spike/") {
@@ -413,6 +446,14 @@ impl DurableObject for SharedBrain {
         // The front door checks this too; the object never serves while off.
         if self.disabled {
             return error_response(Reason::Disabled);
+        }
+        // Cloud training's alarm, once an instance (an alarm set stays set).
+        if let Some((_, every)) = self.training.filter(|_| !self.alarm_checked.get()) {
+            let storage = self.state.storage();
+            if storage.get_alarm().await?.is_none() {
+                storage.set_alarm(every).await?;
+            }
+            self.alarm_checked.set(true);
         }
         // The only await: after it, the request runs to its answer alone.
         // (The front door has already cut the body at 64 KB.)
@@ -452,6 +493,49 @@ impl DurableObject for SharedBrain {
                 error_response(Reason::ServerError)
             }
         }
+    }
+
+    /// Cloud training (X2): a session, then the next alarm. Nothing while
+    /// paused or without a schema; a store error or a panic empties the
+    /// brain (the next request or session rebuilds it from SQLite), and the
+    /// schedule goes on.
+    async fn alarm(&self) -> Result<Response> {
+        let Some((t, every)) = self.training else { return Response::ok("") };
+        if !self.disabled && self.init_error.is_none() {
+            let started = now_ms();
+            match std::panic::catch_unwind(AssertUnwindSafe(|| self.train(t))) {
+                Ok(Ok(Some(report))) => console_log!("cloud brain: trained in {} ms: {}", now_ms() - started, serde_json::to_string(&report).unwrap_or_default()),
+                Ok(Ok(None)) => {}
+                Ok(Err(error)) => console_error!("cloud brain: training: {error}"),
+                Err(_) => console_error!("cloud brain: training panicked"),
+            }
+        }
+        self.state.storage().set_alarm(every).await?;
+        Response::ok("")
+    }
+}
+
+/// Frames a training session may drive at most (~1 s natively).
+const TRAIN_FRAMES_MAX: u64 = 1_200_000;
+
+impl SharedBrain {
+    /// One training session on the brain (built if it is not), or why not.
+    /// While someone is playing nothing runs, and a brain not in memory is
+    /// not built (a rebuild costs more than a session).
+    fn train(&self, t: Training) -> StoreResult<Option<brain::brain::TrainReport>> {
+        let now = now_ms() as u64;
+        let mut store = SqlStore(self.state.storage().sql());
+        if !Brain::idle(t, now, store.last_contribution()?) {
+            return Ok(None);
+        }
+        let mut brain = match self.brain.take() {
+            Some(brain) => brain,
+            None => Brain::open(self.config.clone(), &mut store, now)?,
+        };
+        // The session's random numbers come from the time.
+        let report = brain.train(t, now, now, &mut store)?;
+        self.brain.replace(Some(brain));
+        Ok(report)
     }
 }
 
@@ -868,6 +952,18 @@ impl Store for SqlStore {
     }
     fn pin(&mut self, track: &str, digest: &str, now: u64) -> StoreResult<()> {
         self.run("INSERT OR IGNORE INTO geometries (track, digest, created) VALUES (?, ?, ?)", vec![track.into(), digest.into(), (now as i64).into()])
+    }
+    fn last_contribution(&self) -> StoreResult<Option<u64>> {
+        let mut last = None;
+        self.each("SELECT MAX(minute) FROM contribution_minutes", vec![], |r| {
+            last = r.first().and_then(|v| match v {
+                SqlStorageValue::Integer(i) if *i >= 0 => Some(*i as u64),
+                SqlStorageValue::Float(x) if *x >= 0.0 => Some(*x as u64),
+                _ => None,
+            });
+            Ok(())
+        })?;
+        Ok(last)
     }
 }
 
