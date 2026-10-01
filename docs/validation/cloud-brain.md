@@ -550,7 +550,8 @@ browser follows the served fitness.
   corroborated brains are kept: an uncorroborated brain holds no place, as
   anyone can make a track of their own.
 - **Per-address limits** (the front door, before the body is read; the
-  Rate Limiting binding): 20 contributions, 60 recalls, stats and health
+  Rate Limiting binding): 20 contributions (24 with crash maps since X4),
+  60 recalls, stats and health
   checks, and 3 forgets a minute, per `CF-Connecting-IP` (an
   IPv6 address by its /64, which one host holds). A browser sends at most 6
   contributions a minute. The address is a key, never stored. Past a
@@ -568,7 +569,8 @@ browser follows the served fitness.
   the `contributors` table, which holds today's contributors only (older
   rows go as requests arrive).
 - **Forget.** `POST /v1/forget {protocol, token}` →
-  `{protocol, brains, feedback}`: every brain the token contributed goes,
+  `{protocol, brains, feedback, crashes}` (`crashes`: the token's crash
+  maps, X4): every brain the token contributed goes,
   with its feedback, and the token's slot is taken out of every record the
   store holds with its full id (a record left empty goes); the numbers are
   what went. Not limited by the quota (the address limit counts it) and not
@@ -976,3 +978,134 @@ race you: a ghost car driven in the page from its weights, next to yours.
 - No ghost while you edit the track or the physics (phase 3).
 - The 3D studio's placement of the ghost is not covered by a test (the
   browser test runs the flat view).
+
+## X4: everyone's crash map
+
+Where cars crash on a track, from everyone who trains there: shown under
+your cars, and the gate layouts other players measured, offered to your
+adaptive gates for a one-generation trial.
+
+### What it does
+
+- **What a page sends** (`POST /v1/crashes`). Each crash map the bridge
+  archives in shared mode (`archiveCrashMap`, once a generation: adaptive
+  gates' or the passive one's) waits in the session, the latest replacing
+  the one before, and goes at most once a minute with the flush (one
+  request at a time): the track's embedding, the map as crashMapCodec.js
+  makes it (16 × 9 cells over the canvas, log1p of the deaths in each,
+  length 1; car-contact deaths left out, car-collisions C4), its deaths (3
+  to a million), its collision mode, and the layout the generation drove
+  when it reads: the walls' signature (`AdaptiveGates.wallSignature`, the
+  walls alone, the same with adaptive gates on or off; adaptive gates' own
+  `geometrySignature` adds the baseline gate count for local memory), 1 to
+  64 gates on the canvas, the survival in [0, 1]. Gates the generation did
+  not drive (adaptive gates' next ones), and a generation whose gates
+  changed while it drove (a reset, adaptive gates turned on or off, a trial
+  ended), are archived `measured: false` and never sent. A refusal drops
+  the map and the next waits out the minute; a busy or offline service
+  keeps it and it goes when the service answers again (after the backoff);
+  a service from before X4 (404) stops crash maps for the page without
+  backing off its other requests.
+- **What the service keeps.** One row a contributor a track and collision
+  mode: their latest map and their best layout there for the walls (a
+  worse or missing one keeps it; one for other walls replaces it). At most
+  16 contributors a mode (the least recently sent goes) and 4 modes a track
+  (a new mode pushes out the mode with the fewest contributors, then the
+  least recently sent to, all its rows: one token's made-up labels push out
+  each other, not the players'); the track is kept as a contribution's
+  (when the store is full, a track no brain uses makes room, and its rows
+  go with it), so the track cap bounds the table whatever labels arrive.
+  Each send counts a request on the token's quota and the address's write
+  limit (now 24 a minute: 3 browsers' contributions and crash maps). Forget
+  deletes the token's rows and counts them (`crashes`). SQL schema 4
+  (`crash_maps`).
+- **What comes back** (`POST /v1/crashes/recall`, with each pull: a new
+  track or context, and every 5 generations). The maps on the nearest
+  tracks (the 5 nearest, at least 0.9 alike by their embeddings) in the
+  page's collision mode, one a contributor (from the nearest track they
+  sent one on: gate variants of a track count once), weighed by how alike
+  its track is, summed and scaled to length 1, with how many contributors
+  and tracks they are from; and the 4 best layouts among those rows for the
+  page's walls (each contributor's best; ties by contributor). No map, no
+  layouts. A map is never stored by the page; the replica's own crash maps
+  stay its own. Other walls or another mode drop the map shown, even when
+  the next recall fails, and an answer for walls the page has left is not
+  shown.
+- **The overlay.** The Memory panel's toggle, "Show where everyone crashes
+  here (3 players)" (`aria-pressed`, the same label shown or not), draws
+  everyone's map under the cars on the flat view (cloud/crashOverlay.js):
+  a red cell for each cell with crashes, the busiest at half opacity.
+- **Shared layouts for adaptive gates.** The bridge keeps the recalled map
+  and layouts (`acceptSharedCrash`); `recommendCrashLayouts` offers each
+  shared layout next to the local hits, as alike as this generation's crash
+  map is to everyone's. Adaptive gates take one under the local rules (the
+  same walls, by their signature, and collision mode, similar enough, 0.55,
+  a survival 0.03 above this generation's) and more: gates this page could
+  have made (2 to the adaptive maximum, every end on the canvas), each
+  layout once a track, not within 10 generations of one that failed, and
+  none after 3 failures on the track (all three remembered per walls for
+  this page load: a preset reload or a multiplayer visit keeps them, a page
+  reload starts over). It is then on trial for a generation,
+  not saved nor remembered (that generation's map is archived with the
+  gates it drove): kept, saved as the page's gates, when survival rose by 3
+  points (counted in whole cars); else the gates go back, that generation
+  is not archived, and the layout is never taken again on the track in this
+  page load, not even from the page's own archive. The trial also ends with
+  the page's gates back when adaptive gates are turned off, Solid cars is
+  switched, the collision mode changes, or the phase changes (Back,
+  Customize Track: before phase 3 saves the track). Joining another
+  multiplayer driver during a trial comes back to the page's own gates
+  (`pageGates`), and the lap clock starts a lap over when the gates change
+  under it to fewer than it had reached. A generation counts as driving
+  the gates in place from when it begins with them (main.js
+  `performBegin`).
+- **Disclosure and consent.** What shared mode sends now says: at most once
+  a minute, the coarse crash map with the number of crashes and the Solid
+  cars setting, the checkpoints driven through, the survival and a
+  fingerprint of the walls; and that adaptive gates may try checkpoints
+  others shared for the same walls for one generation, kept only when more
+  cars survive. A yes is saved as the version of that text
+  (`CONSENT_VERSION` 2): a yes to the text before crash maps is asked again
+  before anything more is sent, saying that what is sent has changed.
+
+### Evidence
+
+| Claim | Test |
+|---|---|
+| The service | `cargo test` (`core/tests/crashes.rs`, 8 tests): two contributors on a track and one on a near track (0.98 alike) come back as one map weighed by likeness, not a far track's nor another mode's; a contributor's latest replaces theirs; tracks 0.912 and 0.9005 alike are in the neighbourhood, 0.887 and 0.8995 are not; a contributor on two tracks votes once, with the nearest one's map; a track with maps in another mode only is not counted; none where nobody crashed; a rebuild serves the same; 16 contributors a mode, the least recent gone; 4 modes a track: one token's 5 made-up modes push out each other (the least recently sent to among the smallest), never the players' 3 and 2, a contributor already held never pushes a mode out, and the smallest goes even when sent to most recently; the rows go with an evicted track; layouts are each contributor's best (a worse or missing one keeps it, an equal one replaces it, one for other walls replaces it), from the neighbourhood, the best 4 first, by walls and mode, ties by contributor across tracks and the same after a rebuild, a contributor's equal layouts on two tracks give the nearest one's; forget counts and takes a token's rows; a send counts on the quota; hostile maps, deaths, layouts and recalls refused with their reasons (`crash-map`, `crash-layout`). Targeted mutants (the 0.9 line moved to 0.899 or 0.901 or flipped, the tie-break dropped, `>` to `>=` across tracks, keep-best across walls, eviction by recency alone) all fail it |
+| The wire | the fixtures for `crashes`, `crash-recall` and their answers (74 valid, 165 invalid in all), read the same by the Rust and JavaScript parsers |
+| The Worker | `npm run test:cloud-brain:service` (20 tests): every fixture over HTTP, these too, and the forget answer's 4 fields; two players' maps near a track come back as one with the best layouts first; a later map with no layout or a worse one keeps the layout (read back from SQL whole); another mode's none; forget takes and counts a player's; a map that is not one refused; a Worker keeping 2 tracks (`MAX_TRACKS`) drops the oldest track's crash maps with it (none left in SQL without a track); 23 contributions and a crash map from one address in a minute pass, the 25th write is refused; the migration to schema 4 |
+| Adaptive gates | `npm run test:crash-maps` (12 X4 tests, on a page whose bridge recalls what it archived): the walls' signature is the same with adaptive gates on or off, a layout under the baseline signature is not for these walls, archives carry both; a shared layout is applied on trial, not saved, not remembered, the generation archived with the gates it drove; no rise puts the gates back (the trial generation not archived), shared layouts then wait 10 generations (not 9, not 11) while a local one still applies, a tried layout never comes back, the same walls again (a track change) keep what was tried and failed while the wait starts over, other walls have their own; a layout that failed is never taken again, even when the page's archive offers it and survival falls; 0.25 to 0.28, 0.26 to 0.29 and 0.38 to 0.41 are kept, 0.25 to 0.27 and 0.26 to 0.28 are not (100 cars); a kept one is saved first and archived as the page's own; after 3 failures no shared layout is tried; 8 gates (more than 5 + 2), an end off the canvas or NaN, one gate, a one-ended gate are never tried, 7 gates with ends on the canvas's edge are; adaptive gates' next gates are archived as not measured; turning adaptive gates off, a Solid cars switch (also outside training), `endTrial`, another collision mode end a trial with the page's gates back and saved; a reset ends it; a reset or a trial ended mid-generation makes that generation's map not measured, with adaptive gates on or off (`gatesChangedLastGen`), and the next one measured; Back and Customize Track (buttonResponse.js, in the same page) end a trial before phase 3 saves the track's gates; a generation begun with the gates in place (`onGatesSent`) is measured; during a trial `pageGates` gives the page's own gates, after it none; a shared layout claiming 0.29 is chosen at 0.26 (in whole cars, as it would be kept). The named JS mutants (20) fail it or the client tests, but one that is equivalent and the bridge's `measured` check, which stage 7 asserts |
+| Multiplayer | `npm run test:multiplayer` (25 tests): joining a driver while a shared layout is on trial comes back to the page's own gates, and right after a trial to the live gates, not the last tick's; a lap clock at gate 3 given 2 gates starts the lap over instead of throwing |
+| The browser | `npm run test:cloud-brain` (wire 10, client 31 tests): a crash map goes on the wire as made, its layout only when it reads (under the walls' signature, not adaptive gates'; survival 0 and 1 in, 1.01 and -0.01 out, 64 gates in, 65 out); the latest waits and goes at most once a minute, also after a refusal; two ticks at once send once; each pull brings everyone's map and the layouts for the walls and mode to the bridge; another mode, or other walls, with the network gone drop the map shown; an answer for walls left is not shown; a refusal drops it, a busy service keeps it; a crash recall ends a read backoff; a service from before X4 stops crash maps (from a send or a recall) without backoff and is not asked again; a yes to the text before X4 is asked again (`consentedBefore`: with the text saying what is sent changed), the version kept across switches; the overlay's cells and its toggle's label. `npm run test:cloud-brain:browser` stage 7, on the real service, in Chromium and WebKit: A's training sends its own crash maps; an unmeasured layout A archives is not queued; a map A archives through the bridge (cells 40 and 41, a layout of 4 gates under the walls' signature) is sent; B pulls it back: everyone's map (cell 40), the layout among B's adaptive-gates candidates (its walls' signature, as alike as B's map is to everyone's), the toggle "Show where everyone crashes here (N players)", the overlay drawn under the cars, then hidden |
+| Fuzzing | `cargo +nightly fuzz run`, 5 minutes each on the final code: `wire` 1 852 693 inputs (`parse_crashes`, `parse_crash_recall`: an accepted map is 144 non-negative numbers of length 1, deaths 3 to a million, a layout of 1 to 64 gates for a signature), `brain` 34 866 operation sequences (crash maps from 5 tokens on 6 tracks in 6 collision modes, with layouts for 3 walls; recalls; forget; contributions, verifications, training; reopen), no failure: after every step one row a contributor a track and mode, at most 16 a mode and 4 modes a track, rows only on held tracks, none of a forgotten token; recalls give a map of length 1 or none with contributors, at most 4 layouts the best first, the same answers after a rebuild |
+
+### Limits
+
+- One vote a contributor, but tokens are free: 16 fresh tokens can crowd
+  honest players out of a track and mode's map (they come back within a
+  minute of play), more tokens than a mode's players can push the mode out,
+  and a few can paint crashes where there are none or offer a layout
+  claiming a high survival. A shared layout costs a player at most one
+  generation, is never tried again on the track after it fails, and after
+  3 failures a track tries none, each page load (a reload starts over: up
+  to 3 generations a load); the overlay is only a picture
+  (docs/plan/cloud-brain.md, Risks).
+- The track's gates are the page's in both memory modes (scope.js scopes
+  the brain's state, not the track): a shared layout kept after its trial
+  is the gates local mode starts from too, as adaptive gates' own changes
+  always were.
+- A crash map creates its track as a contribution does (`/v1/contribute`
+  can already make tracks no brain uses), so it adds no new way to churn
+  tracks.
+- A trial is one generation: survival is noisy, so a good layout can be
+  undone and a lucky one kept (then adapted from as the page's own).
+- A layout lasts as long as its contributor's row: 16 players more recent
+  than them on the track and mode push it out, however good it was (a
+  player who kept it after a trial shares it again, measured).
+- The neighbourhood is by track embedding: two tracks that look alike to
+  the CNN share their maps (0.9 alike or more).
+- The overlay is drawn on the flat view only (not the tilted view or the
+  3D studio).
+- Layouts apply only on the same walls (the walls' exact signature): in
+  practice, the presets.

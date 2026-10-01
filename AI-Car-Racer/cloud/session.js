@@ -16,12 +16,17 @@
 //   leaderboard for the track and physics is read every minute and after a
 //   verification;
 // - the champion (X3): the fastest verified brain the last pull brought, or
-//   the pool's best, can race you as a ghost (cloud/ghost.js).
-import {brainToWire, feedbackToWire, brainId, encodeF32, trackGeometry, boardQuery, parseBoard, DIMS, LIMITS} from './wire.js';
+//   the pool's best, can race you as a ghost (cloud/ghost.js);
+// - crash maps (X4): where this page's cars crash (and the gate layout
+//   adaptive gates settled on) goes to everyone's crash map, at most one a
+//   minute; with each pull, everyone's map for this track and the layouts
+//   shared for its walls come back (an overlay; adaptive gates' candidates).
+import {brainToWire, feedbackToWire, brainId, encodeF32, trackGeometry, boardQuery, parseBoard, isGeometrySig, isUnit, CRASH_DIM, DIMS, LIMITS} from './wire.js';
 import {CloudBrainClient, contributorToken} from './client.js';
-import {saveBrainMode, consented} from './mode.js';
-import {mountMemoryControl, ARRIVAL_DISCLOSURE} from './ui.js';
+import {saveBrainMode, consented, consentedBefore} from './mode.js';
+import {mountMemoryControl, ARRIVAL_DISCLOSURE, CHANGED_DISCLOSURE} from './ui.js';
 import {Ghost, chooseChampion} from './ghost.js';
+import {CrashOverlay} from './crashOverlay.js';
 import {geometryKey} from '../graphics/state.js';
 
 export const FLUSH_MS = 10_000;
@@ -35,6 +40,30 @@ export const VERIFY_QUEUE = 4;
 export const VERIFY_TRIES = 3;
 /** The leaderboard is read again after this long (and after a verification). */
 export const BOARD_MS = 60_000;
+/** A crash map is sent at most this often (the latest waits; X4). */
+export const CRASH_SEND_MS = 60_000;
+
+/**
+ * A crash map the bridge archived ({map, meta}), as POST /v1/crashes takes
+ * it on this track (`trackVec`), or null: the map as made (144 non-negative
+ * numbers of length 1), its deaths, its collision mode, and the layout it
+ * was measured with when it reads (the walls' signature `meta.walls`, the
+ * same with adaptive gates on or off; gates; survival).
+ */
+export function crashToWire({map, meta = {}}, trackVec) {
+  const track = unit(trackVec);
+  if (!track || track.length !== DIMS.track || !(map instanceof Float32Array) || map.length !== CRASH_DIM) return null;
+  if (!map.every(x => Number.isFinite(x) && x >= 0) || !isUnit(map)) return null;
+  const deaths = Math.round(Number(meta.nDeaths));
+  if (!(deaths >= LIMITS.crashDeaths[0] && deaths <= LIMITS.crashDeaths[1])) return null;
+  let layout = null;
+  const cps = meta.cps, survival = Number(meta.survival);
+  if (Array.isArray(cps) && cps.length >= 1 && cps.length <= LIMITS.gates && isGeometrySig(meta.walls) && survival >= 0 && survival <= 1) {
+    const gates = cps.map(g => (Array.isArray(g) && g.length === 2 ? g.map(p => [p?.x, p?.y]) : null));
+    if (gates.every(g => g && g.flat().every(v => Number.isFinite(v) && Math.abs(v) <= LIMITS.coordinate))) layout = {geometry: meta.walls, survival, gates};
+  }
+  return {track, map, deaths, collisions: typeof meta.collisions === 'string' ? meta.collisions : 'off', layout};
+}
 
 /** The key the service gives a verification's track (wire.rs geometry_key). */
 export function trackKeyOf(track) {
@@ -114,12 +143,20 @@ export class SharedSession {
     this.pool = []; // the last pull's entries (X3: the champion is among them)
     this.champion = null;
     this.onChampion = null; // (champion or null) when it changes
+    this.crash = null; // the latest crash map waiting to be sent (X4)
+    this.crashSentAt = -Infinity;
+    this.crashSending = false;
+    this.crashesSent = 0;
+    this.sharedCrash = null; // everyone's crash map for this track and its layouts
+    this.sharedCrashAbout = null; // the walls and collision mode it is for
+    this.onCrashMap = null; // (shared or null) when it is read
   }
 
   start() {
     this.bridge.setCloudHooks({
       onArchive: entry => this.#track(this.pushBrain(entry)),
       onFeedback: rows => this.#track(this.pushFeedback(rows)),
+      onCrash: crash => this.queueCrash(crash),
     });
     if (this.every) {
       this.timers.push(this.every(() => this.#track(this.tick()), FLUSH_MS));
@@ -137,10 +174,72 @@ export class SharedSession {
     this.refreshBoard();
     return this.maybePull();
   }
-  /** Every FLUSH_MS: what waits is sent, then a brain that drove a lap is verified. */
+  /** Every FLUSH_MS: what waits is sent, then a brain that drove a lap is verified, then a crash map. */
   async tick() {
     await this.client.flush();
-    return this.verifyNext();
+    const verified = await this.verifyNext();
+    await this.sendCrash();
+    return verified;
+  }
+
+  /** A crash map the bridge archived: it waits, the latest replacing the one before (X4). */
+  queueCrash(crash) {
+    let trackVec = null;
+    try { trackVec = this.page.trackVec(); } catch { /* no track */ }
+    const wire = crashToWire(crash || {}, trackVec);
+    if (wire) this.crash = wire;
+    return !!wire;
+  }
+
+  /** The waiting crash map, at most one every CRASH_SEND_MS (one request at a time). */
+  async sendCrash() {
+    if (this.crashSending || !this.crash || this.client.now() - this.crashSentAt < CRASH_SEND_MS) return false;
+    const crash = this.crash;
+    this.crashSending = true;
+    try {
+      const sent = await this.client.sendCrash(crash);
+      if (sent) this.crashesSent++;
+      if (sent || this.client.canTry('send')) {
+        // Sent, or refused for good: it no longer waits.
+        if (this.crash === crash) this.crash = null;
+        this.crashSentAt = this.client.now();
+      }
+      return sent;
+    } finally {
+      this.crashSending = false;
+    }
+  }
+
+  #geometrySig() {
+    try {
+      const g = this.page.geometrySig?.();
+      return isGeometrySig(g) ? g : null;
+    } catch { return null; }
+  }
+
+  /** Everyone's crash map, once these are not the walls and mode it is for, goes (X4). */
+  #crashesFor(geometry, collisions) {
+    const about = (geometry || '') + '|' + collisions;
+    if (about === this.sharedCrashAbout) return;
+    this.sharedCrashAbout = about;
+    if (!this.sharedCrash) return;
+    this.sharedCrash = null;
+    try { this.bridge.acceptSharedCrash?.(null); } catch (e) { console.warn('[cloud-brain]', e); }
+    try { this.onCrashMap?.(null); } catch { /* the UI's problem */ }
+  }
+
+  /** Everyone's crash map for this track and the layouts for its walls (after a pull). */
+  async pullCrashes(trackVec, context) {
+    const geometry = this.#geometrySig();
+    const collisions = context?.collisions || 'off';
+    this.#crashesFor(geometry, collisions);
+    const shared = await this.client.recallCrashes({track: unit(trackVec), collisions, geometry});
+    // Another track or mode came while it was asked for: not this one's.
+    if (!shared || this.sharedCrashAbout !== (geometry || '') + '|' + collisions) return null;
+    this.sharedCrash = shared;
+    try { this.bridge.acceptSharedCrash?.(shared, {geometry, collisions}); } catch (e) { console.warn('[cloud-brain]', e); }
+    try { this.onCrashMap?.(shared); } catch { /* the UI's problem */ }
+    return shared;
   }
   stop() {
     this.stopped = true;
@@ -297,11 +396,13 @@ export class SharedSession {
     // The coach's count restarts with a new context: a smaller count is due too.
     const due = generation !== null && this.pulledGeneration !== null && (generation < this.pulledGeneration || generation - this.pulledGeneration >= PULL_EVERY);
     if (!force && key === this.pulledTrack && !due) return Promise.resolve(0);
-    // Another track or context: the last pool's champion is not this one's.
+    // Another track or context: the last pool's champion is not this one's,
+    // nor (other walls or mode) everyone's crash map.
     if (key !== this.pulledTrack && this.pool.length) {
       this.pool = [];
       this.#pickChampion();
     }
+    if (key !== this.pulledTrack) this.#crashesFor(this.#geometrySig(), context.collisions || 'off');
     this.pulling = (async () => {
       const track = unit(trackVec);
       const pool = await this.client.recall({trackVec: track, dynamicsVec: unit(this.page.dynamicsVec()), context, k: LIMITS.recallDefaultK});
@@ -311,6 +412,7 @@ export class SharedSession {
       this.pulls++;
       this.pool = pool;
       this.#pickChampion();
+      this.#track(this.pullCrashes(trackVec, context));
       const added = this.bridge.acceptCloudPool(pool, trackVec, context);
       this.accepted += added;
       return added;
@@ -351,9 +453,10 @@ export async function startCloudBrain(bridge, {win = globalThis.window, ask = te
   });
   if (mode !== 'shared') return null;
   if (!available) { ui.setStatus({state: 'unavailable', secure}); return null; }
-  // Arrived by a ?brain=shared link: ask before anything is sent.
+  // Arrived by a ?brain=shared link, or what is sent changed since the
+  // player's yes: ask before anything is sent.
   if (!consented()) {
-    if (!ask(ARRIVAL_DISCLOSURE)) { saveBrainMode('local'); reload(); return null; }
+    if (!ask(consentedBefore() ? CHANGED_DISCLOSURE : ARRIVAL_DISCLOSURE)) { saveBrainMode('local'); reload(); return null; }
     saveBrainMode('shared', {consent: true});
   }
   const client = new CloudBrainClient({endpoint: config.endpoint, token: contributorToken(), onStatus: status => ui.setStatus(status)});
@@ -374,6 +477,8 @@ export async function startCloudBrain(bridge, {win = globalThis.window, ask = te
       // The walls and gates the cars learn on (X1): main.js's `road`, a
       // top-level const of a classic script.
       geometry: () => pageGeometry(),
+      // The walls' signature (X4: shared layouts are for these walls).
+      geometrySig: () => win?.AdaptiveGates?.wallSignature?.() || null,
     },
   });
   session.onBoard = (board, about) => ui.setBoard(board, about);
@@ -389,7 +494,12 @@ export async function startCloudBrain(bridge, {win = globalThis.window, ask = te
   const showChampion = () => ui.setChampion(session.champion, {wanted: ghost.wanted});
   session.onChampion = champion => { ghost.setChampion(champion); showChampion(); };
   ui.onRace = () => { ghost.enable(!ghost.wanted); showChampion(); };
-  if (win) { win.__rvCloud = session; win.CloudGhost = ghost; }
+  // Everyone's crash map (X4): main.js draws window.SharedCrashOverlay.
+  const overlay = new CrashOverlay();
+  const showCrashes = () => ui.setCrashMap(session.sharedCrash, {shown: overlay.shown});
+  session.onCrashMap = shared => { overlay.set(shared?.map || null); showCrashes(); };
+  ui.onCrashToggle = () => { overlay.show(!overlay.shown); showCrashes(); };
+  if (win) { win.__rvCloud = session; win.CloudGhost = ghost; win.SharedCrashOverlay = overlay; }
   // (Unsent brains survive a reload in the outbox: nothing is sent on the way out.)
   session.start();
   return session;

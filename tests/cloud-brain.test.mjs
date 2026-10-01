@@ -56,6 +56,7 @@ const post = (route, body) => call(route, {method: 'POST', body});
 
 const sine = (n, seed, scale = 1) => Float32Array.from({length: n}, (_, i) => Math.sin(i * 0.37 + seed) * scale);
 const unit = (n, seed) => { const v = sine(n, seed); const norm = Math.hypot(...v); return v.map(x => x / norm); };
+const unit2 = v => { const norm = Math.hypot(...v); return v.map(x => x / norm); };
 const context = {profile: 'balanced', track: 'service-test', maxSpeed: 15, traction: 0.5, seconds: 20, collisions: 'off'};
 
 test('health answers without an origin', async () => {
@@ -120,10 +121,11 @@ test('every CB1 request fixture gets the answer the wire format says', async () 
   for (const kind of ['valid', 'invalid']) {
     for (const file of (await readdir(new URL(kind + '/', root))).sort()) {
       const fixture = JSON.parse(await readFile(new URL(`${kind}/${file}`, root), 'utf8'));
-      if (!['contribute', 'recall', 'forget', 'verify', 'leaderboard'].includes(fixture.route)) continue;
+      if (!['contribute', 'recall', 'forget', 'verify', 'leaderboard', 'crashes', 'crash-recall'].includes(fixture.route)) continue;
       const body = 'bodyBase64' in fixture ? Buffer.from(fixture.bodyBase64, 'base64') : fixture.body;
       // A leaderboard fixture's body is its query string.
-      const res = fixture.route === 'leaderboard' ? await call('/v1/leaderboard?' + body) : await post('/v1/' + fixture.route, body);
+      const res = fixture.route === 'leaderboard' ? await call('/v1/leaderboard?' + body)
+        : await post(fixture.route === 'crash-recall' ? '/v1/crashes/recall' : '/v1/' + fixture.route, body);
       const answer = await bytes(res), where = `${kind}/${file}`, expect = fixture.expect;
       checked++;
       if (fixture.route === 'verify' && expect.ok) {
@@ -144,8 +146,16 @@ test('every CB1 request fixture gets the answer the wire format says', async () 
       }
       if (fixture.route === 'forget') {
         const forgot = JSON.parse(new TextDecoder().decode(answer));
-        assert.deepEqual(Object.keys(forgot).sort(), ['brains', 'feedback', 'protocol'], where);
-        assert.ok(forgot.protocol === 1 && Number.isInteger(forgot.brains) && Number.isInteger(forgot.feedback), where);
+        assert.deepEqual(Object.keys(forgot).sort(), ['brains', 'crashes', 'feedback', 'protocol'], where);
+        assert.ok(forgot.protocol === 1 && [forgot.brains, forgot.feedback, forgot.crashes].every(Number.isInteger), where);
+        continue;
+      }
+      if (fixture.route === 'crashes') {
+        assert.deepEqual(wire.parseCrashesResponse(answer), {ok: true, accepted: true}, where);
+        continue;
+      }
+      if (fixture.route === 'crash-recall') {
+        assert.equal(wire.parseCrashRecallResponse(answer).ok, true, where);
         continue;
       }
       if (fixture.route === 'recall') {
@@ -167,7 +177,7 @@ test('every CB1 request fixture gets the answer the wire format says', async () 
       assert.equal(r.feedbackAccepted + unknown.length, expect.feedbackAccepted, where);
     }
   }
-  assert.ok(checked >= 140, `${checked} fixtures`);
+  assert.ok(checked >= 160, `${checked} fixtures`);
 });
 
 // The brains this file contributes, on a track no fixture uses.
@@ -265,10 +275,10 @@ test('forget deletes a contributor\'s brains and takes their feedback out', asyn
   const res = await post('/v1/forget', wire.forgetBody({token: LEAVER}));
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('access-control-allow-origin'), PAGE);
-  assert.deepEqual(await res.json(), {protocol: 1, brains: 1, feedback: 1});
+  assert.deepEqual(await res.json(), {protocol: 1, brains: 1, feedback: 1, crashes: 0});
   assert.ok(!(await pool(track)).some(p => p.id === id), 'the brain is gone');
   assert.deepEqual((await pool(TRACK)).find(p => p.id === theirs).feedback, {weight: 0, count: 0, contributors: 0}, 'and the feedback');
-  assert.deepEqual(await (await post('/v1/forget', wire.forgetBody({token: LEAVER}))).json(), {protocol: 1, brains: 0, feedback: 0});
+  assert.deepEqual(await (await post('/v1/forget', wire.forgetBody({token: LEAVER}))).json(), {protocol: 1, brains: 0, feedback: 0, crashes: 0});
 });
 
 test('an address past its limits gets 429 rate-limited, with CORS and Retry-After', async () => {
@@ -278,9 +288,13 @@ test('an address past its limits gets 429 rate-limited, with CORS and Retry-Afte
   const address = '192.0.2.7';
   const write = body => call('/v1/contribute', {method: 'POST', body, address});
   const statuses = [];
-  for (let i = 0; i < 20; i++) statuses.push((await write(wire.contributeBody({token: TOKEN}))).status);
-  assert.deepEqual(statuses, Array(20).fill(200));
-  // The 21st write in the minute is refused before it reaches the object.
+  for (let i = 0; i < 23; i++) statuses.push((await write(wire.contributeBody({token: TOKEN}))).status);
+  // A crash map is a write too (X4): 3 browsers' 6 contributions and 1 crash map a minute fit.
+  const map = new Float32Array(wire.CRASH_DIM);
+  map[3] = 1;
+  statuses.push((await call('/v1/crashes', {method: 'POST', body: wire.crashesBody({token: TOKEN, track: unit(DIMS.track, 81), map, deaths: 4}), address})).status);
+  assert.deepEqual(statuses, Array(24).fill(200));
+  // The 25th write in the minute is refused before it reaches the object.
   const res = await write(wire.contributeBody({token: TOKEN}));
   assert.equal(res.status, 429);
   assert.equal(res.headers.get('retry-after'), '60');
@@ -301,8 +315,8 @@ test('an address past its limits gets 429 rate-limited, with CORS and Retry-Afte
   assert.equal((await call('/v1/contribute', {method: 'POST', body: wire.contributeBody({token: TOKEN})})).status, 200);
   // IPv6 is counted by its /64: one host cannot rotate past the limit.
   const v6 = [];
-  for (let i = 1; i <= 21; i++) v6.push((await call('/v1/contribute', {method: 'POST', body: wire.contributeBody({token: TOKEN}), address: `2001:db8:7:9::${i.toString(16)}`})).status);
-  assert.deepEqual(v6, [...Array(20).fill(200), 429]);
+  for (let i = 1; i <= 25; i++) v6.push((await call('/v1/contribute', {method: 'POST', body: wire.contributeBody({token: TOKEN}), address: `2001:db8:7:9::${i.toString(16)}`})).status);
+  assert.deepEqual(v6, [...Array(24).fill(200), 429]);
   assert.equal((await call('/v1/contribute', {method: 'POST', body: wire.contributeBody({token: TOKEN}), address: '2001:db8:7:a::1'})).status, 200, 'another /64');
 });
 
@@ -440,6 +454,72 @@ test('while nobody plays, the service breeds a better brain on the busiest prese
   }
 });
 
+test('everyone\'s crash map: two players\' maps near a track come back as one, with the best layouts, and forget takes a player\'s out', async () => {
+  // A near track (cosine ~0.96: its own track, within the neighbourhood).
+  const track = unit(DIMS.track, 61), other = unit(DIMS.track, 62), near = unit2(track.map((x, i) => x + 0.3 * other[i]));
+  const mapOf = cells => { const m = new Float32Array(wire.CRASH_DIM); for (const [i, n] of cells) m[i] = Math.log1p(n); const s = Math.hypot(...m); return m.map(x => x / s); };
+  const send = (token, t, cells, layout = null) => post('/v1/crashes', wire.crashesBody({token, track: t, map: mapOf(cells), deaths: 9, layout}));
+  const layout = (survival, x) => ({geometry: 'g1a2b', survival, gates: [[[x, 300], [x, 700]], [[2000, 300], [2000, 700]]]});
+  const A = '1a'.repeat(16), B = '1b'.repeat(16);
+  assert.equal((await send(A, track, [[10, 5]], layout(0.6, 1000))).status, 200);
+  assert.equal((await send(B, near, [[20, 5]], layout(0.8, 1100))).status, 200);
+  const recall = async () => wire.parseCrashRecallResponse(await bytes(await post('/v1/crashes/recall', wire.crashRecallBody({track, geometry: 'g1a2b'}))));
+  let r = await recall();
+  assert.deepEqual([r.ok, r.contributors, r.tracks], [true, 2, 2]);
+  assert.ok(r.map[10] > 0 && r.map[20] > 0 && r.map[30] === 0, 'both players\' crashes');
+  assert.deepEqual(r.layouts.map(l => [l.survival, l.gates[0][0][0]]), [[0.8, 1100], [0.6, 1000]]);
+  // Another collision mode: none of these.
+  const solid = wire.parseCrashRecallResponse(await bytes(await post('/v1/crashes/recall', wire.crashRecallBody({track, collisions: 'solid/k8', geometry: 'g1a2b'}))));
+  assert.deepEqual([solid.map, solid.contributors, solid.layouts], [null, 0, []]);
+  // A's next map, with no layout or a worse one, keeps their layout (read back from SQL whole).
+  assert.equal((await send(A, track, [[12, 5]])).status, 200);
+  assert.equal((await send(A, track, [[12, 5]], layout(0.3, 900))).status, 200);
+  r = await recall();
+  assert.deepEqual(r.layouts.map(l => [l.survival, l.gates]), [[0.8, layout(0.8, 1100).gates], [0.6, layout(0.6, 1000).gates]]);
+  assert.ok(r.map[12] > 0 && r.map[10] === 0, 'their latest map');
+  // Forget takes B's map and layout.
+  assert.deepEqual(await (await post('/v1/forget', wire.forgetBody({token: B}))).json(), {protocol: 1, brains: 0, feedback: 0, crashes: 1});
+  r = await recall();
+  assert.deepEqual([r.contributors, r.layouts.length], [1, 1]);
+  assert.ok(r.map[20] === 0 && r.map[12] > 0);
+  // A map that is not one is refused with its reason.
+  const bad = await post('/v1/crashes', wire.crashesBody({token: A, track, map: mapOf([[10, 5]]).map(x => x * 2), deaths: 9}));
+  assert.equal(bad.status, 400);
+  assert.deepEqual(wire.parseErrorResponse(await bytes(bad)), {ok: true, error: 'crash-map'});
+});
+
+test('a track dropped to make room takes its crash maps with it', async () => {
+  // A third Worker that keeps 2 tracks (MAX_TRACKS), on a store of its own.
+  const {DatabaseSync} = await import('node:sqlite');
+  const store = await mkdtemp(path.join(os.tmpdir(), 'cloud-brain-tracks-'));
+  const small = await startDev({port: PORT + 2, persist: store, vars: {ALLOW_LOCAL: 'true', MAX_TRACKS: '2'}});
+  const at = (route, body) => fetch(small.origin + route, {method: 'POST', body, signal: AbortSignal.timeout(30_000),
+    headers: {Origin: PAGE, 'Content-Type': 'text/plain', 'CF-Connecting-IP': nextAddress()}});
+  const map = new Float32Array(wire.CRASH_DIM);
+  map[5] = 1;
+  const tracks = [71, 72, 73].map(seed => unit(DIMS.track, seed));
+  let running = true;
+  try {
+    for (const [i, track] of tracks.entries()) {
+      const res = await at('/v1/crashes', wire.crashesBody({token: 'd' + i + 'd'.repeat(30), track, map, deaths: 4}));
+      assert.equal(wire.parseCrashesResponse(await bytes(res)).accepted, true);
+    }
+    const mapOn = async track => wire.parseCrashRecallResponse(await bytes(await at('/v1/crashes/recall', wire.crashRecallBody({track})))).map;
+    assert.equal(await mapOn(tracks[0]), null, 'the oldest track went, its map with it');
+    assert.equal((await mapOn(tracks[2]))[5], 1);
+    await small.stop();
+    running = false;
+    const dir = path.join(store, 'v3/do/vectorvroom-brain-SharedBrain');
+    const db = new DatabaseSync(path.join(dir, (await readdir(dir)).find(f => f.endsWith('.sqlite') && !f.startsWith('metadata'))), {readOnly: true});
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM crash_maps').get().n, 2);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM crash_maps WHERE track NOT IN (SELECT id FROM tracks)').get().n, 0);
+    db.close();
+  } finally {
+    if (running) await small.stop();
+    await rm(store, {recursive: true, force: true});
+  }
+});
+
 test('the token is never stored, only its hash', async () => {
   const dir = path.join(persist, 'v3/do/vectorvroom-brain-SharedBrain');
   const files = (await readdir(dir)).filter(f => !f.startsWith('metadata'));
@@ -495,7 +575,7 @@ test('a daily quota refuses a token past it with 429 until midnight', async () =
   // Forgetting works past the quota (and is not counted).
   const forgot = await post('/v1/forget', wire.forgetBody({token: SPENDER}));
   assert.equal(forgot.status, 200);
-  assert.deepEqual(await forgot.json(), {protocol: 1, brains: 2, feedback: 0});
+  assert.deepEqual(await forgot.json(), {protocol: 1, brains: 2, feedback: 0, crashes: 0});
 });
 
 test('a database at SQL schema 1 is migrated', async () => {
@@ -511,7 +591,7 @@ test('a database at SQL schema 1 is migrated', async () => {
     const db = new DatabaseSync(file);
     // A brain TOKEN did not contribute: its feedback is evidence, and written.
     const theirs = db.prepare('SELECT id FROM brains WHERE contributor != ? LIMIT 1').get(mine).id;
-    db.exec(`DROP TABLE contributors; DROP INDEX IF EXISTS brains_contributor; DROP TABLE IF EXISTS verified; DROP TABLE IF EXISTS geometries; DELETE FROM feedback;
+    db.exec(`DROP TABLE contributors; DROP INDEX IF EXISTS brains_contributor; DROP TABLE IF EXISTS verified; DROP TABLE IF EXISTS geometries; DROP TABLE IF EXISTS crash_maps; DELETE FROM feedback;
       DELETE FROM migrations WHERE version >= 2; UPDATE meta SET value = '1' WHERE key = 'sql_schema'`);
     db.prepare(`INSERT INTO feedback (brain, context_key, context, weight, count, baseline, contributors, updated)
       VALUES (?, '0123456789abcdef', '{}', 0.5, 3, 40, 'aaaaaaaa,bbbbbbbb', ?)`).run(theirs, Date.now());
@@ -532,7 +612,8 @@ test('a database at SQL schema 1 is migrated', async () => {
     assert.equal(wire.parseContributeResponse(await bytes(res)).feedbackAccepted, 1);
     await dev.stop();
     const after = new DatabaseSync(file, {readOnly: true});
-    assert.deepEqual(after.prepare('SELECT version FROM migrations ORDER BY version').all().map(r => r.version), [1, 2, 3]);
+    assert.deepEqual(after.prepare('SELECT version FROM migrations ORDER BY version').all().map(r => r.version), [1, 2, 3, 4]);
+    assert.equal(after.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name IN ('crash_maps', 'crash_maps_contributor')").get().n, 2, 'schema 4: crash maps');
     assert.equal(after.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name IN ('verified', 'geometries')").get().n, 2, 'schema 3: verified runs, pinned geometries');
     assert.equal(after.prepare('SELECT COUNT(*) AS n FROM geometries').get().n, 10, 'the presets pinned');
     assert.ok(after.prepare("SELECT COUNT(*) AS n FROM feedback WHERE contributors = 'aaaaaaaa,bbbbbbbb'").get().n === 0, 'schema 1 feedback is gone');
@@ -546,7 +627,7 @@ test('a database at SQL schema 1 is migrated', async () => {
   // A database newer than the build is not served from.
   await dev.stop();
   const db = new DatabaseSync(file);
-  db.prepare('INSERT INTO migrations (version, applied) VALUES (4, ?)').run(Date.now());
+  db.prepare('INSERT INTO migrations (version, applied) VALUES (5, ?)').run(Date.now());
   db.close();
   dev = await startDev({port: PORT, persist, vars: {ALLOW_LOCAL: 'true'}});
   assert.equal((await (await call('/health', {origin: null})).json()).ok, false);

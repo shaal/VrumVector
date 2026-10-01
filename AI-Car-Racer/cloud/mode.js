@@ -7,6 +7,12 @@
 // Switching reloads the page, so nothing learned in one mode leaks into the
 // other.
 export const STORAGE_KEY = 'vv.cloudBrain';
+/**
+ * What a yes was given to: the version of what shared mode sends (cloud/ui.js
+ * WHAT). 2: crash maps (X4). A yes to an earlier text (`true`, CB3 to X3) is
+ * asked again before anything more is sent.
+ */
+export const CONSENT_VERSION = 2;
 
 function read(storage) {
   try { return JSON.parse(storage?.getItem(STORAGE_KEY) || 'null') || null; } catch { return null; }
@@ -24,23 +30,29 @@ export function brainMode({search = globalThis.location?.search || '', storage =
   try {
     const asked = new URLSearchParams(search).get('brain');
     if (asked === 'shared' || asked === 'local') {
-      saved = {mode: asked, consented: !!saved?.consented};
+      saved = {mode: asked, consented: saved?.consented ?? false};
       storage?.setItem(STORAGE_KEY, JSON.stringify(saved));
     }
   } catch { saved = null; }
   return saved?.mode === 'shared' && secure ? 'shared' : 'local';
 }
 
-/** Whether the player agreed to what shared mode sends (asked before any upload). */
+/** Whether the player agreed to an earlier text only (asked again, with what changed). */
+export function consentedBefore(storage = globalThis.localStorage) {
+  const yes = read(storage)?.consented;
+  return !!yes && yes !== CONSENT_VERSION;
+}
+
+/** Whether the player agreed to what shared mode sends now (asked before any upload). */
 export function consented(storage = globalThis.localStorage) {
-  return !!read(storage)?.consented;
+  return read(storage)?.consented === CONSENT_VERSION;
 }
 
 /** Saves the choice for the next load (the caller reloads the page). */
 export function saveBrainMode(mode, {consent} = {}, storage = globalThis.localStorage) {
   try {
     const was = read(storage);
-    storage.setItem(STORAGE_KEY, JSON.stringify({mode: mode === 'shared' ? 'shared' : 'local', consented: consent === undefined ? !!was?.consented : !!consent}));
+    storage.setItem(STORAGE_KEY, JSON.stringify({mode: mode === 'shared' ? 'shared' : 'local', consented: consent === undefined ? was?.consented ?? false : consent ? CONSENT_VERSION : false}));
     return true;
   } catch { return false; }
 }

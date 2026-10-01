@@ -50,9 +50,11 @@ ruvector sources the first time.
 
 Routes: `GET /health`, `POST /v1/recall`, `POST /v1/contribute`,
 `GET /v1/stats`, `POST /v1/forget`, `POST /v1/verify`,
-`GET /v1/leaderboard` (bodies and answers: [CB1](../docs/validation/cloud-brain.md#cb1-the-wire-format),
+`GET /v1/leaderboard`, `POST /v1/crashes`, `POST /v1/crashes/recall`
+(bodies and answers: [CB1](../docs/validation/cloud-brain.md#cb1-the-wire-format),
 [CB4](../docs/validation/cloud-brain.md#cb4-abuse-and-trust),
-[X1](../docs/validation/cloud-brain.md#x1-verified-laps-and-a-leaderboard)).
+[X1](../docs/validation/cloud-brain.md#x1-verified-laps-and-a-leaderboard),
+[X4](../docs/validation/cloud-brain.md#x4-everyones-crash-map)).
 `sim/` is the game's simulation in Rust (crate `vectorvroom-sim`), which a
 verification drives; `node scripts/cloud-brain-sim-traces.mjs` remakes its
 golden traces from the game's own scripts (and the presets' keys the
@@ -62,9 +64,11 @@ Variables: `DISABLE_BRAIN=true` answers every `/v1/` route with 503
 `http://127.0.0.1:<port>` origins besides the deployed ones;
 `QUOTA_REQUESTS`, `QUOTA_BRAINS`, `QUOTA_FEEDBACK` set a contributor's
 daily quota (10 000, 5 000 and 50 000 by default; a string, a number or
-a boolean in `vars` all read). The per-address limits are the `ratelimits`
-bindings in `wrangler.jsonc` (20 contributions, 60 recalls, stats,
-leaderboards and health checks, 3 forgets and 6 verifications a minute;
+a boolean in `vars` all read); `MAX_TRACKS` keeps fewer tracks than the
+5 000 the object is sized for (never more). The per-address limits are the `ratelimits`
+bindings in `wrangler.jsonc` (24 contributions and crash maps, 60 recalls,
+crash recalls, stats, leaderboards and health checks, 3 forgets and 6
+verifications a minute;
 IPv6 by /64); `/health` says `limits: true` when all are bound. The
 object runs at most 30 verifications a minute in all.
 Cloud training (X2) is off unless `TRAIN_FRAMES` is set (frames a session,

@@ -84,6 +84,8 @@ export class LapClock {
   invalidate(){this.previous=null;this.next=0;this.elapsed=0;this.running=false;}
   step(car,gates,dt=1/60){
     if (!car || car.damaged || !Number.isFinite(car.x+car.y) || gates.length<2){this.invalidate();return;}
+    // Fewer gates than the lap had reached (adaptive gates changed them): start over.
+    if (this.next>=gates.length) this.invalidate();
     const point={x:car.x,y:car.y};
     if (this.running) this.elapsed+=dt;
     if (this.previous && Math.hypot(point.x-this.previous.x,point.y-this.previous.y)>100){this.invalidate();}

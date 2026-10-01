@@ -6,7 +6,11 @@
 // context. `down` simulates the network ('offline': fetch throws;
 // 'disabled': 503; 'error': 500; 'busy': 429). A verification (X1) does not
 // drive the car: its outcome is `verifyOutcome(v)` (by default one lap in
-// 10 s), kept per brain, track and physics for the leaderboard.
+// 10 s), kept per brain, track and physics for the leaderboard. Crash maps
+// (X4) are kept per contributor, exact track and mode (with their best
+// layout); a recall sums those on the query's track and gives their layouts
+// for the walls, the best survival first. `noCrashes`: a service from before
+// X4 (its crash routes answer 404).
 import * as wire from '../../AI-Car-Racer/cloud/wire.js';
 import {geometryKey} from '../../AI-Car-Racer/graphics/state.js';
 
@@ -24,6 +28,8 @@ export function createFakeCloudBrain() {
     contributors: new Set(),
     /** Verified runs: {id, track, profile, maxSpeed, traction, seconds, laps, lapFrames, fitness, created}. */
     verified: [],
+    /** Crash maps and layouts sent (X4): {token, track (its id), map, deaths, collisions, layout}. */
+    crashes: [],
     /** The outcome of a verification: {laps, lapFrames, fitness, crashedAt, frames}. */
     verifyOutcome: v => ({laps: 1, lapFrames: [600], fitness: v.geometry.checkpoints.length, crashedAt: null, frames: Math.floor(v.context.seconds * 60)}),
     /** Adds brains directly: [{vector, fitness, track (Float32Array|null), meta}]. */
@@ -50,6 +56,10 @@ export function createFakeCloudBrain() {
       if (path === '/v1/recall' && init.method === 'POST') return recall(body);
       if (path === '/v1/verify' && init.method === 'POST') return verify(body);
       if (path === '/v1/leaderboard') return leaderboard(new URL(url).search.slice(1));
+      if (path.startsWith('/v1/crashes') && fake.noCrashes) return new Response('Not found', {status: 404});
+      if (path === '/v1/crashes' && fake.refuse.crashes) return error(fake.refuse.crashes);
+      if (path === '/v1/crashes' && init.method === 'POST') return crashes(body);
+      if (path === '/v1/crashes/recall' && init.method === 'POST') return crashRecall(body);
       if (path === '/v1/stats') return json({protocol: wire.PROTOCOL, brains: brains.size, tracks: new Set([...brains.values()].map(b => b.track).filter(Boolean)).size, contributorsToday: fake.contributors.size, contributions24h: fake.requests.filter(r => r.path === '/v1/contribute').length});
       return new Response('Not found', {status: 404});
     },
@@ -133,6 +143,32 @@ export function createFakeCloudBrain() {
       .slice(0, wire.LIMITS.boardSize)
       .map(r => ({id: r.id, lapFrames: r.lapFrames[0], laps: r.laps, fitness: r.fitness, profile: r.profile, verified: r.created}));
     return json({protocol: wire.PROTOCOL, track: b.track, maxSpeed: b.maxSpeed, traction: b.traction, entries});
+  }
+
+  async function crashes(bytes) {
+    const c = wire.parseCrashes(bytes);
+    if (!c.ok) return error(c.error);
+    const track = await wire.brainId(c.track);
+    const mine = r => r.token === c.token && r.track === track && r.collisions === c.collisions;
+    const held = fake.crashes.find(mine)?.layout || null;
+    const layout = held && (!c.layout || c.layout.survival < held.survival) ? held : c.layout;
+    fake.crashes = fake.crashes.filter(r => !mine(r));
+    fake.crashes.push({token: c.token, track, map: c.map, deaths: c.deaths, collisions: c.collisions, layout});
+    return json({protocol: wire.PROTOCOL, accepted: true});
+  }
+
+  async function crashRecall(bytes) {
+    const r = wire.parseCrashRecall(bytes);
+    if (!r.ok) return error(r.error);
+    const track = await wire.brainId(r.track);
+    const here = fake.crashes.filter(c => c.track === track && c.collisions === r.collisions);
+    const sum = new Float64Array(wire.CRASH_DIM);
+    for (const c of here) c.map.forEach((x, i) => { sum[i] += x; });
+    const norm = Math.hypot(...sum);
+    const layouts = here.filter(c => c.layout && c.layout.geometry === r.geometry)
+      .sort((a, b) => b.layout.survival - a.layout.survival).slice(0, wire.LIMITS.crashLayouts).map(c => ({gates: c.layout.gates, survival: c.layout.survival}));
+    return json({protocol: wire.PROTOCOL, map: norm > 0 ? wire.encodeF32(Float32Array.from(sum, x => x / norm)) : null,
+      contributors: new Set(here.map(c => c.token)).size, tracks: here.length ? 1 : 0, layouts});
   }
 
   return fake;

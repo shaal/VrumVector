@@ -30,9 +30,9 @@ use libfuzzer_sys::fuzz_target;
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::sync::OnceLock;
-use vectorvroom_brain_core::brain::{context_hash, contributor_id, tag, Brain, Config, MemStore, Refusal, Training, Usage, BOARD_SIZE, CLOUD_BRAINS, CLOUD_CONTRIBUTOR, MAX_CONTEXTS_PER_BRAIN, MAX_CONTRIBUTORS, VERIFIED_PER_BRAIN};
+use vectorvroom_brain_core::brain::{context_hash, contributor_id, tag, Brain, Config, MemStore, Refusal, Training, Usage, BOARD_SIZE, CLOUD_BRAINS, CLOUD_CONTRIBUTOR, CRASH_CONTRIBUTORS, CRASH_LAYOUTS, CRASH_MODES, MAX_CONTEXTS_PER_BRAIN, MAX_CONTRIBUTORS, VERIFIED_PER_BRAIN};
 use vectorvroom_brain_core::presets::presets;
-use vectorvroom_brain_core::wire::{self, encode_f32, limits, parse_board, parse_contribute, parse_recall, parse_verify};
+use vectorvroom_brain_core::wire::{self, encode_f32, limits, parse_board, parse_contribute, parse_crash_recall, parse_crashes, parse_recall, parse_verify};
 
 const T0: u64 = 1_790_000_000_000;
 const TOKENS: usize = 5;
@@ -62,6 +62,8 @@ enum Op {
     Verify { who: u8, brain: u8, track: u8, context: u8 },
     Board { track: u8, context: u8 },
     Train { frames: u16, seed: u8 },
+    Crash { who: u8, track: u8, cells: Vec<(u8, u8)>, mode: u8, layout: Option<(u8, u8)> },
+    CrashRecall { track: u8, mode: u8, geometry: u8 },
     Wait { ms: u32 },
     Reopen,
     Bytes(Vec<u8>),
@@ -69,6 +71,10 @@ enum Op {
 
 fn token(who: u8) -> String {
     format!("{:032x}", 0xa11ce + (who as usize % TOKENS) as u64)
+}
+/// One of 6 collision modes (a track keeps CRASH_MODES).
+fn crash_mode(mode: u8) -> &'static str {
+    ["off", "solid/k8", "solid/k4", "solid/k2", "solid/k1", "solid/k3"][usize::from(mode % 6)]
 }
 fn stream(seed: u64) -> impl FnMut() -> f32 {
     let mut s = seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) | 1;
@@ -246,6 +252,20 @@ impl World {
             *runs.entry(r.brain.as_str()).or_default() += 1;
         }
         assert!(runs.values().all(|n| *n <= VERIFIED_PER_BRAIN));
+        // Crash maps (X4): one a contributor a track and mode, at most
+        // CRASH_CONTRIBUTORS, in at most CRASH_MODES modes a track, on held
+        // tracks.
+        let mut per: std::collections::HashMap<(&str, &str), Vec<&str>> = std::collections::HashMap::new();
+        let mut modes: std::collections::HashMap<&str, HashSet<&str>> = std::collections::HashMap::new();
+        for r in &self.store.crashes {
+            assert!(self.store.tracks.contains_key(&r.track), "a crash map of a track not held");
+            per.entry((&r.track, &r.mode)).or_default().push(&r.contributor);
+            modes.entry(&r.track).or_default().insert(&r.mode);
+        }
+        for who in per.values() {
+            assert!(who.len() <= CRASH_CONTRIBUTORS && who.iter().collect::<HashSet<_>>().len() == who.len());
+        }
+        assert!(modes.values().all(|m| m.len() <= CRASH_MODES));
         // Every run's key is pinned; the presets' to their own geometries.
         assert!(self.store.verified.iter().all(|r| self.store.pins.contains_key(&r.track)));
         assert!(presets().iter().all(|p| self.store.pins.get(&p.key) == Some(&p.digest)));
@@ -266,6 +286,23 @@ impl World {
         let value = serde_json::to_value(&answer).unwrap();
         assert!(no_negative_zero(&value));
         value
+    }
+    /// Everyone's crash map: of length 1 or none, from contributors whose
+    /// maps are held; at most CRASH_LAYOUTS layouts, the best first.
+    fn crash_recall(&self, track: u8, mode: u8, geometry: u8) -> Value {
+        let b = json!({"protocol": 1, "track": encode_f32(&unit(track_seed(track), wire::TRACK_DIM)), "geometry": format!("g{}", geometry % 3), "collisions": crash_mode(mode)});
+        let answer = json!(self.brain.crash_recall(&parse_crash_recall(&serde_json::to_vec(&b).unwrap()).unwrap(), &self.store).unwrap());
+        match answer["map"].as_str() {
+            Some(_) => {
+                let m = wire::decode_f32(Some(&answer["map"]), wire::CRASH_DIM).expect("a map");
+                assert!(wire::is_unit(&m) && m.iter().all(|x| *x >= 0.0) && answer["contributors"].as_u64() > Some(0));
+            }
+            None => assert_eq!(answer["contributors"], 0),
+        }
+        let s: Vec<f64> = answer["layouts"].as_array().unwrap().iter().map(|l| l["survival"].as_f64().unwrap()).collect();
+        assert!(s.len() <= CRASH_LAYOUTS && s.windows(2).all(|w| w[0] >= w[1]));
+        assert!(no_negative_zero(&answer));
+        answer
     }
     fn key_of(&self, track: u8) -> String {
         wire::geometry_key(&parse_verify(&verify_body(0, 0, track, 0)).unwrap().geometry)
@@ -341,6 +378,7 @@ fuzz_target!(|ops: Vec<Op>| {
                 assert!(w.store.brains.values().all(|b| b.0.contributor != contributor));
                 assert!(w.store.feedback.values().all(|r| r.slots.iter().all(|s| s.id != contributor)));
                 assert!(w.store.verified.iter().all(|r| r.contributor != contributor));
+                assert!(w.store.crashes.iter().all(|r| r.contributor != contributor));
             }
             Op::Verify { who, brain, track, context } => {
                 let v = parse_verify(&verify_body(who, brain, track, context)).expect("a valid verification");
@@ -360,6 +398,26 @@ fuzz_target!(|ops: Vec<Op>| {
             Op::Board { track, context } => {
                 w.board(track, context);
             }
+            Op::Crash { who, track, cells, mode, layout } => {
+                // Up to 4 cells with deaths; a layout for one of 3 walls' signatures.
+                let mut m = vec![0f32; wire::CRASH_DIM];
+                for (cell, n) in cells.iter().take(4) {
+                    m[*cell as usize % wire::CRASH_DIM] += (1.0 + f32::from(*n % 50)).ln();
+                }
+                let norm = m.iter().map(|x| x * x).sum::<f32>().sqrt();
+                if norm > 0.0 {
+                    let mut b = json!({"protocol": 1, "token": token(who), "track": encode_f32(&unit(track_seed(track), wire::TRACK_DIM)),
+                        "map": encode_f32(&m.iter().map(|x| x / norm).collect::<Vec<_>>()), "deaths": 7, "collisions": crash_mode(mode)});
+                    if let Some((g, s)) = layout {
+                        b["layout"] = json!({"geometry": format!("g{}", g % 3), "survival": f64::from(s) / 255.0, "gates": [[[f64::from(s), 300.0], [f64::from(s), 700.0]]]});
+                    }
+                    let c = parse_crashes(&serde_json::to_vec(&b).unwrap()).expect("a valid crash map");
+                    let _ = w.brain.crashes(c, &contributor_id(&token(who)), w.now, &mut w.store).unwrap();
+                }
+            }
+            Op::CrashRecall { track, mode, geometry } => {
+                w.crash_recall(track, mode, geometry);
+            }
             Op::Train { frames, seed } => {
                 // A small session (up to 3 runs of 20 s), right after the last
                 // request: training never waits for idleness here.
@@ -378,12 +436,16 @@ fuzz_target!(|ops: Vec<Op>| {
                 let queries: Vec<Vec<u8>> = (0..3u8).map(|i| recall_body(i, (i == 1).then_some(i), i, 63)).collect();
                 let live: Vec<Value> = queries.iter().map(|q| w.recall(q)).collect();
                 let boards: Vec<Value> = (0..2u8).map(|t| w.board(t, 0)).collect();
+                let crashes: Vec<Value> = (0..3u8).map(|t| w.crash_recall(t, t, t)).collect();
                 w.brain = Brain::open(w.config.clone(), &mut w.store, w.now).unwrap();
                 for (q, before) in queries.iter().zip(&live) {
                     assert_eq!(&w.recall(q), before, "a rebuild answers as the live brain");
                 }
                 for (t, before) in boards.iter().enumerate() {
                     assert_eq!(&w.board(t as u8, 0), before, "a rebuild's leaderboard is the live one");
+                }
+                for (t, before) in crashes.iter().enumerate() {
+                    assert_eq!(&w.crash_recall(t as u8, t as u8, t as u8), before, "a rebuild's crash recall is the live one");
                 }
             }
             Op::Bytes(bytes) => {

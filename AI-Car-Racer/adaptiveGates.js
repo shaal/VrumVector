@@ -69,10 +69,26 @@
     topoCooldown: 0,
     trackKey: null,
     mode: null,              // collision mode of the last adapted generation
+    // X4: a shared layout on trial ({before, survival, mode, key}), the
+    // shared layouts tried and failed on each walls this page load (by the
+    // walls' signature: a preset reload or a multiplayer visit does not
+    // forget them), generations adapted, and the last one shared layouts
+    // wait for.
+    trial: null,
+    sharedSeen: {},
+    adapted: 0,
+    sharedWaitUntil: 0,
+    // Gates changed during a generation (not at its end, by adaptOnce for
+    // the next): its map was not driven on the gates in place when it ends.
+    atGenEnd: false,
+    changedMidGen: false,
+    lastGenChanged: false,
   };
 
   const CRASH_SIM_MIN = 0.55;      // min cosine sim to trust a retrieved layout
   const CRASH_SURV_LIFT = 0.03;    // retrieved survival must beat current by this
+  const SHARED_PAUSE = 10;         // generations without shared layouts after one did not help
+  const SHARED_FAILS = 3;          // failed shared trials before a track tries no more
 
   try {
     if (new URLSearchParams(location.search).get('adaptGates') === '1') {
@@ -158,6 +174,18 @@
    * memory never re-applies onto Rectangle after a preset switch.
    */
   function geometrySignature() {
+    return signature(true);
+  }
+
+  /**
+   * The walls alone, whether adaptive gates ever ran here or not: what crash
+   * maps are shared under (X4), the same on every page with these walls.
+   */
+  function wallSignature() {
+    return signature(false);
+  }
+
+  function signature(withBaseline) {
     try {
       const re = road.roadEditor;
       if (!re) return 'g0';
@@ -173,7 +201,7 @@
       pushPts(re.points2);
       // Include *baseline* gate count when known; avoid live adaptive gate
       // count so adds/removes don't thrash the track key every gen.
-      if (state.baseline && state.baseline.length) {
+      if (withBaseline && state.baseline && state.baseline.length) {
         parts.push('|b' + state.baseline.length);
       }
       let h = 2166136261;
@@ -285,6 +313,8 @@
     state.topoCooldown = 0;
     state.genSinceAdapt = 0;
     state._hnswNote = null;
+    state.trial = null;
+    state.sharedWaitUntil = 0;
 
     const ok = captureBaseline();
     // Do NOT restoreBestIfAny() here — that re-applies an adapted layout and
@@ -297,14 +327,21 @@
     return ok;
   }
 
-  function applyCps(cps) {
+  // The gates a reload starts from.
+  function persistCps(cps) {
+    try { localStorage.setItem('checkPointList', JSON.stringify(cps)); } catch (_) {}
+  }
+
+  // persist false: a shared layout on trial is not saved until it helped.
+  function applyCps(cps, persist) {
     if (!cps || !cps.length) return false;
     try {
       if (typeof road === 'undefined' || !road || !road.roadEditor) return false;
+      if (!state.atGenEnd) state.changedMidGen = true;
       road.roadEditor.checkPointListEditor = cloneCps(cps);
       road.checkPointList = cloneCps(cps);
       if (typeof road.rebuildGrids === 'function') road.rebuildGrids();
-      try { localStorage.setItem('checkPointList', JSON.stringify(cps)); } catch (_) {}
+      if (persist !== false) persistCps(cps);
       if (typeof invalidateWorkerInit === 'function') invalidateWorkerInit();
       if (window.DemoPresentation && window.DemoPresentation.invalidateRoad) {
         window.DemoPresentation.invalidateRoad();
@@ -560,9 +597,46 @@
     return null;
   }
 
+  function layoutKey(cps) {
+    return cps.map(function (g) {
+      return g.map(function (p) { return Math.round(p.x) + ',' + Math.round(p.y); }).join(' ');
+    }).join(';');
+  }
+
+  /**
+   * X4: may a layout from everyone's (cloud/session.js) be tried? Once on
+   * this track, not while shared layouts wait nor after SHARED_FAILS failed
+   * here, and only gates this page could have made: a count adaptive gates
+   * allows, every end on the canvas.
+   */
+  // The shared layouts tried and failed on these walls: {tried, failed, fails}.
+  function sharedSeen() {
+    const w = wallSignature();
+    return state.sharedSeen[w] || (state.sharedSeen[w] = { tried: new Set(), failed: new Set(), fails: 0 });
+  }
+
+  function sharedUsable(cps) {
+    if (state.adapted <= state.sharedWaitUntil || sharedSeen().fails >= SHARED_FAILS) return false;
+    if (!Array.isArray(cps) || cps.length < 2 || cps.length > maxGates()) return false;
+    let w = 3200, h = 1800;
+    try {
+      if (typeof road !== 'undefined' && road && road.right > 0 && road.bottom > 0) { w = road.right; h = road.bottom; }
+    } catch (_) {}
+    for (let i = 0; i < cps.length; i++) {
+      const g = cps[i];
+      if (!Array.isArray(g) || g.length !== 2) return false;
+      for (let j = 0; j < 2; j++) {
+        const p = g[j];
+        if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || p.x < 0 || p.y < 0 || p.x > w || p.y > h) return false;
+      }
+    }
+    return !sharedSeen().tried.has(layoutKey(cps));
+  }
+
   /**
    * Query HNSW for similar crash maps. If a hit carries a gate layout with
    * better survival, apply it (full replace). Returns status string or null.
+   * A shared one (X4) is on trial for a generation (adaptOnce decides).
    */
   function tryHnswLayout(crashVec, survival, genData) {
     const b = window.__rvBridge;
@@ -577,21 +651,26 @@
     state.lastCrashHit = hits[0];
 
     // Prefer highest survival among sufficiently similar maps on *this* wall
-    // geometry, archived in this collision mode.
+    // geometry, archived in this collision mode. Shared layouts carry the
+    // walls alone (X4).
     const geo = geometrySignature();
+    const walls = wallSignature();
     const mode = collisionMode(genData);
     let best = null;
     for (let i = 0; i < hits.length; i++) {
       const h = hits[i];
       if (!h.cps || !h.cps.length) continue;
+      if (h.shared && !sharedUsable(h.cps)) continue;
+      if (sharedSeen().failed.has(layoutKey(h.cps))) continue;
       // Reject layouts archived on a different track (Triangle ≠ Rectangle).
       // Require geometrySig: older untagged maps are never auto-applied
       // (avoids painting Triangle gates onto Rectangle after a preset switch).
-      if (!h.geometrySig || h.geometrySig !== geo) continue;
+      if (!h.geometrySig || h.geometrySig !== (h.shared ? walls : geo)) continue;
       if ((h.similarity || 0) < CRASH_SIM_MIN) continue;
       // 'unknown' (no context, or a pre-C4 collision map) matches no mode.
       if (mode === 'unknown' || (h.collisions || 'off') !== mode) { otherMode++; continue; }
-      if ((h.survival || 0) < survival + CRASH_SURV_LIFT) continue;
+      // (In whole cars: 0.26 + 0.03 is 0.29000000000000004.)
+      if ((h.survival || 0) < survival + CRASH_SURV_LIFT - 1e-9) continue;
       if (!best || h.survival > best.survival ||
           (h.survival === best.survival && h.similarity > best.similarity)) {
         best = h;
@@ -601,15 +680,25 @@
       return 'hnsw: ' + hits.length + ' similar crash map(s), none beat survival' +
         (otherMode ? ' (' + otherMode + ' from another collision mode)' : '');
     }
-    if (!applyCps(best.cps)) return 'hnsw: apply failed';
+    if (best.shared) {
+      state.trial = { before: cloneCps(currentCps() || []), survival: survival, mode: mode, key: layoutKey(best.cps) };
+      sharedSeen().tried.add(state.trial.key);
+    }
+    if (!applyCps(best.cps, !best.shared)) {
+      state.trial = null;
+      return 'hnsw: apply failed';
+    }
     state.hnswApplies++;
     state.topoCooldown = TOPO_EVERY;
-    return 'hnsw: applied layout from similar crash (sim ' +
+    return 'hnsw: applied ' + (best.shared ? 'a shared layout on trial' : 'layout') + ' from similar crash (sim ' +
       (best.similarity * 100).toFixed(0) + '%, surv ' +
       (best.survival * 100).toFixed(0) + '%, ' + best.cps.length + ' gates)';
   }
 
-  function archiveCrashToBridge(crashVec, survival, fitness, cps, genData, bottleneck) {
+  // measured false: gates the generation did not run on (the next ones),
+  // archived with its survival here but never shared (X4). `walls`: the
+  // walls alone, what a shared layout is for.
+  function archiveCrashToBridge(crashVec, survival, fitness, cps, genData, bottleneck, measured) {
     const b = window.__rvBridge;
     if (!b || typeof b.archiveCrashMap !== 'function') return;
     if (window.rvDisabled) return;
@@ -635,7 +724,9 @@
         causes: causesOf(genData),
         bottleneck: bottleneck,
         geometrySig: geometrySignature(),
+        walls: wallSignature(),
         collisions: collisionMode(genData),
+        measured: measured !== false,
       });
     } catch (e) {
       console.warn('[adaptiveGates] archiveCrashMap failed', e);
@@ -686,18 +777,52 @@
 
     // Encode + HNSW retrieve similar crash problems (ruvector crash-map index).
     const crashVec = encodeCrashVec(genData);
+
+    // X4: this generation ran a shared layout on trial. Kept (and saved as
+    // the page's gates) when survival rose by CRASH_SURV_LIFT; else the
+    // gates go back, shared layouts wait SHARED_PAUSE generations, and the
+    // generation is not archived (the layout never becomes this page's).
+    state.adapted++;
+    if (state.trial) {
+      const t = state.trial;
+      if (t.mode !== mode) {
+        // Not comparable in another collision mode: it did not prove itself.
+        endTrial();
+        state.lastStatus = 'on · shared layout trial ended (collision mode changed) · gates restored';
+        return true;
+      }
+      state.trial = null;
+      // (In whole cars: 0.26 + 0.03 is 0.29000000000000004.)
+      if (survival >= t.survival + CRASH_SURV_LIFT - 1e-9) {
+        persistCps(cps);
+      } else if (t.before.length) {
+        sharedSeen().failed.add(t.key);
+        sharedSeen().fails++;
+        state.sharedWaitUntil = state.adapted + SHARED_PAUSE;
+        // (The survival trend goes on from before the trial: the trial's
+        // start left it there.)
+        if (applyCps(t.before)) {
+          state.lastStatus = 'on · shared layout did not help (survival ' + (survival * 100).toFixed(0) + '% vs ' +
+            (t.survival * 100).toFixed(0) + '%) · gates restored';
+          return true;
+        }
+      }
+    }
+
     if (crashVec) {
       const hnswMsg = tryHnswLayout(crashVec, survival, genData);
       if (hnswMsg && hnswMsg.indexOf('applied') !== -1) {
         state.lastStatus = 'on · ' + hnswMsg;
         state.lastSurvival = survival;
         const nowCps = currentCps() || cps;
-        maybeRemember(mode, survival, genData.fitness || 0, nowCps, crash);
-        archiveCrashToBridge(crashVec, survival, genData.fitness || 0, nowCps, genData, bot1);
+        if (!state.trial) maybeRemember(mode, survival, genData.fitness || 0, nowCps, crash);
+        // This generation's map, with the gates it was measured on.
+        archiveCrashToBridge(crashVec, survival, genData.fitness || 0, cps, genData, bot1, !state.lastGenChanged);
         return true;
       }
-      // Always archive this gen's crash map + layout for future retrieval.
-      archiveCrashToBridge(crashVec, survival, genData.fitness || 0, cps, genData, bot1);
+      // Always archive this gen's crash map + layout for future retrieval
+      // (not measured when the gates changed during the generation).
+      archiveCrashToBridge(crashVec, survival, genData.fitness || 0, cps, genData, bot1, !state.lastGenChanged);
       if (hnswMsg) {
         // Fall through to local nudge/add/remove, but keep hnsw note.
         state._hnswNote = hnswMsg;
@@ -784,7 +909,7 @@
       (crashVec ? ' · map archived' : '');
     maybeRemember(mode, survival, genData.fitness || 0, next, crash);
     if (crashVec) {
-      archiveCrashToBridge(crashVec, survival, genData.fitness || 0, next, genData, bot1);
+      archiveCrashToBridge(crashVec, survival, genData.fitness || 0, next, genData, bot1, false);
     }
     return true;
   }
@@ -831,8 +956,24 @@
     return false;
   }
 
+  /**
+   * X4: a shared layout still on trial goes, the page's gates back (saved):
+   * on any phase change (buttonResponse.js nextPhase, before phase 3 saves
+   * the track), turning adaptive gates off, a Solid cars switch, another
+   * collision mode. True when one was on trial.
+   */
+  function endTrial() {
+    const t = state.trial;
+    state.trial = null;
+    if (t && t.before.length) applyCps(t.before);
+    return !!t;
+  }
+
   function setEnabled(on) {
     state.enabled = !!on;
+    // A shared layout still on trial (X4) never proved itself: turning
+    // adaptive gates off puts the page's own gates back.
+    endTrial();
     if (!state.enabled) {
       state.lastStatus = 'off';
       return state.enabled;
@@ -862,6 +1003,7 @@
       return ok;
     }
     const ok = applyCps(state.baseline);
+    state.trial = null;
     state.nudgeCount = 0;
     state.addCount = 0;
     state.removeCount = 0;
@@ -882,6 +1024,7 @@
    * The survival trend restarts in any case.
    */
   function onCollisionsChange() {
+    endTrial();
     state.mode = collisionMode(null);
     state.lastSurvival = null;
     state.badStreak = 0;
@@ -897,17 +1040,24 @@
   }
 
   function onGenEnd(genData) {
+    // Whether this generation's gates changed while it drove (main.js's
+    // passive archive asks too, right after: gatesChangedLastGen).
+    state.lastGenChanged = state.changedMidGen;
+    state.changedMidGen = false;
     if (!state.enabled) return;
     // Detect track switches that happened without onTrackChange (defensive).
     if (trackStale()) onTrackChange();
     state.genSinceAdapt++;
     if (state.genSinceAdapt < MIN_GENS_BETWEEN) return;
     state.genSinceAdapt = 0;
+    state.atGenEnd = true;
     try {
       adaptOnce(genData);
     } catch (e) {
       console.warn('[adaptiveGates] onGenEnd failed', e);
       state.lastStatus = 'on · error (see console)';
+    } finally {
+      state.atGenEnd = false;
     }
   }
 
@@ -947,6 +1097,13 @@
     captureBaseline: captureBaseline,
     getStatus: getStatus,
     geometrySignature: geometrySignature,
+    wallSignature: wallSignature,
+    endTrial: endTrial,
+    gatesChangedLastGen: function () { return !!state.lastGenChanged; },
+    // main.js performBegin: the generation starting now drives the gates in place.
+    onGatesSent: function () { state.changedMidGen = false; },
+    // The page's own gates while a shared layout is on trial, else null.
+    pageGates: function () { return state.trial && state.trial.before.length ? cloneCps(state.trial.before) : null; },
     _state: state,
     _crashCentroid: crashCentroid,   // for tests
     _reachRates: reachRates,         // for tests

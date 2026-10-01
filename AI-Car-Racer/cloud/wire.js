@@ -19,7 +19,7 @@
 // Brain ids are 128 bits of SHA-256 over those bytes: xxHash32 (the local
 // archive's ids) is not collision resistant, and a shared service must not
 // let anyone make a second brain with another brain's id.
-import {FLAT_LENGTH, cleanContext, cleanLearning, clamp} from '../learning/policy.js';
+import {FLAT_LENGTH, cleanContext, cleanLearning, clamp, collisionsLabel} from '../learning/policy.js';
 
 export const PROTOCOL = 1;
 // BRAIN_SCHEMA_VERSION of brainCodec.js (a test checks they agree): a client
@@ -52,7 +52,12 @@ export const LIMITS = Object.freeze({
   coordinate: 1e5,
   verifySeconds: 120,
   boardSize: 20,
+  // Everyone's crash map (X4): deaths a map counts; layouts a recall gives.
+  crashDeaths: [3, 1e6],
+  crashLayouts: 4,
 });
+/** A crash map's cells (16 × 9 over the canvas, crashMapCodec.js). */
+export const CRASH_DIM = 144;
 export const SOURCES = Object.freeze(['evolved', 'demonstration', 'cloud']);
 const TOKEN = /^[0-9a-f]{32}$/;
 const BRAIN_ID = /^brain_[0-9a-f]{32}$/;
@@ -95,6 +100,9 @@ export const REASONS = Object.freeze({
   trackGeometry: 'track-geometry',
   verifyContext: 'verify-context',
   leaderboardQuery: 'leaderboard-query',
+  // a crash map or its deaths; a shared gate layout (X4)
+  crashMap: 'crash-map',
+  crashLayout: 'crash-layout',
 });
 // Refusals only the service gives (CB4, CB5): in error answers, never from a parser here.
 export const SERVICE_ERRORS = Object.freeze(['rate-limited', 'disabled', 'server-error']);
@@ -666,4 +674,104 @@ export function boardQuery({track, maxSpeed, traction}) {
 /** An error answer's body; its HTTP status is httpStatus(error). */
 export function errorBody(error) {
   return JSON.stringify({protocol: PROTOCOL, error});
+}
+
+// ─── crash maps (X4) ──────────────────────────────────────────────────────
+
+const GEOMETRY_SIG = /^g[0-9a-f]{1,8}$/;
+/** adaptiveGates.js geometrySignature: `g` and 1 to 8 hex digits. */
+export const isGeometrySig = v => typeof v === 'string' && GEOMETRY_SIG.test(v);
+const crashMode = v => (absent(v) ? 'off' : typeof v === 'string' && PRINTABLE.test(v) ? collisionsLabel(v) : 'unknown');
+function crashLayout(l) {
+  if (!isObject(l)) return null;
+  const geometry = own(l, 'geometry'), survival = own(l, 'survival'), gates = own(l, 'gates');
+  if (!isGeometrySig(geometry) || !isNum(survival, 0, 1) || !Array.isArray(gates) || gates.length < 1 || gates.length > LIMITS.gates) return null;
+  const out = gates.map(g => {
+    if (!Array.isArray(g) || g.length !== 2) return null;
+    const a = coordinate(g[0]), b = coordinate(g[1]);
+    return a && b ? [a, b] : null;
+  });
+  return out.every(Boolean) ? {geometry, survival: survival + 0, gates: out} : null;
+}
+const crashMap = v => {
+  const map = decodeF32(v, CRASH_DIM);
+  return map && map.every(x => Number.isFinite(x) && x >= 0) && isUnit(map) ? map : null;
+};
+
+/**
+ * POST /v1/crashes (X4). Checks, in order: the body (no brain format),
+ * token, the track (a unit embedding), the crash map (144 finite,
+ * non-negative numbers of length 1) and its deaths (3 to 1 000 000), the
+ * collision mode (a label; absent is off), the layout when given.
+ */
+export function parseCrashes(text) {
+  const r = read(text, {schema: false});
+  if (!r.ok) return r;
+  const token = own(r.body, 'token');
+  if (typeof token !== 'string' || !TOKEN.test(token)) return refuse(REASONS.token);
+  const track = decodeF32(own(r.body, 'track'), DIMS.track);
+  if (!unitVector(track, DIMS.track)) return refuse(REASONS.track);
+  const map = crashMap(own(r.body, 'map'));
+  if (!map || !isInt(own(r.body, 'deaths'), ...LIMITS.crashDeaths)) return refuse(REASONS.crashMap);
+  const collisions = crashMode(own(r.body, 'collisions'));
+  let layout = null;
+  const l = own(r.body, 'layout');
+  if (!absent(l)) {
+    layout = crashLayout(l);
+    if (!layout) return refuse(REASONS.crashLayout);
+  }
+  return {ok: true, token, track, map, deaths: own(r.body, 'deaths') + 0, collisions, layout};
+}
+
+/** POST /v1/crashes/recall (X4): the body, the track, the collision mode, the walls' signature when given. */
+export function parseCrashRecall(text) {
+  const r = read(text, {schema: false});
+  if (!r.ok) return r;
+  const track = decodeF32(own(r.body, 'track'), DIMS.track);
+  if (!unitVector(track, DIMS.track)) return refuse(REASONS.track);
+  const collisions = crashMode(own(r.body, 'collisions'));
+  const g = own(r.body, 'geometry');
+  if (!absent(g) && !isGeometrySig(g)) return refuse(REASONS.crashLayout);
+  return {ok: true, track, collisions, geometry: absent(g) ? null : g};
+}
+
+/** The body of POST /v1/crashes: a crash map for a track, and a gate layout or none. */
+export function crashesBody({token, track, map, deaths, collisions = 'off', layout = null}) {
+  const body = {protocol: PROTOCOL, token, track: encodeF32(track), map: encodeF32(map), deaths, collisions};
+  if (layout) body.layout = {geometry: layout.geometry, survival: layout.survival, gates: layout.gates};
+  return JSON.stringify(body);
+}
+/** The body of POST /v1/crashes/recall. */
+export function crashRecallBody({track, collisions = 'off', geometry = null}) {
+  const body = {protocol: PROTOCOL, track: encodeF32(track), collisions};
+  if (geometry) body.geometry = geometry;
+  return JSON.stringify(body);
+}
+
+/** The answer to POST /v1/crashes: {ok, accepted} or {ok: false, error: 'shape'}. */
+export function parseCrashesResponse(text) {
+  const r = read(text, ANSWER);
+  if (!r.ok) return r;
+  return typeof own(r.body, 'accepted') === 'boolean' ? {ok: true, accepted: own(r.body, 'accepted')} : refuse(REASONS.shape);
+}
+
+/**
+ * The answer to a crash recall (X4): {ok, map (144 numbers of length 1, or
+ * null), contributors, tracks, layouts: [{gates, survival}] (up to 4)}, or
+ * {ok: false, error: 'shape'}.
+ */
+export function parseCrashRecallResponse(text) {
+  const r = read(text, ANSWER);
+  if (!r.ok) return r;
+  const b = r.body, rawMap = own(b, 'map'), layouts = own(b, 'layouts');
+  const map = rawMap === null ? null : crashMap(rawMap);
+  if ((rawMap !== null && !map) || !isInt(own(b, 'contributors'), 0, 1e6) || !isInt(own(b, 'tracks'), 0, 1e6)
+    || !Array.isArray(layouts) || layouts.length > LIMITS.crashLayouts) return refuse(REASONS.shape);
+  const out = [];
+  for (const l of layouts) {
+    const layout = isObject(l) && crashLayout({geometry: 'g0', survival: own(l, 'survival'), gates: own(l, 'gates')});
+    if (!layout) return refuse(REASONS.shape);
+    out.push({gates: layout.gates, survival: layout.survival});
+  }
+  return {ok: true, map, contributors: own(b, 'contributors') + 0, tracks: own(b, 'tracks') + 0, layouts: out};
 }

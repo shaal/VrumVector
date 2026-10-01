@@ -117,7 +117,12 @@ class LiveSession {
   joinDriver(id){
     const setup=validSetup(this.peers.get(id)?.setup);
     if(!this.enabled||!setup||!this.setup)return;
-    const original=this.originalSetup||{setup:this.setup,adaptive:window.AdaptiveGates?.isEnabled()};
+    // What to come back to: the page's own gates as they are now (not the
+    // last tick's), never a shared layout on trial (X4: joining ends the
+    // trial; coming back must not bring it back).
+    const gates=window.AdaptiveGates?.pageGates?.()||this.info?.road?.checkPointList;
+    const mine=(gates&&validSetup({...this.setup,gates}))||this.setup;
+    const original=this.originalSetup||{setup:mine,adaptive:window.AdaptiveGates?.isEnabled()};
     if(this.applySetup(setup))this.originalSetup=original;
     this.renderUI();
   }

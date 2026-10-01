@@ -270,7 +270,12 @@ geometry), driving summaries, learning context; when a car drives a lap, the
 track's walls and gates, so the service can drive it again (X1). An anonymous random token
 (128-bit, localStorage) identifies a contributor for quotas and "forget me"; the
 server stores only its SHA-256. IPs are used transiently for rate limiting and
-not stored. The toggle says what is sent before the first upload. Forget
+not stored. The toggle says what is sent before the first upload. Crash maps
+are shared too (X4): at most one a minute, 16 × 9 cells, the number of
+crashes, the collision mode, the gates the generation drove through, its
+survival and the walls' signature; a shared layout replaces the page's gates
+only for a one-generation trial, kept when survival rises 3 points. A yes
+given before a change to what is sent is asked again (X4). Forget
 also deletes the brains the service bred from the forgotten ones (X2: a
 child keeps most of its parent's weights).
 
@@ -281,8 +286,11 @@ training hour. Free plan: 100,000 requests/day, 100,000 DO rows written/day,
 shared with multiplayer; CPU is 10 ms per invocation on Workers Free (unclear
 for DO requests), which a cold start (instantiate + rebuild 20k-vector index)
 will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
-10M requests and 30M CPU-ms per month. Storage is negligible (20k brains ≈
-40 MB).
+10M requests and 30M CPU-ms per month. Storage is small (20k brains ≈
+40 MB). Crash maps (X4) add 1 request and 1 row written a minute per
+training page, and a crash recall reads up to 80 rows; the table is bounded
+by 5 000 tracks × 4 modes × 16 rows (about 0.85 GB at the largest layouts,
+far less in practice).
 
 ### Local development and CI (no account needed)
 
@@ -663,11 +671,29 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
     cars while the AI trains (flat, tilted and 3D views), restarted with
     them and after a crash. The Memory panel's "Race the cloud champion"
     toggle (docs/validation/cloud-brain.md#x3-race-the-cloud-champion).
-- [ ] **X4 — Everyone's crash map.** Aggregate 144-float crash maps per track
+- [x] **X4 — Everyone's crash map.** Aggregate 144-float crash maps per track
   neighbourhood; overlay "where everyone crashes here"; adaptive gates recall
   shared layouts. Value: medium (curriculum from many players). Effort: ~4
   hours. Risk: low; contact deaths stay filtered (car-collisions C4).
   depends: CB2
+  - [x] `POST /v1/crashes`: a page's crash map for a track (at most one a
+    minute; car contact left out) and the gate layout it was measured with
+    (under the walls' signature); the service keeps one row a contributor a
+    track and mode (their latest map, their best layout for the walls), 16
+    contributors a mode (the least recently sent go) and 4 modes a track (the
+    one with the fewest contributors goes), and the track cap bounds the
+    table; a dropped track and forget take them; SQL schema 4.
+    `POST /v1/crashes/recall`: the maps of the nearest tracks (0.9 alike),
+    one a contributor, weighed by likeness, and the 4 best layouts for the
+    walls, with each pull. The write limit is 24 a minute.
+  - [x] The Memory panel's "Show where everyone crashes here" overlay (flat
+    view); shared layouts join adaptive gates' candidates under the same
+    rules as local ones, then a one-generation trial: kept (and saved) on a
+    rise of 3 points of survival, else undone and never tried again, with
+    shared layouts paused 10 generations and stopped after 3 failures on a
+    track (each page load); any phase change ends a trial first. Consent is
+    versioned: a yes to the text before crash maps is asked again
+    (docs/validation/cloud-brain.md#x4-everyones-crash-map).
 
 ## Risks
 
@@ -692,5 +718,13 @@ will likely exceed. Workers Paid ($5/month minimum) gives 30 s CPU per request,
   forged claim, and a few can bring an honest brain back to neutral.
   Mitigation: per-address limits, feedback never sinks a brain below
   `min(claim, 0)`; Turnstile (D8) or X1 if abuse appears.
+- Crash maps are telemetry (X4): 16 fresh tokens can crowd honest players out
+  of a track and mode's map, more tokens than a mode's players can push the
+  mode out, and a few can claim a high survival for a bad layout.
+  Mitigation: per-address limits; honest maps return within a minute of
+  play; a shared layout gets a one-generation trial, is undone unless
+  survival rises 3 points, is never tried again on the track, and after 3
+  failures a track tries no more shared layouts (each page load: up to 3
+  generations a load).
 - Quota sharing with multiplayer on the same account. Mitigation: batching,
   breaker, runbook alerts.

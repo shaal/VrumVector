@@ -100,6 +100,15 @@ fn run(route: &str, bytes: &[u8], expect: &Value) -> Option<Value> {
                 json!({"ok": true, "id": v.id, "context": v.context, "points": [g.inner.len(), g.outer.len(), g.checkpoints.len()]})
             }
         },
+        "crashes" => match wire::parse_crashes(bytes) {
+            Err(r) => refusal(r),
+            Ok(c) => json!({"ok": true, "deaths": c.deaths, "collisions": c.collisions,
+                "layout": c.layout.map(|l| json!({"geometry": l.geometry, "survival": l.survival, "gates": l.gates.len()}))}),
+        },
+        "crash-recall" => match wire::parse_crash_recall(bytes) {
+            Err(r) => refusal(r),
+            Ok(r) => json!({"ok": true, "collisions": r.collisions, "geometry": r.geometry}),
+        },
         // A leaderboard fixture's body is its query string.
         "leaderboard" => match wire::parse_board(std::str::from_utf8(bytes).ok()?) {
             Err(r) => refusal(r),

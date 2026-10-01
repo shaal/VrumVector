@@ -144,6 +144,21 @@ test('different setups remain discoverable; joining and restoring keeps the sock
   assert.equal(c.sent.at(-1).setup.maxSpeed,14);
   s.restoreSetup();assert.equal(s.drivers().length,0);assert.equal(s.setup.maxSpeed,15);assert.equal(s.originalSetup,null);
   assert.equal(s.ws,c.socket);assert.equal(c.closed,0);assert.deepEqual([...c.storage],saved);
+  // X4: joining while a shared gate layout is on trial comes back to the page's own gates.
+  const own=setup.gates.map(([a,b])=>[{x:a.x+1,y:a.y},{x:b.x+1,y:b.y}]);
+  c.window.AdaptiveGates={pageGates:()=>own,isEnabled:()=>true,setEnabled(){}};
+  s.joinDriver('phone');
+  assert.deepEqual(s.originalSetup.setup.gates,own);
+  s.restoreSetup();
+  assert.deepEqual(s.setup.gates,own);
+  // Right after a trial ends (before the next tick): the live gates, not the last tick's.
+  c.window.AdaptiveGates.pageGates=()=>null;
+  const live=own.map(([a,b])=>[{x:a.x+1,y:a.y},{x:b.x+1,y:b.y}]);
+  s.info={...s.info,road:{...s.info.road,checkPointList:live}};
+  s.joinDriver('phone');
+  assert.deepEqual(s.originalSetup.setup.gates,live);
+  s.restoreSetup();
+  delete c.window.AdaptiveGates;
 });
 test('setup metadata retries until accepted, and an old acknowledgment cannot confirm a newer setup',()=>{
   const c=clientClock(),s=c.session;
@@ -209,6 +224,11 @@ test('lap clock requires every gate in order; pause and crash invalidate partial
   drive(-2,0);drive(2,0);circuit();assert.equal(lap.laps,1);assert.equal(lap.bestLap,5);
   drive(12,0);lap.invalidate();drive(12,18);drive(-12,18);drive(-12,0);drive(2,0);assert.equal(lap.laps,1);
   drive(12,0,true);circuit();assert.equal(lap.laps,1);
+  // The gates change under a lap (adaptive gates): fewer than it had reached starts it over.
+  lap.invalidate();drive(-2,0);drive(2,0);drive(12,0);drive(12,18);
+  assert.equal(lap.next,3);
+  assert.doesNotThrow(()=>lap.step({x:-12,y:0},gates.slice(0,2),1));
+  assert.deepEqual([lap.next,lap.running],[0,false]);
 });
 test('real WebSocket rooms relay live cars and renames, isolate tracks, and remove departures',async()=>{
   const a=await join('Silver Fox'),b=await join('Neon Lynx'),c=await join('Other track','b'.repeat(64));

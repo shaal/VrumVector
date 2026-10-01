@@ -13,11 +13,13 @@
 // - Pull: recall() asks for a pool for a track.
 // - Verify (X1): verify() has the service drive a brain it holds on a track;
 //   leaderboard() reads the fastest verified first laps.
+// - Crash maps (X4): sendCrash() gives where this page's cars crashed on a
+//   track (and its gate layout); recallCrashes() reads everyone's.
 // - Offline: a failure backs off (1 s, doubling, to 60 s) on a monotonic
 //   clock, sending and reading apart; training never waits on the network.
 // Answers are read as bytes and given to wire.js's parsers as they are.
 import {LIMITS, SERVICE_ERRORS, contributeBody, recallBody, verifyBody, boardQuery, parseContributeResponse, parseRecallResponse, parseErrorResponse, parseStatsResponse,
-  parseVerifyResponse, parseLeaderboardResponse} from './wire.js';
+  parseVerifyResponse, parseLeaderboardResponse, crashesBody, crashRecallBody, parseCrashesResponse, parseCrashRecallResponse} from './wire.js';
 
 export const OUTBOX_KEY = 'vv.cloudBrainOutbox';
 export const TOKEN_KEY = 'vv.cloudBrainToken';
@@ -75,6 +77,9 @@ export class CloudBrainClient {
     this.backoff = {send: {failures: 0, retryAt: 0, error: null}, read: {failures: 0, retryAt: 0, error: null}};
     this.flushing = null;
     this.verifyAt = 0;
+    // The service has crash maps (X4; one from before them answers 404: they
+    // stop for this page, and nothing backs off).
+    this.crashMaps = true;
     this.saveFailed = false;
     // The service refused this page's protocol or brain format: nothing more
     // is sent until the page reloads (a newer version).
@@ -349,6 +354,39 @@ export class CloudBrainClient {
     if (answer.error) { this.#failed('read', answer.error); return null; }
     if (answer.status !== 200) { this.#failed('read', parseErrorResponse(answer.bytes).error); return null; }
     const r = parseLeaderboardResponse(answer.bytes);
+    if (!r.ok) { this.#failed('read', 'bad-answer'); return null; }
+    this.#ok('read');
+    return r;
+  }
+
+  /**
+   * POST /v1/crashes (X4): a crash map for a track ({track (unit), map (144,
+   * length 1), deaths, collisions, layout ({geometry, survival, gates}) or
+   * null}). True when kept; false when refused or not sent (offline, backing
+   * off: the next map goes instead, nothing waits).
+   */
+  async sendCrash(crash) {
+    if (!this.crashMaps || !this.canTry('send')) return false;
+    const answer = await this.#request('/v1/crashes', crashesBody({token: this.token, ...crash}));
+    if (answer.error) { this.#failed('send', answer.error); return false; }
+    if (answer.status === 200) return parseCrashesResponse(answer.bytes).accepted === true;
+    if (answer.status === 404) { this.crashMaps = false; return false; }
+    const {error} = parseErrorResponse(answer.bytes);
+    if (answer.status >= 500 || answer.status === 429 || SERVICE_ERRORS.includes(error) || error === 'protocol') this.#failed('send', error);
+    return false;
+  }
+
+  /**
+   * POST /v1/crashes/recall (X4): {map (144 numbers, or null), contributors,
+   * tracks, layouts: [{gates, survival}]} near a track, or null.
+   */
+  async recallCrashes({track, collisions = 'off', geometry = null}) {
+    if (!this.crashMaps || !this.canTry('read') || !track) return null;
+    const answer = await this.#request('/v1/crashes/recall', crashRecallBody({track, collisions, geometry}));
+    if (answer.error) { this.#failed('read', answer.error); return null; }
+    if (answer.status === 404) { this.crashMaps = false; return null; }
+    if (answer.status !== 200) { this.#failed('read', parseErrorResponse(answer.bytes).error); return null; }
+    const r = parseCrashRecallResponse(answer.bytes);
     if (!r.ok) { this.#failed('read', 'bad-answer'); return null; }
     this.#ok('read');
     return r;

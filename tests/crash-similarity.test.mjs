@@ -128,7 +128,7 @@ function gatesPage(mode='off',globals={}){
   const context=vm.createContext({window,location:{search:''},URLSearchParams,console,road,canvas:{width:3200,height:1800},
     localStorage:{getItem:k=>storage.has(k)?storage.get(k):null,setItem:(k,v)=>storage.set(k,String(v))},document:{readyState:'complete'},...globals});
   vm.runInContext(gates,context);
-  return {AG:window.AdaptiveGates,window,road,storage,archived,setHits:h=>{hits=h;}};
+  return {AG:window.AdaptiveGates,window,road,storage,archived,context,setHits:h=>{hits=h;}};
 }
 // One generation of 20 cars: 10 died by contact near (2000, 900), 10 at the walls near (300, 50).
 function generation(mode){
@@ -378,3 +378,259 @@ test('C4: a few survivors of a pile-up in mid-course never prune the gate after 
   assert.equal(AG.getStatus().removeCount,0);
 });
 
+
+// X4 (docs/plan/cloud-brain.md): layouts from everyone's crash map.
+const alive=(mode,n)=>({...generation(mode),popStillAlive:n});        // survival n / 20
+// 100 cars (survival in steps of 0.01): 50 crash near (300, 50), the rest reach gate 2.
+function hundred(mode,n){
+  const N=100,xy=new Float32Array(N*2),causes=new Int8Array(N),popCheckpoints=new Int16Array(N);
+  for(let i=0;i<N;i++){causes[i]=i%3;xy[i*2]=i<50?300+i:NaN;xy[i*2+1]=i<50?50:NaN;popCheckpoints[i]=i<50?1:2;}
+  return {popN:N,popDeathXY:xy,popDeathCauses:causes,popCheckpoints,popStillAlive:n,fitness:2,learningContext:{collisions:mode}};
+}
+const sharedLayout=x=>[[{x,y:2},{x,y:98}],[{x:x+100,y:2},{x:x+100,y:98}],[{x:x+200,y:2},{x:x+200,y:98}],[{x:x+300,y:2},{x:x+300,y:98}],[{x:x+400,y:2},{x:x+400,y:98}]];
+// A page whose bridge recalls what it archived (local hits) and the shared layouts given.
+function livePage(globals={}){
+  const page=gatesPage('off',globals);
+  page.AG.setEnabled(true);
+  const walls=page.AG.wallSignature();
+  const shared=(cps,extra={})=>({cps,geometrySig:walls,similarity:.9,survival:.9,collisions:'off',shared:true,...extra});
+  const local=()=>page.archived.filter(a=>a.cps).map(a=>({cps:a.cps,geometrySig:a.geometrySig,similarity:.99,survival:a.survival,collisions:a.collisions||'off'}));
+  const gen=(n,sharedHits=[],data=alive('off',n))=>{page.setHits([...local(),...sharedHits]);page.AG.onGenEnd(data);};
+  return {...page,walls,shared,gen,gates:()=>plain(page.road.roadEditor.checkPointListEditor)};
+}
+
+test('X4: shared layouts are for the walls alone, the same signature with adaptive gates on or off',()=>{
+  const page=gatesPage('off'),{AG}=page;
+  const before=AG.wallSignature();
+  assert.equal(AG.geometrySignature(),before,'no baseline yet: the same');
+  AG.setEnabled(true);
+  assert.notEqual(AG.geometrySignature(),before,'local memory adds the baseline');
+  assert.equal(AG.wallSignature(),before);
+  AG.setEnabled(false);
+  assert.equal(AG.wallSignature(),before);
+  // A shared layout under the baseline signature is not for these walls.
+  AG.setEnabled(true);
+  page.setHits([{cps:sharedLayout(10),geometrySig:AG.geometrySignature(),similarity:.9,survival:.9,collisions:'off',shared:true}]);
+  AG.onGenEnd(alive('off',4));
+  assert.equal(AG._state.trial,null);
+  // Archives carry both.
+  assert.equal(page.archived.at(-1).walls,before);
+  assert.equal(page.archived.at(-1).geometrySig,AG.geometrySignature());
+});
+
+test('X4: a shared layout gets a one-generation trial, unsaved and unarchived; undone without a 3-point rise, then shared layouts wait 10 generations',()=>{
+  const p=livePage(),{AG,storage,archived}=p;
+  const before=p.gates();
+  storage.delete('checkPointList');
+  p.gen(5,[p.shared(sharedLayout(10))]);                    // survival 0.25: 0.9 beats it
+  assert.deepEqual(p.gates(),sharedLayout(10));
+  assert.match(AG.getStatus().status,/applied a shared layout on trial/);
+  assert.equal(storage.has('checkPointList'),false,'not saved while on trial');
+  assert.equal([...storage.keys()].some(k=>k.startsWith('vv_adapt_gates_')),false,'nor remembered');
+  assert.deepEqual(plain(archived.at(-1).cps),before,'the generation\'s map, with the gates it drove');
+  assert.equal(archived.at(-1).measured,true);
+  const archivedBefore=archived.length;
+  // The trial generation: 0.20, no rise. The gates go back, that
+  // generation is not archived, the trend goes on from before the trial.
+  p.gen(4,[p.shared(sharedLayout(10)),p.shared(sharedLayout(20))]);
+  assert.deepEqual(p.gates(),before);
+  assert.match(AG.getStatus().status,/shared layout did not help \(survival 20% vs 25%\) · gates restored/);
+  assert.equal(archived.length,archivedBefore);
+  assert.equal(AG._state.lastSurvival,.25);
+  // Shared layouts wait 10 generations; a local one does not.
+  for(let g=0;g<9;g++){p.gen(5,[p.shared(sharedLayout(20))]);assert.equal(AG._state.trial,null,'gen '+g);}
+  p.gen(5,[p.shared(sharedLayout(20)),p.shared(sharedLayout(30),{shared:false,geometrySig:AG.geometrySignature(),survival:.5})]);
+  assert.deepEqual(p.gates(),sharedLayout(30),'a local layout applies while shared ones wait');
+  // The 11th: the untried one gets its trial; the tried one never again.
+  p.gen(5,[p.shared(sharedLayout(10),{survival:1}),p.shared(sharedLayout(20))]);
+  assert.deepEqual(p.gates(),sharedLayout(20));
+  p.gen(5);                                                 // it fails too
+  // The same walls again (a preset reload, a multiplayer visit): the wait
+  // starts over, what was tried and failed is remembered.
+  AG.onTrackChange();
+  const seen=AG._state.sharedSeen[p.walls];
+  assert.deepEqual([AG._state.trial,AG._state.sharedWaitUntil,seen.tried.size,seen.failed.size,seen.fails],[null,0,2,2,2]);
+  p.gen(5,[p.shared(sharedLayout(10),{survival:1}),p.shared(sharedLayout(20),{survival:1})]);
+  assert.equal(AG._state.trial,null);
+  // Other walls have their own.
+  p.road.roadEditor.points[1].x+=40;
+  AG.onTrackChange();
+  const walls=AG.wallSignature();
+  assert.notEqual(walls,p.walls);
+  p.gen(5,[p.shared(sharedLayout(10),{geometrySig:walls})]);
+  assert.ok(AG._state.trial);
+  assert.equal(AG._state.sharedSeen[walls].tried.size,1);
+});
+
+test('X4: a layout that failed its trial never comes back, not even through the page\'s own archive',()=>{
+  // Survival 0.5 puts the shared layout on trial; 0.2 fails it; later
+  // generations at 0.45, 0.3, 0.1 would take any local layout archived at 0.5.
+  const p=livePage(),{AG,archived}=p;
+  const S=sharedLayout(10),key=JSON.stringify(S);
+  p.gen(10,[p.shared(S,{survival:.95})]);
+  assert.deepEqual(p.gates(),S);
+  p.gen(4);
+  assert.notDeepEqual(p.gates(),S);
+  for(const n of [9,6,2]){
+    p.gen(n);
+    assert.notDeepEqual(p.gates(),S,'survival '+n/20);
+    assert.ok(archived.every(a=>JSON.stringify(plain(a.cps))!==key),'never archived');
+  }
+  // Even if the archive held it (an older page), it is not taken again.
+  p.setHits([{cps:S,geometrySig:AG.geometrySignature(),similarity:.99,survival:.9,collisions:'off'}]);
+  AG.onGenEnd(alive('off',2));
+  assert.notDeepEqual(p.gates(),S);
+});
+
+test('X4: a shared layout kept after its trial is saved, archived and shared as the page\'s own',()=>{
+  const p=livePage(),{AG,storage,archived}=p;
+  const saved=[],set=storage.set.bind(storage);
+  storage.set=(k,v)=>{if(k==='checkPointList')saved.push(JSON.parse(v));return set(k,v);};
+  p.gen(4,[p.shared(sharedLayout(10))]);
+  assert.equal(saved.length,0);
+  p.gen(5);                                                 // 0.25 >= 0.2 + 0.03: kept
+  assert.deepEqual(saved[0],sharedLayout(10),'saved first, then adapted from as the page\'s own');
+  assert.doesNotMatch(AG.getStatus().status,/did not help/);
+  assert.equal(AG._state.trial,null);
+  assert.ok(archived.some(a=>a.measured&&JSON.stringify(plain(a.cps))===JSON.stringify(sharedLayout(10))&&a.survival===.25));
+});
+
+test('X4: a trial is kept on a rise of 3 points or more (0.25 to 0.28, 0.26 to 0.29), not of 2 (to 0.27)',()=>{
+  for(const [from,n,kept] of [[25,27,false],[25,28,true],[26,29,true],[38,41,true],[26,28,false]]){
+    const p=livePage(),before=p.gates();
+    p.gen(from,[p.shared(sharedLayout(10))],hundred('off',from));
+    assert.deepEqual(p.gates(),sharedLayout(10));
+    p.gen(n,[],hundred('off',n));
+    assert.equal(/did not help/.test(p.AG.getStatus().status),!kept,p.AG.getStatus().status);
+    if(!kept)assert.deepEqual(p.gates(),before);
+  }
+});
+
+test('X4: after 3 failed trials a track tries no more shared layouts',()=>{
+  const p=livePage(),{AG}=p;
+  for(let k=0;k<3;k++){
+    p.gen(4,[p.shared(sharedLayout(10+k))]);
+    assert.ok(AG._state.trial,'trial '+k);
+    p.gen(4);
+    for(let g=0;g<10;g++)p.gen(4);
+  }
+  assert.equal(AG._state.sharedSeen[p.walls].fails,3);
+  p.gen(4,[p.shared(sharedLayout(50))]);
+  assert.equal(AG._state.trial,null);
+});
+
+test('X4: a shared layout this page could not have made is never tried',()=>{
+  const page=gatesPage('off'),{AG,road}=page;
+  AG.setEnabled(true);
+  const walls=AG.wallSignature();
+  const hit=cps=>({cps,geometrySig:walls,similarity:.9,survival:.9,collisions:'off',shared:true});
+  const many=Array.from({length:8},(_,i)=>[{x:10+i*50,y:2},{x:10+i*50,y:98}]);   // 5 baseline gates: at most 7
+  const off=sharedLayout(10).map((g,i)=>i===2?[{x:-5,y:2},g[1]]:g);
+  const far=sharedLayout(10).map((g,i)=>i===1?[g[0],{x:g[1].x,y:1800.5}]:g);
+  const wide=sharedLayout(10).map((g,i)=>i===1?[g[0],{x:3200.5,y:g[1].y}]:g);
+  const nan=sharedLayout(10).map((g,i)=>i===0?[{x:NaN,y:2},g[1]]:g);
+  for(const bad of [many,off,far,wide,nan,[sharedLayout(10)[0]],sharedLayout(10).map(g=>[g[0]])]){
+    page.setHits([hit(bad)]);
+    AG.onGenEnd(alive('off',4));
+    assert.match(AG.getStatus().status,/none beat survival/,JSON.stringify(bad));
+    assert.equal(AG._state.trial,null);
+  }
+  // Seven gates (as many as adaptive gates may grow to), ends on the canvas's edge: tried.
+  const edge=many.slice(0,7).map((g,i)=>i===6?[{x:3200,y:0},{x:3200,y:1800}]:g);
+  page.setHits([hit(edge)]);
+  AG.onGenEnd(alive('off',4));
+  assert.deepEqual(plain(road.roadEditor.checkPointListEditor),edge);
+});
+
+test('X4: gates adaptive gates moved to are archived as not measured; the generation\'s own are',()=>{
+  const page=gatesPage('off'),{AG,archived}=page;
+  AG.setEnabled(true);
+  for(let g=0;g<3;g++)AG.onGenEnd(generation('off'));
+  const byGen=archived.map(a=>a.measured);
+  assert.ok(byGen.includes(true)&&byGen.includes(false),JSON.stringify(byGen));
+  assert.equal(archived[0].measured,true);
+});
+
+test('X4: a trial ends with the page\'s gates back: adaptive gates off, a Solid cars switch, another mode, leaving training, a reset',()=>{
+  const ends=[
+    ['off',p=>p.AG.setEnabled(false)],
+    ['switch',p=>p.AG.onCollisionsChange()],
+    ['switch outside training',p=>p.AG.onCollisionsChange(),{phase:3}],
+    ['endTrial',p=>assert.equal(p.AG.endTrial(),true)],
+    ['another mode',p=>p.AG.onGenEnd(alive('solid/k8',9))],
+  ];
+  for(const [name,end,globals] of ends){
+    const p=livePage(globals),before=p.gates();
+    p.gen(4,[p.shared(sharedLayout(10))]);
+    assert.deepEqual(p.gates(),sharedLayout(10),name);
+    end(p);
+    assert.deepEqual(p.gates(),before,name);
+    assert.equal(p.AG._state.trial,null,name);
+    assert.deepEqual(JSON.parse(p.storage.get('checkPointList')),before,name+': saved back');
+  }
+  const p=livePage();
+  p.gen(4,[p.shared(sharedLayout(10))]);
+  p.AG.resetToBaseline();
+  assert.equal(p.AG._state.trial,null);
+  assert.equal(p.AG.endTrial(),false,'nothing on trial');
+});
+
+test('X4: a generation whose gates changed while it drove is archived as not measured (adaptive gates on or off)',()=>{
+  const p=livePage(),{AG,archived}=p;
+  // The first archive of a generation is its own map (then come the next gates').
+  const own=()=>{const at=archived.length;return ()=>archived[at].measured;};
+  let first=own();p.gen(4);
+  assert.equal(first(),true);
+  AG.resetToBaseline();                                     // mid-generation
+  first=own();p.gen(4);
+  assert.equal(first(),false,'the generation drove other gates');
+  assert.equal(AG.gatesChangedLastGen(),true);
+  first=own();p.gen(4);
+  assert.equal(first(),true,'the next one drove these');
+  assert.equal(AG.gatesChangedLastGen(),false);
+  // Off: main.js's passive archive asks after onGenEnd.
+  p.gen(4,[p.shared(sharedLayout(20))]);
+  assert.ok(AG._state.trial);
+  AG.setEnabled(false);                                     // the trial ends mid-generation
+  AG.onGenEnd(alive('off',4));
+  assert.equal(AG.gatesChangedLastGen(),true);
+  AG.onGenEnd(alive('off',4));
+  assert.equal(AG.gatesChangedLastGen(),false);
+});
+
+test('X4: Back and Customize Track end a trial before phase 3 saves the track',async()=>{
+  const buttons=await readFile(new URL('../AI-Car-Racer/buttonResponse.js',import.meta.url),'utf8');
+  for(const leave of ['backPhase','customizeTrack']){
+    const p=livePage(),{context,road,storage}=p,before=p.gates();
+    Object.assign(road.roadEditor,{checkPointModeChange(){},editModeChange(){}});
+    road.getTrack=()=>{};
+    p.window.__rvBridge.endPhase4Trajectory=()=>{};
+    Object.assign(context,{phase:4,phaseToLayout(){},embedCurrentTrack(){}});
+    vm.runInContext(buttons,context);
+    p.gen(4,[p.shared(sharedLayout(10))]);
+    assert.deepEqual(p.gates(),sharedLayout(10));
+    vm.runInContext(leave+'()',context);
+    while(context.phase<3)vm.runInContext('nextPhase()',context);
+    assert.equal(context.phase,3,leave);
+    assert.deepEqual(JSON.parse(storage.get('checkPointList')),before,leave+': the page\'s gates saved');
+    assert.equal(p.AG._state.trial,null);
+  }
+});
+
+test('X4: a generation begun with the gates in place is measured; pageGates gives the page\'s own gates during a trial',()=>{
+  const p=livePage(),{AG,archived}=p,before=p.gates();
+  // Back to the editor ends a trial outside any generation; the next
+  // generation begins (main.js performBegin) with the page's gates.
+  p.gen(4,[p.shared(sharedLayout(10))]);
+  assert.deepEqual(plain(AG.pageGates()),before,'what a multiplayer visit comes back to');
+  AG.endTrial();
+  assert.equal(AG.pageGates(),null);
+  AG.onGatesSent();
+  const at=archived.length;
+  p.gen(4);
+  assert.equal(archived[at].measured,true);
+  // A shared layout claiming 0.29 is chosen at 0.26 (in whole cars, as it would be kept).
+  const q=livePage();
+  q.gen(26,[q.shared(sharedLayout(20),{survival:.29})],hundred('off',26));
+  assert.deepEqual(q.gates(),sharedLayout(20));
+});

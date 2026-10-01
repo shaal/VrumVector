@@ -438,6 +438,12 @@ function resetTrainCount(){
     window.__rvLastSeedIdsForGraph = null;
 }
 function nextPhase(){
+    // X4 — a shared gate layout still on trial (only ever in training) is
+    // not this track's: any phase change (Back, Customize Track) puts the
+    // page's own gates back before phase 3 saves the track.
+    try {
+        if (window.AdaptiveGates && window.AdaptiveGates.endTrial) window.AdaptiveGates.endTrial();
+    } catch (e) { console.warn('[adaptiveGates] ending the trial failed', e); }
     phase+=1;
     switch(phase){
         case 1:

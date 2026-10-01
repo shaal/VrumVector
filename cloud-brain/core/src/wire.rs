@@ -98,6 +98,12 @@ pub enum Reason {
     /// A leaderboard query without a track key, or with numbers that do
     /// not read (X1).
     LeaderboardQuery,
+    /// A crash map that is not 144 finite, non-negative numbers of length 1,
+    /// or a count of deaths out of range (X4).
+    CrashMap,
+    /// A shared gate layout that does not read: its walls' signature, gates
+    /// or survival (X4).
+    CrashLayout,
     RateLimited,
     Disabled,
     ServerError,
@@ -137,6 +143,8 @@ impl Reason {
             VerifyContext => "verify-context",
             BrainUnknown => "brain-unknown",
             LeaderboardQuery => "leaderboard-query",
+            CrashMap => "crash-map",
+            CrashLayout => "crash-layout",
             RateLimited => "rate-limited",
             Disabled => "disabled",
             ServerError => "server-error",
@@ -785,4 +793,106 @@ pub fn parse_board(query: &str) -> Result<Board, Reason> {
 /// An error answer's body; its HTTP status is `reason.status()`.
 pub fn error_body(reason: Reason) -> String {
     serde_json::json!({"protocol": PROTOCOL, "error": reason.code()}).to_string()
+}
+
+// ─── crash maps (X4) ────────────────────────────────────────────────────────
+
+/// A crash map: where cars died on a track, 16 × 9 cells over the canvas
+/// (crashMapCodec.js: log1p of the deaths in each cell, then length 1; car
+/// contact deaths left out).
+pub const CRASH_DIM: usize = 144;
+/// Deaths a crash map may count (the app needs 3 to make one).
+pub const CRASH_DEATHS: (f64, f64) = (3.0, 1_000_000.0);
+
+/// A gate layout adaptive gates settled on (X4): the walls it is for
+/// (adaptiveGates.js `geometrySignature`: `g` and up to 8 hex digits), its
+/// gates and the share of cars that survived with them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CrashLayout {
+    pub geometry: String,
+    pub gates: Vec<[[f64; 2]; 2]>,
+    pub survival: f64,
+}
+
+/// POST /v1/crashes.
+#[derive(Clone, Debug)]
+pub struct Crashes {
+    pub token: String,
+    pub track: Vec<f32>,
+    pub map: Vec<f32>,
+    pub deaths: u64,
+    /// The collision mode the cars drove in (`collisions_label`).
+    pub collisions: String,
+    pub layout: Option<CrashLayout>,
+}
+
+/// POST /v1/crashes/recall.
+#[derive(Clone, Debug)]
+pub struct CrashRecall {
+    pub track: Vec<f32>,
+    pub collisions: String,
+    /// The page's walls (`geometrySignature`): its shared layouts.
+    pub geometry: Option<String>,
+}
+
+/// adaptiveGates.js `geometrySignature`: `g` and 1 to 8 lowercase hex digits.
+pub fn is_geometry_sig(s: &str) -> bool {
+    s.len() >= 2 && s.len() <= 9 && s.starts_with('g') && s[1..].bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+fn collisions_of(v: Option<&Value>) -> String {
+    match v {
+        v if absent(v) => "off".into(),
+        Some(Value::String(label)) if printable(label) => collisions_label(label),
+        _ => "unknown".into(),
+    }
+}
+
+fn crash_layout(v: &Value) -> Option<CrashLayout> {
+    let l = v.as_object()?;
+    let geometry = string(l.get("geometry")).filter(|g| is_geometry_sig(g))?.to_string();
+    let survival = is_num(l.get("survival"), 0.0, 1.0)?;
+    let gates = l.get("gates")?.as_array().filter(|a| (1..=GATES).contains(&a.len()))?;
+    let gates = gates
+        .iter()
+        .map(|gate| {
+            let ends = gate.as_array().filter(|a| a.len() == 2)?;
+            Some([coordinate(&ends[0])?, coordinate(&ends[1])?])
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(CrashLayout { geometry, gates, survival: plain(survival) })
+}
+
+/// POST /v1/crashes (X4). In order: the body (no brain format), token, the
+/// track (a unit embedding), the crash map (144 finite, non-negative numbers
+/// of length 1) and its deaths (3 to 1 000 000), the collision mode (a
+/// label; absent is off), the layout when given.
+pub fn parse_crashes(bytes: &[u8]) -> Result<Crashes, Reason> {
+    let body = read(bytes, REQUEST_BYTES, false)?;
+    let token = token(&body)?;
+    let track = unit_vector(decode_f32(body.get("track"), TRACK_DIM), TRACK_DIM).ok_or(Reason::Track)?;
+    let map = decode_f32(body.get("map"), CRASH_DIM)
+        .filter(|m| m.iter().all(|x| x.is_finite() && *x >= 0.0) && is_unit(m))
+        .ok_or(Reason::CrashMap)?;
+    let deaths = is_int(body.get("deaths"), CRASH_DEATHS.0, CRASH_DEATHS.1).ok_or(Reason::CrashMap)? as u64;
+    let collisions = collisions_of(body.get("collisions"));
+    let layout = match body.get("layout") {
+        l if absent(l) => None,
+        Some(l) => Some(crash_layout(l).ok_or(Reason::CrashLayout)?),
+        None => None,
+    };
+    Ok(Crashes { token, track, map: map.into_iter().map(|x| x + 0.0).collect(), deaths, collisions, layout })
+}
+
+/// POST /v1/crashes/recall (X4): the body (no brain format), the track, the
+/// collision mode, the walls' signature when given.
+pub fn parse_crash_recall(bytes: &[u8]) -> Result<CrashRecall, Reason> {
+    let body = read(bytes, REQUEST_BYTES, false)?;
+    let track = unit_vector(decode_f32(body.get("track"), TRACK_DIM), TRACK_DIM).ok_or(Reason::Track)?;
+    let collisions = collisions_of(body.get("collisions"));
+    let geometry = match body.get("geometry") {
+        g if absent(g) => None,
+        g => Some(string(g).filter(|g| is_geometry_sig(g)).ok_or(Reason::CrashLayout)?.to_string()),
+    };
+    Ok(CrashRecall { track, collisions, geometry })
 }

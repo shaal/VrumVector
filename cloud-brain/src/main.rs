@@ -13,9 +13,9 @@
 
 use brain::brain::{
     contributor_id, parse_slots, resolve_ids, slots_text, Brain, BrainRow, Config, FeedbackRow, Limited, Loaded, Page, Refusal, Result as StoreResult,
-    Slot, Store, StoreError, StoredBrain, TrackRow, Training, Usage, VerifiedRow,
+    Slot, Store, StoreError, StoredBrain, TrackRow, Training, Usage, VerifiedRow, CrashRow,
 };
-use brain::wire::{self, error_body, Reason};
+use brain::wire::{self, error_body, CrashLayout, Reason};
 use futures_util::StreamExt;
 use serde::Serialize;
 use std::cell::RefCell;
@@ -236,19 +236,19 @@ async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
         return with_cors(response, cors);
     }
     let limiter = match (&method, path.as_str()) {
-        (Method::Post, "/v1/contribute") => "WRITE_LIMIT",
+        (Method::Post, "/v1/contribute" | "/v1/crashes") => "WRITE_LIMIT",
         // A forget can read every feedback record: a few a minute.
         (Method::Post, "/v1/forget") => "FORGET_LIMIT",
         // A verification runs the simulator (up to 7 200 frames).
         (Method::Post, "/v1/verify") => "VERIFY_LIMIT",
-        (Method::Post, "/v1/recall") | (Method::Get, "/v1/stats" | "/v1/leaderboard") => "READ_LIMIT",
+        (Method::Post, "/v1/recall" | "/v1/crashes/recall") | (Method::Get, "/v1/stats" | "/v1/leaderboard") => "READ_LIMIT",
         _ => return with_cors(Response::error("Not found", 404)?, cors),
     };
     if over_rate_limit(&env, limiter, &req).await {
         return with_cors(limited_response(RATE_WINDOW_S)?, cors);
     }
     let forwarded = match (method, path.as_str()) {
-        (Method::Post, "/v1/recall" | "/v1/contribute" | "/v1/forget" | "/v1/verify") => match capped_body(&mut req, wire::limits::REQUEST_BYTES).await {
+        (Method::Post, "/v1/recall" | "/v1/contribute" | "/v1/forget" | "/v1/verify" | "/v1/crashes" | "/v1/crashes/recall") => match capped_body(&mut req, wire::limits::REQUEST_BYTES).await {
             Ok(None) => return with_cors(error_response(Reason::BodyTooLarge)?, cors),
             Ok(Some(body)) => {
                 let mut init = RequestInit::new();
@@ -349,6 +349,14 @@ const MIGRATIONS: &[&[&str]] = &[
          contributor TEXT NOT NULL, created INTEGER NOT NULL, PRIMARY KEY (brain, track, profile, max_speed, traction, seconds))",
         "CREATE INDEX IF NOT EXISTS verified_board ON verified (track, max_speed, traction, lap_frames)",
     ],
+    // 4 (X4): everyone's crash maps: a contributor's latest a track and
+    // collision mode, with the best gate layout they shared there (null
+    // columns: none).
+    &[
+        "CREATE TABLE IF NOT EXISTS crash_maps (track TEXT NOT NULL, mode TEXT NOT NULL, contributor TEXT NOT NULL, map BLOB NOT NULL, \
+         deaths INTEGER NOT NULL, geometry TEXT, gates TEXT, survival REAL, updated INTEGER NOT NULL, PRIMARY KEY (track, mode, contributor))",
+        "CREATE INDEX IF NOT EXISTS crash_maps_contributor ON crash_maps (contributor)",
+    ],
 ];
 
 fn init_schema(state: &State) -> Result<()> {
@@ -384,13 +392,16 @@ impl DurableObject for SharedBrain {
         // Schema before any request.
         let init_error = init_schema(&state).err().map(|e| e.to_string());
         let spike_enabled = env.var("CLOUD_BRAIN_SPIKE").map(|v| v.to_string() == "1").unwrap_or(false);
-        let d = Config::default().quota;
+        let base = Config::default();
+        let d = base.quota;
         let quota = Usage {
             requests: number(&env, "QUOTA_REQUESTS", d.requests),
             brains: number(&env, "QUOTA_BRAINS", d.brains),
             feedback: number(&env, "QUOTA_FEEDBACK", d.feedback),
         };
-        let config = Config { quota, ..Config::default() };
+        // Fewer tracks than the default, never more (memory is sized for it).
+        let max_tracks = number(&env, "MAX_TRACKS", base.max_tracks as u64).clamp(1, base.max_tracks as u64) as usize;
+        let config = Config { quota, max_tracks, ..base };
         let limits = ["WRITE_LIMIT", "READ_LIMIT", "FORGET_LIMIT", "VERIFY_LIMIT"].iter().all(|name| env.rate_limiter(name).is_ok());
         let frames = number(&env, "TRAIN_FRAMES", 0);
         // At most ~1 s of CPU a session, and a session a week at least.
@@ -440,6 +451,8 @@ impl DurableObject for SharedBrain {
             (Method::Post, "/v1/verify") => Route::Verify,
             (Method::Get, "/v1/stats") => Route::Stats,
             (Method::Get, "/v1/leaderboard") => Route::Leaderboard,
+            (Method::Post, "/v1/crashes") => Route::Crashes,
+            (Method::Post, "/v1/crashes/recall") => Route::CrashRecall,
             // Before any body is read or the brain built.
             _ => return Response::error("Not found", 404),
         };
@@ -466,6 +479,8 @@ impl DurableObject for SharedBrain {
             Route::Verify => wire::parse_verify(&body).map(Job::Verify),
             Route::Stats => Ok(Job::Stats),
             Route::Leaderboard => wire::parse_board(url.query().unwrap_or("")).map(Job::Leaderboard),
+            Route::Crashes => wire::parse_crashes(&body).map(Job::Crashes),
+            Route::CrashRecall => wire::parse_crash_recall(&body).map(Job::CrashRecall),
         };
         let job = match job {
             Ok(job) => job,
@@ -547,6 +562,8 @@ enum Route {
     Verify,
     Stats,
     Leaderboard,
+    Crashes,
+    CrashRecall,
 }
 
 /// A parsed request.
@@ -558,6 +575,8 @@ enum Job {
     Verify(wire::Verify),
     Stats,
     Leaderboard(wire::Board),
+    Crashes(wire::Crashes),
+    CrashRecall(wire::CrashRecall),
 }
 
 enum Answer {
@@ -592,6 +611,14 @@ fn run(brain: &mut Brain, store: &mut SqlStore, job: Job, now: u64) -> StoreResu
         }
         Job::Stats => json(&brain.stats(now, store)?),
         Job::Leaderboard(board) => json(&brain.leaderboard(&board, store)?),
+        Job::Crashes(c) => {
+            let contributor = contributor_id(&c.token);
+            match brain.crashes(c, &contributor, now, store)? {
+                Ok(answer) => json(&answer),
+                Err(limited) => Ok(Answer::Limited(limited)),
+            }
+        }
+        Job::CrashRecall(r) => json(&brain.crash_recall(&r, store)?),
     }
 }
 
@@ -730,6 +757,7 @@ impl Store for SqlStore {
         )
     }
     fn delete_track(&mut self, id: &str) -> StoreResult<()> {
+        self.run("DELETE FROM crash_maps WHERE track = ?", vec![id.into()])?;
         self.run("DELETE FROM tracks WHERE id = ?", vec![id.into()])
     }
     fn put_brain(&mut self, row: &BrainRow, vector: &[f32]) -> StoreResult<()> {
@@ -952,6 +980,66 @@ impl Store for SqlStore {
     }
     fn pin(&mut self, track: &str, digest: &str, now: u64) -> StoreResult<()> {
         self.run("INSERT OR IGNORE INTO geometries (track, digest, created) VALUES (?, ?, ?)", vec![track.into(), digest.into(), (now as i64).into()])
+    }
+    fn crashes_of(&self, track: &str, mode: Option<&str>) -> StoreResult<Vec<CrashRow>> {
+        let mut rows = Vec::new();
+        const COLUMNS: &str = "SELECT track, mode, contributor, map, deaths, geometry, gates, survival, updated FROM crash_maps WHERE track = ?";
+        let (query, bindings) = match mode {
+            Some(m) => (format!("{COLUMNS} AND mode = ?"), vec![track.into(), m.into()]),
+            None => (COLUMNS.to_string(), vec![track.into()]),
+        };
+        self.each(&query, bindings, |r| {
+            if let (Some(track), Some(mode), Some(contributor), Some(map), Some(deaths), Some(updated)) =
+                (text(&r[0]), text(&r[1]), text(&r[2]), blob(&r[3]), int(&r[4]), int(&r[8]))
+            {
+                // A layout reads back whole or not at all.
+                let layout = match (text(&r[5]), text(&r[6]).and_then(|g| serde_json::from_str::<Vec<[[f64; 2]; 2]>>(&g).ok()), real(&r[7])) {
+                    (Some(geometry), Some(gates), Some(survival)) => Some(CrashLayout { geometry, gates, survival }),
+                    _ => None,
+                };
+                if map.len() == wire::CRASH_DIM {
+                    rows.push(CrashRow { track, mode, contributor, map, deaths, layout, updated });
+                }
+            }
+            Ok(())
+        })?;
+        Ok(rows)
+    }
+    fn put_crash(&mut self, row: &CrashRow) -> StoreResult<()> {
+        let (geometry, gates, survival) = match &row.layout {
+            Some(l) => (
+                l.geometry.as_str().into(),
+                serde_json::to_string(&l.gates).map_err(|e| StoreError(e.to_string()))?.into(),
+                l.survival.into(),
+            ),
+            None => (SqlStorageValue::Null, SqlStorageValue::Null, SqlStorageValue::Null),
+        };
+        self.run(
+            "INSERT OR REPLACE INTO crash_maps (track, mode, contributor, map, deaths, geometry, gates, survival, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            vec![
+                row.track.as_str().into(),
+                row.mode.as_str().into(),
+                row.contributor.as_str().into(),
+                f32_bytes(&row.map).into(),
+                (row.deaths as i64).into(),
+                geometry,
+                gates,
+                survival,
+                (row.updated as i64).into(),
+            ],
+        )
+    }
+    fn delete_crash(&mut self, row: &CrashRow) -> StoreResult<()> {
+        self.run("DELETE FROM crash_maps WHERE track = ? AND mode = ? AND contributor = ?", vec![row.track.as_str().into(), row.mode.as_str().into(), row.contributor.as_str().into()])
+    }
+    fn forget_crashes(&mut self, contributor: &str) -> StoreResult<usize> {
+        let mut n = 0;
+        self.each("SELECT COUNT(*) FROM crash_maps WHERE contributor = ?", vec![contributor.into()], |r| {
+            n += r.first().and_then(int).unwrap_or(0) as usize;
+            Ok(())
+        })?;
+        self.run("DELETE FROM crash_maps WHERE contributor = ?", vec![contributor.into()])?;
+        Ok(n)
     }
     fn last_contribution(&self) -> StoreResult<Option<u64>> {
         let mut last = None;

@@ -58,6 +58,19 @@ async function run(fixture, body = fixture.body) {
     const r = wire.parseBoard(typeof body === 'string' ? body : new TextDecoder().decode(body));
     return r.ok ? r : refusal(r);
   }
+  if (route === 'crashes') {
+    const r = wire.parseCrashes(body);
+    return r.ok ? {ok: true, deaths: r.deaths, collisions: r.collisions, layout: r.layout && {geometry: r.layout.geometry, survival: r.layout.survival, gates: r.layout.gates.length}} : refusal(r);
+  }
+  if (route === 'crash-recall') {
+    const r = wire.parseCrashRecall(body);
+    return r.ok ? {ok: true, collisions: r.collisions, geometry: r.geometry} : refusal(r);
+  }
+  if (route === 'crashes-response') return wire.parseCrashesResponse(body);
+  if (route === 'crash-recall-response') {
+    const r = wire.parseCrashRecallResponse(body);
+    return r.ok ? {ok: true, map: !!r.map, contributors: r.contributors, tracks: r.tracks, survivals: r.layouts.map(l => l.survival)} : r;
+  }
   if (route === 'verify-response') return wire.parseVerifyResponse(body);
   if (route === 'leaderboard-response') return wire.parseLeaderboardResponse(body);
   if (route === 'recall-response') {
@@ -101,7 +114,7 @@ test('every fixture gives its expected result', async () => {
       if ('body' in fixture) assert.deepEqual(await run(fixture), fixture.expect, `${kind}/${name} as text`);
       // A valid request is accepted whole, a valid answer read; an invalid
       // fixture refuses something (answers: refused, or an unknown error).
-      const answer = ['contribute-response', 'stats-response', 'error-response', 'verify-response', 'leaderboard-response'].includes(fixture.route);
+      const answer = ['contribute-response', 'stats-response', 'error-response', 'verify-response', 'leaderboard-response', 'crashes-response', 'crash-recall-response'].includes(fixture.route);
       const refusedSomething = answer ? !result.ok || result.error === 'server-error'
         : !result.ok || result.rejected?.length || result.feedbackRejected?.length || result.dropped?.length;
       assert.equal(!!refusedSomething, kind === 'invalid', `${kind}/${name}`);
