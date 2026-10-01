@@ -723,7 +723,8 @@ The shared brain is deployed with the site, on Workers Paid (D2).
 | A client cannot choose its rate-limit key | a request with its own `CF-Connecting-IP` header gets 403 from Cloudflare before the Worker; without it, 400 for an invalid body |
 | The per-address limits act | 106 invalid writes and 70 reads in about 2 minutes all passed (the binding is "permissive, eventually consistent": counters cached per machine); 300 parallel reads then got 5 refusals and the next 60 got 28 (`429`) |
 | The breaker | on the PR 55 preview, `wrangler secret put DISABLE_BRAIN`: `/health` `"brain":false` and `/v1/stats` 503 within seconds; `wrangler secret delete`: `"brain":true` again |
-| CI | `cloud-brain.yml` on PR 55: native tests, the wasm check, client, crash maps, the Worker suite and the browser suite on Ubuntu (stage 7 now waits out A's send backoff: A and B share one address and its write limit) |
+| CI | `cloud-brain.yml` on PR 55 passes on Ubuntu: native tests, the wasm check, client, crash maps, the Worker suite and the browser suite. Its first runs found three tests that assumed a fast machine, now fixed: browser stages 5 and 7 wait out a send backoff (A and B share one address and its limits; a failure now prints the client's state), and the X2 training test follows a cloud brain's lineage back to a seed (sessions run every second) |
+| Each push to the PR | 5 preview deploys, each with the health check passing; from the second on, `/health` reported the commit just built (`build.commit`), and the toolchain came from the cache |
 
 ### Limits
 

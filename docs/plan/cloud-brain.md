@@ -559,7 +559,7 @@ far less in practice).
     Measured at the caps: memory as CB2 (70.1 MiB), a forget 18 ms to 3 s.
     The valuation at the cap is not cached (a contribution there 64 to 85
     ms; the quotas did not raise the rate it can be asked at).
-- [ ] **CB5 — Deploy (needs your OK).** `deploy.yml` step like the multiplayer
+- [x] **CB5 — Deploy (needs your OK).** `deploy.yml` step like the multiplayer
   one (`vectorvroom-brain`, PR previews `vectorvroom-brain-pr-<n>`) with cached
   toolchain; writes the endpoint into `AI-Car-Racer/cloud/config.json` (CB3
   reads it; `{"endpoint": null}` hides the Shared option);
@@ -581,6 +581,15 @@ far less in practice).
   and a quota-exhausted client retries about once a minute (the client
   does not read `Retry-After` yet).
   depends: CB3, CB4
+  - [x] Deployed on Workers Paid (D2): `deploy.yml` deploys
+    `vectorvroom-brain` from `main` after its tests, and
+    `vectorvroom-brain-pr-<n>` per PR; `cloud/config.json` gets the
+    endpoint only after a health check of the commit just built;
+    `cloud-brain.yml` CI; the runbook
+    (docs/operations/cloud-brain-operations.md); checked on the PR 55
+    preview: an end-to-end page session, `CF-Connecting-IP` refused at the
+    edge, the limits under a burst, the breaker
+    (docs/validation/cloud-brain.md#cb5-deploy).
 - [ ] **CB6 — Shared SONA.** Browser posts `WasmEphemeralAgent.exportState()`
   trajectories (bounded, validated); the object runs
   `FederatedCoordinator::aggregate` with a quality threshold and outlier filter;
