@@ -439,14 +439,23 @@ try {
       window.__rvBridge.archiveBrain(unflatten(decodeF32(vector, 244)), fitness, window.currentTrackVec, 40, [], 16.6, undefined, {context: ctx, styleScore: 0});
       await s.settled();
       const waiting = s.verifications.length;
-      const answer = await s.tick();
+      // Sent, then verified: a backoff (A and B share one address and its
+      // limits) or a busy service only delays it.
+      const sleep = ms => new Promise(r => setTimeout(r, ms));
+      let answer = null;
+      for (let i = 0; i < 60 && !answer; i++) {
+        while (!s.client.canTry('send')) await sleep(250);
+        answer = await s.tick();
+        if (!answer) await sleep(2000);
+      }
       const pool = await s.client.recall({trackVec: (await import('./cloud/session.js')).unit(window.currentTrackVec), context: ctx, k: 50});
       return {answer, waiting, key: ctx.track, pageMaxSpeed: maxSpeed, pageTraction: traction,
-        served: pool.find(p => p.id === answer?.id)?.fitness ?? null, board: s.board};
+        served: pool?.find(p => p.id === answer?.id)?.fitness ?? null, board: s.board,
+        client: {status: s.client.status, backoff: s.client.backoff, pending: s.client.pending(), left: s.verifications.length}};
     }, {vector: lap.vector, fitness: 30});
     assert.equal(run.key, traces.tracks.Rectangle.key, 'the page\'s default track is the fixture\'s Rectangle');
     assert.equal(run.waiting, 1, 'queued for a verification');
-    assert.ok(run.answer?.ok && run.answer.matched, JSON.stringify(run.answer));
+    assert.ok(run.answer?.ok && run.answer.matched, JSON.stringify({answer: run.answer, client: run.client}));
     assert.deepEqual({fitness: run.answer.fitness, laps: run.answer.laps, lapFrames: run.answer.lapFrames, crashedAt: run.answer.crashedAt, frames: run.answer.frames},
       lap.outcome, 'the service drove the lap the game drove');
     assert.equal(run.served, lap.outcome.fitness, 'verified: its fitness is trusted, not quarantined (it claimed 30)');
