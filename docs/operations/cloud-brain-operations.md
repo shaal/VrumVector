@@ -204,11 +204,18 @@ and exits non-zero.
 ## PR previews
 
 Each PR leaves a `vectorvroom-brain-pr-<n>` Worker and its Durable Object.
-Delete them when the PR is closed:
+Delete them when the PR is closed, always naming the Worker:
 
 ```sh
 cd cloud-brain && npx wrangler delete --name vectorvroom-brain-pr-<n>
 ```
+
+**Never run `wrangler delete` in `cloud-brain/` without `--name`.**
+`wrangler.jsonc` names production (`vectorvroom-brain`). Without a terminal
+(a script, CI, an agent), wrangler answers its own "Are you sure?" with yes.
+That would delete the production brain and its Durable Object, which holds
+all the shared data, with no undo. `--dry-run` does not say which Worker it
+would delete. Check the name in the command before you run it.
 
 ## Verification commands
 
