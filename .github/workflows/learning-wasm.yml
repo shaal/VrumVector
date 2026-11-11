@@ -18,7 +18,7 @@ concurrency:
 jobs:
   build:
     if: github.repository == 'shaal/VrumVector' && (startsWith(github.ref, 'refs/heads/codex/') || startsWith(github.ref, 'refs/heads/ship/'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       # One target per run: the dispatch input, else the branch's own binding.
