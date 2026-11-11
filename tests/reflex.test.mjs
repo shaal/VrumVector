@@ -7,12 +7,15 @@ import {reflexBrain,reflexSeedEnabled,REFLEX_SEED_DEFAULT} from '../AI-Car-Racer
 import {buildPopulation} from '../AI-Car-Racer/learning/policy.js';
 import {runTrialArm} from '../AI-Car-Racer/learning/trial.js';
 import {seededRandom} from '../AI-Car-Racer/graphics/state.js';
+import {brainProblem,LIMITS} from '../AI-Car-Racer/cloud/wire.js';
 
 const drive=(track,seconds=20)=>{const sim=new Simulation({track,seed:'reflex-test'});sim.begin(reflexBrain());return sim.run(seconds);};
 
 test('the reflex brain fills the [10,16,4] layout and reacts the right way round',()=>{
   const flat=reflexBrain();
   assert.equal(flat.length,244);assert.ok(flat.every(Number.isFinite));
+  // The shared cloud brain refuses weights past its limit; the reflex must fit.
+  assert.equal(brainProblem(flat),null);assert.ok(flat.every(v=>Math.abs(v)<=LIMITS.maxWeight));
   // Decode with the game's own network.js (the same loader the simulators use).
   const sim=new Simulation({track:'Rectangle',seed:'reflex-layout'});sim.begin(flat);
   const brain=sim.cars[0].brain;
@@ -31,7 +34,7 @@ test('the reflex brain fills the [10,16,4] layout and reacts the right way round
 
 test('the reflex brain drives: passes gates on Rect and Tri without training',()=>{
   const rect=drive('Rectangle'),tri=drive('Triangle');
-  // Frozen tuning reaches Rect 11 (two laps) and Tri 6 of 9 gates at 20 s.
+  // Frozen tuning reaches Rect 10 (one lap) and Tri 9 (every gate, no lap) at 20 s.
   assert.ok(rect.fitness>=5,`Rect progress ${rect.fitness}`);assert.ok(rect.laps>=1,'Rect: at least one lap');
   assert.ok(tri.fitness>=3,`Tri progress ${tri.fitness}`);
 });

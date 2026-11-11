@@ -14,7 +14,10 @@
 export const REFLEX_LAYOUT=Object.freeze({inputs:10,hidden:16,outputs:4,length:244});
 
 // Tuning, in input units, frozen before the #62 benchmark ran (a small grid
-// on Rect and Tri at 20 s). Do not re-tune it against the trial results.
+// on Rect and Tri at 20 s, every |weight| <= 16 so the shared cloud brain
+// accepts it: cloud/wire.js maxWeight). Do not re-tune it against the trial
+// results. The reflex's own score is sensitive to these numbers: gateGain 20
+// instead of 16 changes Rect from 10 to 3 gates.
 // side weights the left-minus-right ray difference (outer ray first).
 export const REFLEX_TUNING=Object.freeze({
   side:[.5,1,1.5],     // rays 0,1,2 (left) against rays 6,5,4 (right)
@@ -22,12 +25,12 @@ export const REFLEX_TUNING=Object.freeze({
   steerDeadband:.08,   // turn only when |hidden 0| clears this
   frontGain:2,         // hidden 1 = tanh(frontGain * (ray 3 + frontSide * (ray 2 + ray 4)))
   frontSide:0,
-  throttleOff:.4,      // forward fires while hidden 1 + speedThrottle * hidden 3 < throttleOff
+  throttleOff:.2,      // forward fires while hidden 1 + speedThrottle * hidden 3 < throttleOff
   speedThrottle:.3,
   brakeOn:.9,          // reverse fires while hidden 1 + speedBrake * hidden 3 > brakeOn
-  speedBrake:1,        // hidden 3 = tanh(speed / maxSpeed)
-  gateGain:20,         // hidden 2 = tanh(gateGain * lr); 0 leaves it out
-  gateSteer:.5,        // weight of hidden 2 on the steering outputs
+  speedBrake:0,        // hidden 3 = tanh(speed / maxSpeed)
+  gateGain:16,         // hidden 2 = tanh(gateGain * lr); 0 leaves it out
+  gateSteer:1,         // weight of hidden 2 on the steering outputs
 });
 
 // The generation-0 reflex seed is ON: in paired cold-start runs it cut the

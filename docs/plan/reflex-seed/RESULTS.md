@@ -18,8 +18,13 @@ and the car is fast, and pulls toward the next gate. It is ON by default.
   conservative init .65.
 - Two seed families (`s1`, `s2`) stand in for "two sessions". The simulator is
   deterministic, so this is seed-to-seed variance, not browser-session variance.
-- The tuning (`REFLEX_TUNING`) was chosen on a small grid on Rect and Tri at 20 s,
-  then frozen before any paired run.
+- Tuning (`REFLEX_TUNING`): the best of a small grid on Rect and Tri at 20 s,
+  frozen before the paired runs. Every weight is within ±16, the shared cloud
+  brain's limit (`cloud/wire.js` `maxWeight`).
+- History: a first tuning had one weight of 20. The cloud brain refuses that, so
+  it was re-tuned under the limit and every paired run was repeated. The first
+  tuning gave the same picture: Tri 19 sooner, 0 later and 5 ties at N=24, and
+  5 sooner, 0 later and 1 tie at N=500. The baseline arms are identical in both rounds.
 
 ## Raw results (baseline / reflex, first-lap generation)
 
@@ -28,50 +33,64 @@ Population 24, cap 80 generations (n = 24 per track):
 | Track | Pairs |
 |---|---|
 | Rect | s1#0: 46 / 0, s1#1: 33 / 0, s1#2: 12 / 0, s1#3: >79 / 0, s1#4: 48 / 0, s1#5: 46 / 0, s1#6: >79 / 0, s1#7: 2 / 0, s1#8: 16 / 0, s1#9: 35 / 0, s1#10: 43 / 0, s1#11: 5 / 0, s2#0: >79 / 0, s2#1: 17 / 0, s2#2: 10 / 0, s2#3: 23 / 0, s2#4: 68 / 0, s2#5: >79 / 0, s2#6: 23 / 0, s2#7: >79 / 0, s2#8: >79 / 0, s2#9: >79 / 0, s2#10: 21 / 0, s2#11: 19 / 0 |
-| Tri | s1#0: >79 / 55, s1#1: >79 / >79, s1#2: >79 / 60, s1#3: >79 / 11, s1#4: >79 / 69, s1#5: >79 / 19, s1#6: >79 / >79, s1#7: >79 / >79, s1#8: >79 / 48, s1#9: >79 / 17, s1#10: >79 / 20, s1#11: >79 / 51, s2#0: >79 / 4, s2#1: >79 / 54, s2#2: >79 / 22, s2#3: >79 / 26, s2#4: >79 / 9, s2#5: >79 / 16, s2#6: >79 / 29, s2#7: >79 / 31, s2#8: >79 / 57, s2#9: >79 / 1, s2#10: >79 / >79, s2#11: >79 / >79 |
+| Tri | s1#0: >79 / 1, s1#1: >79 / >79, s1#2: >79 / 20, s1#3: >79 / 27, s1#4: >79 / 3, s1#5: >79 / >79, s1#6: >79 / >79, s1#7: >79 / 51, s1#8: >79 / 43, s1#9: >79 / 27, s1#10: >79 / 58, s1#11: >79 / 69, s2#0: >79 / 12, s2#1: >79 / 13, s2#2: >79 / 5, s2#3: >79 / 13, s2#4: >79 / 22, s2#5: >79 / 18, s2#6: >79 / 37, s2#7: >79 / 24, s2#8: >79 / 66, s2#9: >79 / 11, s2#10: >79 / 23, s2#11: >79 / 40 |
 
 Population 500 (the live `batchSize`), cap 40 generations (n = 6 per track):
 
 | Track | Pairs |
 |---|---|
 | Rect | s1#0: >39 / 0, s1#1: 2 / 0, s1#2: 2 / 0, s2#3: 1 / 0, s2#4: 2 / 0, s2#5: 2 / 0 |
-| Tri | s1#0: >39 / 3, s1#1: >39 / 6, s1#2: 21 / 21, s2#3: >39 / 1, s2#4: >39 / 2, s2#5: >39 / 8 |
+| Tri | s1#0: >39 / 1, s1#1: >39 / 1, s1#2: 21 / 2, s2#3: >39 / 2, s2#4: >39 / 1, s2#5: >39 / 1 |
 
 Per-generation champion progress for every arm is in `n24.jsonl` and `n500.jsonl`.
 
 ## Summary
 
-| Run | Track | Lapped (base / reflex) | Median first lap (censored = cap) | Reflex sooner / later / tie |
+| Run | Track | Lapped (base → reflex) | Median first lap (censored = cap) | Reflex sooner / later / tie |
 |---|---|---|---|---|
-| N=24 | Rect | 17 / 24 → 24 / 24 | 39 → 0 | 24 / 0 / 0 |
-| N=24 | Tri | 0 / 24 → 19 / 24 | >80 → 39.5 | 19 / 0 / 5 |
-| N=500 | Rect | 5 / 6 → 6 / 6 | 2 → 0 | 6 / 0 / 0 |
-| N=500 | Tri | 1 / 6 → 6 / 6 | >40 → 4.5 | 5 / 0 / 1 |
+| N=24 | Rect | 17/24 → 24/24 | 39 → 0 | 24 / 0 / 0 |
+| N=24 | Tri | 0/24 → 21/24 | >80 → 25.5 (s1 47, s2 20) | 21 / 0 / 3 |
+| N=500 | Rect | 5/6 → 6/6 | 2 → 0 | 6 / 0 / 0 |
+| N=500 | Tri | 1/6 → 6/6 | >40 → 1 | 6 / 0 / 0 |
 
-Kill criterion (#62: drop if less than 15% fewer generations on either shape):
-cleared on both shapes at both population sizes. The baseline medians are
+Kill criterion (#62: drop the change if it gives less than 15% fewer generations on either shape):
+the change clears it on both shapes at both population sizes. The baseline medians are
 censored, so the Tri reductions are lower bounds.
 
 ## How strong is this evidence
 
-- **Tri is the real test.** The reflex alone passes 6 of 9 gates there, so the
-  GA must still find the lap. Across both families, no pair got slower: 19–0 at
-  N=24 and 5–0 at N=500. The apex local-optimum risk named in #62 did not show:
-  every tie is a pair where neither arm lapped, or both lapped at the same generation.
-- **Rect is decided before the GA runs.** The reflex car alone laps Rect in
-  20 s, so the reflex arm always records generation 0. That is a real gain for
-  a player on Rect, but it says nothing about learning. At the live population
-  (500) the cold baseline already laps Rect at generation 1–2, so the gain there
-  is 1–2 generations.
-- **Tuned and measured on the same tracks and spawn.** On the other presets
-  the reflex alone is weak at 20 s: Oval, Hexagon and Pentagon 1 gate, Monza,
-  Monaco and Spa 2, Silverstone 3, Suzuka 1 lap. Expect little gain there.
-  The seed costs one car of the population, and that car only matters if it
-  ranks as champion.
+- **Strong for Rect and Tri at this spawn.** No pair got slower: 57 sooner,
+  0 later and 3 ties over 60 pairs. Both seed families agree. The three ties
+  are Tri pairs where neither arm lapped. The apex local-optimum risk named in
+  #62 did not show.
+- **Much of the gain is the reflex itself, not faster learning.** The reflex
+  alone laps Rect (10 progress in 20 s) and passes all 9 Tri gates without a
+  lap. So on Rect the reflex arm records generation 0 every time, and on Tri
+  the GA only has to finish the lap. At the live population (500) the cold
+  baseline already laps Rect at generation 1–2, so the gain there is 1–2
+  generations. On Tri the gain is large: 6/6 lap by generation 2, against
+  1/6 by generation 39.
+- **Tuned and measured on the same tracks and spawn.** The reflex's own score
+  is sensitive to its tuning: `gateGain` 20 instead of 16 takes Rect from 10
+  to 3 gates. On the other presets the reflex alone is weak at 20 s: Oval,
+  Hexagon and Pentagon 1 gate, Monza, Monaco and Spa 2, Silverstone and Suzuka
+  4. Expect little gain on those tracks. The seed costs one car of the
+  population, and that car matters only if it ranks as champion.
 - **Not measured:** browser sessions (the Node simulator is deterministic),
-  tracks other than Rect and Tri in paired runs, and warm starts (the reflex
+  paired runs on tracks other than Rect and Tri, and warm starts. The reflex
   car is never added when any seed or champion exists, so the warm path is
-  unchanged by construction).
+  unchanged by construction.
+
+## Where the reflex car is used
+
+- Live training (`DriverLearning.build` → `buildPopulation`) on a cold start.
+- The A/B view's baseline arm (`main.js`), whenever its coach is cold. Arm A
+  may start from memory, so the A/B lift now measures memory against a
+  reflex-seeded cold start. Do not compare A/B lifts from before and after #62.
+- The transfer check's fresh arm (`transferCheck.js`). The fresh arm matches a
+  live cold start, and the memory arm has seeds, so it never gets the reflex
+  car. The test identity gains `|r1`, so earlier verdicts are re-tested.
+- `reflexBrain()` is exported for #59, which can use it as a fixed baseline.
 
 Reproduce:
 
