@@ -28,6 +28,8 @@ class Car{
         this.checkPointsCount = 0;
         this.checkPointsPassed = [];
         this.laps=0;
+        // Frame of the last gate this car gained (time tie-break, #60).
+        this.lastGateFrame=0;
 
         this.controlType = controlType;
         this.useBrain=controlType=="AI";
@@ -80,11 +82,13 @@ class Car{
             if (checkPoint!=-1 && (!this.checkPointsPassed.includes(checkPoint) || checkPoint == this.checkPointsPassed[0])){
                 if(!this.checkPointsPassed.includes(checkPoint)){
                     this.checkPointsCount++;
+                    this.lastGateFrame=this.controlType === "AI" ? frameCount : this.driveFrames;
                 }
                 if(this.checkPointsCount >= checkPointList.length && checkPoint == this.checkPointsPassed[0]){
                     this.checkPointsCount=1;
                     this.laps++;
                     const elapsedFrames=this.controlType === "AI" ? frameCount : this.driveFrames;
+                    this.lastGateFrame=elapsedFrames;
                     if(this.laps == 1){
                         this.lapTimes = [parseFloat((elapsedFrames/60).toFixed(2))];
                     }

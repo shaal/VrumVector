@@ -36,6 +36,55 @@ test('style breaks progress ties but cannot outweigh a checkpoint or reward park
   a.checkPointsCount=1;assert.ok(profiles.rank(a,5)>1&&profiles.rank(a,5)<2);
   a.driverProfile='balanced';assert.equal(profiles.rank(a,5),1);
 });
+test('time tie-break (#60): off by default; on, the sooner car wins a tie but never a gate or a style gap',()=>{
+  const slow=car(),fast=car();slow.checkPointsCount=fast.checkPointsCount=3;slow.lastGateFrame=900;fast.lastGateFrame=600;
+  assert.equal(profiles.settings.timeTieBreak,false);
+  assert.equal(profiles.rank(fast,5),profiles.rank(slow,5));assert.deepEqual({...profiles.lastGateFrame(fast)},{});
+  profiles.settings.timeTieBreak=true;
+  try{
+    assert.ok(profiles.rank(fast,5)>profiles.rank(slow,5));
+    assert.deepEqual({...profiles.lastGateFrame(fast)},{lastGateFrame:600});
+    const ahead=car();ahead.checkPointsCount=4;ahead.lastGateFrame=1e6;fast.lastGateFrame=0;
+    assert.ok(profiles.rank(ahead,5)>profiles.rank(fast,5),'one more gate always wins');
+    const parked=car();parked.checkPointsCount=0;assert.equal(profiles.rank(parked,5),0);
+    const careful=car('careful'),reckless=car('careful');careful.checkPointsCount=reckless.checkPointsCount=3;
+    careful.lastGateFrame=900;reckless.lastGateFrame=1;reckless.damaged=true;
+    assert.ok(profiles.rank(careful,5)>profiles.rank(reckless,5),'a style gap outweighs the time term');
+  }finally{profiles.settings.timeTieBreak=false;}
+});
+test('time tie-break (#60): a result with lastGateFrame takes a tied incumbent without resetting stagnation',()=>{
+  const coach=new LearningCoach();coach.setContext(context);
+  coach.record({fitness:6,styleScore:.4,popN:5,popStillAlive:2},brain(.2),'first');
+  coach.record({fitness:6,styleScore:.4,popN:5,popStillAlive:2},brain(.3),'tie-off');
+  assert.equal(coach.incumbent.id,'first','without lastGateFrame a tie keeps the incumbent, as before');
+  assert.equal(coach.record({fitness:6,styleScore:.4,lastGateFrame:500,popN:5,popStillAlive:2},brain(.5),'sooner'),true,'true: save it');
+  assert.equal(coach.incumbent.id,'sooner');assert.deepEqual(coach.incumbent.vector,brain(.5));assert.equal(coach.incumbent.lastGateFrame,500);
+  assert.equal(coach.stagnant,2);assert.equal(coach.lastImproved,false);
+  for(const [r,id] of [[{fitness:6,styleScore:.4,lastGateFrame:500},'same-time'],[{fitness:6,styleScore:.4,lastGateFrame:700},'later'],
+    [{fitness:6,styleScore:.39999,lastGateFrame:1},'worse-style'],[{fitness:5,styleScore:1,lastGateFrame:1},'fewer-gates']])
+    assert.equal(coach.record({...r,popN:5,popStillAlive:2},brain(.6),id),false,id);
+  assert.equal(coach.incumbent.id,'sooner');
+  coach.record({fitness:6,styleScore:.4,lastGateFrame:499,popN:5,popStillAlive:2},brain(.7),'sooner-still');
+  assert.equal(coach.incumbent.id,'sooner-still');
+  coach.record({fitness:7,styleScore:0,popN:5,popStillAlive:2},brain(.8),'more-gates-flag-off');
+  assert.equal(coach.incumbent.lastGateFrame,undefined,'a result without the field stores none');
+});
+test('time tie-break (#60): cars record the frame of each gate they gain',()=>{
+  const sim=new Simulation({track:'Rectangle',seed:'tiebreak-frames',timeTieBreak:true});
+  const random=seededRandom('tiebreak-frames:brains');
+  sim.begin(new Float32Array(24*244).map(()=>random()*2-1));
+  const seen=new Map();
+  for(let f=1;f<=1200;f++){
+    sim.scope.frameCount=f;
+    for(const c of sim.cars){
+      const before=c.checkPointsCount+c.laps*5;c.update(sim.road.borders,sim.road.checkPointList);
+      if(c.checkPointsCount+c.laps*5>before)seen.set(c,f);
+    }
+  }
+  assert.ok(seen.size>0,'some car passes a gate');
+  for(const c of sim.cars)assert.equal(c.lastGateFrame,seen.get(c)??0);
+  assert.equal(new Simulation({track:'Rectangle'}).scope.DriverProfiles.settings.timeTieBreak,false);
+});
 test('manual input overrides a style-filtered AI brake and steering command',async()=>{
   const document=new EventTarget(),window=new EventTarget();
   const box=vm.createContext({document,window,AbortController});

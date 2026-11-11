@@ -90,11 +90,22 @@
     if(p.id==='calm')return unit(.3*!s.crashed+.35*s.smoothness+.2*(1-s.slideRate)+.15*(1-Math.abs(s.averageSpeed-.5)));
     return unit((p.id==='reckless'?.85:.65)*s.averageSpeed+(p.id==='reckless'?.15:.35)*!s.crashed);
   }
+  // Time tie-break (#60), OFF by default: on equal progress and style, the
+  // car that reached its last gate sooner ranks higher. Set
+  // DriverProfiles.settings.timeTieBreak=true in the scope that ranks cars.
+  const settings={timeTieBreak:false};
+  const tieBreakOn=()=>settings.timeTieBreak===true;
   function rank(car,gates) {
     const progress=car.checkPointsCount+car.laps*gates;
     // Style never outweighs even one checkpoint, and standing still is not
     // rewarded for being safe. Balanced preserves the original ordering.
-    return progress+(progress>0?.25*styleScore(car):0);
+    // The time term is at most 5e-4: it never outweighs a gate, and it can
+    // outweigh only a style gap below 2e-3.
+    const time=tieBreakOn()&&progress>0?1e-3/(1+Math.max(0,Number(car.lastGateFrame)||0)):0;
+    return progress+(progress>0?.25*styleScore(car):0)+time;
   }
-  root.DriverProfiles=Object.freeze({profiles,get,apply,record,summarize,styleScore,rank,createStats});
+  // Fields to spread into a generation result: {lastGateFrame}, or {} when
+  // the tie-break is off, so results and LearningCoach.record stay as before.
+  const lastGateFrame=car=>tieBreakOn()?{lastGateFrame:Math.max(0,Number(car?.lastGateFrame)||0)}:{};
+  root.DriverProfiles=Object.freeze({profiles,get,apply,record,summarize,styleScore,rank,lastGateFrame,settings,createStats});
 })(globalThis);

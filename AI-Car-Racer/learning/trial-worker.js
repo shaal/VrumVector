@@ -3,7 +3,7 @@
 //
 //   main -> worker { type:'trial', id, key, arm, track:{canvasW, canvasH, borders,
 //                    checkPointList, startInfo}, context, profile, maxSpeed,
-//                    traction, seconds, exploration, seeds:[Float32Array], options,
+//                    traction, seconds, exploration, seeds:[Float32Array], options, timeTieBreak?,
 //                    collisions?: {heatSize} }
 //   worker -> main { type:'result', id, arm, best, area, lastMean, history } | { type:'error', id, arm, message }
 //
@@ -46,7 +46,7 @@ function simulator({startInfo,maxSpeed,seconds,profile,collisions}){
     const vector=new Float32Array(FLAT_LENGTH);let at=0;
     for(const level of elite.brain.levels){for(const v of level.biases)vector[at++]=v;for(const v of level.weights)vector[at++]=v;}
     const meanProgress=cars.reduce((sum,car)=>sum+car.checkPointsCount+car.laps*gates,0)/cars.length;
-    return {vector,fitness:elite.checkPointsCount+elite.laps*gates,meanProgress,styleScore:DriverProfiles.styleScore(elite),
+    return {vector,fitness:elite.checkPointsCount+elite.laps*gates,...DriverProfiles.lastGateFrame?.(elite),meanProgress,styleScore:DriverProfiles.styleScore(elite),
       popN:cars.length,popStillAlive:cars.filter(c=>!c.damaged).length,driving:DriverProfiles.summarize(elite),
       ...(gen?{contactDeaths:cars.filter(c=>c.contactCrash).length}:{})};
   };
@@ -57,6 +57,7 @@ self.onmessage=async({data:m})=>{
   try{
     const [{runTrialArm},{seededRandom}]=await modules;
     self.road=buildRoad(m.track);self.traction=m.traction;self.maxSpeed=m.maxSpeed;
+    if(DriverProfiles.settings)DriverProfiles.settings.timeTieBreak=m.timeTieBreak===true;
     // Common random numbers: both arms of a trial share the population and
     // physics streams, so the only systematic difference is the seed pool.
     Math.random=seededRandom(m.key+':physics');
