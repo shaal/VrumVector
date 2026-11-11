@@ -16,8 +16,8 @@ export const REFLEX_LAYOUT=Object.freeze({inputs:10,hidden:16,outputs:4,length:2
 // Tuning, in input units, frozen before the #62 benchmark ran (a small grid
 // on Rect and Tri at 20 s, every |weight| <= 16 so the shared cloud brain
 // accepts it: cloud/wire.js maxWeight). Do not re-tune it against the trial
-// results. The reflex's own score is sensitive to these numbers: gateGain 20
-// instead of 16 changes Rect from 10 to 3 gates.
+// results. The reflex's own score is sensitive to these numbers: gateSteer .5
+// instead of 1 takes Rect from 10 to 3 gates, and gateGain 18 makes it lap Tri.
 // side weights the left-minus-right ray difference (outer ray first).
 export const REFLEX_TUNING=Object.freeze({
   side:[.5,1,1.5],     // rays 0,1,2 (left) against rays 6,5,4 (right)

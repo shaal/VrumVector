@@ -49,9 +49,9 @@ Per-generation champion progress for every arm is in `n24.jsonl` and `n500.jsonl
 | Run | Track | Lapped (base → reflex) | Median first lap (censored = cap) | Reflex sooner / later / tie |
 |---|---|---|---|---|
 | N=24 | Rect | 17/24 → 24/24 | 39 → 0 | 24 / 0 / 0 |
-| N=24 | Tri | 0/24 → 21/24 | >80 → 25.5 (s1 47, s2 20) | 21 / 0 / 3 |
+| N=24 | Tri | 0/24 → 21/24 | >79 (80) → 25.5 (s1 47, s2 20) | 21 / 0 / 3 |
 | N=500 | Rect | 5/6 → 6/6 | 2 → 0 | 6 / 0 / 0 |
-| N=500 | Tri | 1/6 → 6/6 | >40 → 1 | 6 / 0 / 0 |
+| N=500 | Tri | 1/6 → 6/6 | >39 (40) → 1 | 6 / 0 / 0 |
 
 Kill criterion (#62: drop the change if it gives less than 15% fewer generations on either shape):
 the change clears it on both shapes at both population sizes. The baseline medians are
@@ -67,12 +67,12 @@ censored, so the Tri reductions are lower bounds.
   alone laps Rect (10 progress in 20 s) and passes all 9 Tri gates without a
   lap. So on Rect the reflex arm records generation 0 every time, and on Tri
   the GA only has to finish the lap. At the live population (500) the cold
-  baseline already laps Rect at generation 1–2, so the gain there is 1–2
+  baseline already laps Rect at generation 1–2 in 5 of 6 pairs, so the gain there is 1–2
   generations. On Tri the gain is large: 6/6 lap by generation 2, against
   1/6 by generation 39.
 - **Tuned and measured on the same tracks and spawn.** The reflex's own score
-  is sensitive to its tuning: `gateGain` 20 instead of 16 takes Rect from 10
-  to 3 gates. On the other presets the reflex alone is weak at 20 s: Oval,
+  is sensitive to its tuning: `gateSteer` .5 instead of 1 takes Rect from 10
+  to 3 gates, and `gateGain` 18 instead of 16 makes it lap Tri on its own. On the other presets the reflex alone is weak at 20 s: Oval,
   Hexagon and Pentagon 1 gate, Monza, Monaco and Spa 2, Silverstone and Suzuka
   4. Expect little gain on those tracks. The seed costs one car of the
   population, and that car matters only if it ranks as champion.
@@ -91,6 +91,10 @@ censored, so the Tri reductions are lower bounds.
   live cold start, and the memory arm has seeds, so it never gets the reflex
   car. The test identity gains `|r1`, so earlier verdicts are re-tested.
 - `reflexBrain()` is exported for #59, which can use it as a fixed baseline.
+- Weight limit: the largest reflex weight is exactly 16. The default lerp
+  mutation keeps every child within ±16. The sparse mutation of #63 (flag off)
+  adds Gaussian noise, so with it on about half the close children of a reflex
+  champion would exceed the cloud brain's limit.
 
 Reproduce:
 
