@@ -6,11 +6,15 @@ reading (1 − offset, high = close) must be above `front`, or another ray's
 reading above `side`. The reflex then sets all four controls for that frame,
 after the driving style (`car.js` `Car.makeShield`, `Car.shieldDanger`).
 `cloud-brain/sim` mirrors it (`run_shielded`). Verification and cloud training
-never use it.
+never use it. A page with the shield on sends no brains, feedback or crash maps to
+the shared brain (`cloud/session.js` `reflexShieldOn`), because a shielded run is
+not the brain's own driving.
 
 **Verdict: the shield does not clear the kill criterion. It stays OFF.**
 `globalThis.vvReflexShield = true` (or `{front, side}`) turns it on for one
-page, from the next generation.
+page, from the next generation. With it on, `genEnd` carries
+`shield: {frames, drivenFrames, laps, cars}` for the population. The decision
+bars of the best car still show its own brain's outputs, not the reflex's.
 
 ## Method
 
@@ -26,7 +30,10 @@ page, from the next generation.
 - Thresholds frozen before the measured runs: `front .4`, `side .6`
   (`Car.SHIELD_DEFAULTS`). This was the lowest early crash rate of a pilot on a
   third seed family (`tune`, 2 pairs on Rect and Tri), over front .4–.75 and side .6–.85.
-  Every pair cut the crash rate by only 3–5 points in the pilot.
+  Every setting cut the mean crash rate of generations 0–4 by only 2–5 points
+  in the pilot (raw: `reflex-shield-pilot.jsonl`, one line per pair and setting).
+  The pilot tuned for early crash rate only, on Rect and Tri, so the frozen
+  setting was not chosen with Oval in view.
 - Each arm's final champion drives one 60 s solo evaluation, with the shield and
   without it ("bare"). The kill-criterion comparison is the shield arm's
   champion with the shield against the baseline champion without it. The order
@@ -37,7 +44,7 @@ page, from the next generation.
 
 ## Summary (front .4, side .6, n = 12 per track)
 
-| Track | Shield champion vs off champion (better / worse / tie) | Crash rate g0–4, off → on | Crash rate all gens, off → on | Champions lapping, off → on (bare) | Median laps in 60 s, off → on | Shield fires / 1000 driven frames | Fires per car per lap |
+| Track | Shield champion vs off champion (better / worse / tie) | Crash rate g0–4, off → on | Crash rate all gens, off → on | Champions lapping, off → on (bare) | Median laps in 60 s, off → on | Shield fires / 1000 driven frames | Shield frames per population lap |
 |---|---|---|---|---|---|---|---|
 | Rect | 8 / 4 / 0 (s1 4/2, s2 4/2) | 50.1% → 48.7% | 51.5% → 47.6% | 12 → 12 (2) | 6 → 6 | 158 | 389 |
 | Tri | 5 / 7 / 0 (s1 3/3, s2 2/4) | 44.2% → 39.8% | 46.0% → 39.4% | 12 → 12 (0) | 2 → 1.5 | 354 | 3 129 |
@@ -58,16 +65,23 @@ Other numbers:
   Oval at least one ray reads above a threshold on every frame of every car. So
   the shield drives 100% of frames, and the reflex alone does not lap Oval. The cars never
   crash, and they never lap.
-- **Moderate that it does not help Triangle laps.** 5 better and 7 worse. The shield
+- **No evidence of a lap gain on Triangle.** 5 better and 7 worse is no different
+  from a coin flip; it does not show harm either. The kill criterion needs
+  "at least as good", and nothing here shows that. The shield
   finds a first lap much sooner (12/12 pairs by generation 2, against 4/12 by
   generation 29). But after 30 generations its champions do not lap more (median
   1.5 against 2 laps in 60 s). This is a small sample: one more pair either way
-  changes the split.
+  changes the split. 8 of the 12 baseline champions on Triangle are the same
+  brain (2 laps, 19.37 s), so the baseline barely moved off its reflex seed.
 - **Weak gain on Rectangle.** 8 better and 4 worse, and both families agree (4/2).
   The shield mostly saves crashes in the 60 s evaluation (0 against 4 crashed).
 - **The shield hides bad brains, as #73 warned.** Without the shield, the shield
   arm's champions almost never lap: Rect 2/12, Tri 0/12. The baseline's champions
   lap 12/12 on both. The population stops learning to avoid walls itself.
+- **"Shield frames per population lap"** is all shield frames over all laps of the
+  population, so it is mostly frames of cars that never lap. It is not a rate
+  of one lapping car. The per-car rate of a champion is the evaluation's
+  fires per 1000 frames: Rect 296, Tri 839, Oval 1 000.
 - **Crash cuts are small where it does not take over.** The estimate in #73 was 20–50%
   fewer crashes in early generations. The measured cut is 3% relative on Rect (50.1 → 48.7)
   and 10% on Tri (44.2 → 39.8). A cut to 0% happens only on Oval, where the shield
@@ -77,7 +91,8 @@ Other numbers:
 
 The same benchmark with `front .75`, `side .85` on family `s1` (n = 6 per track),
 run after the measured runs. The shield then fires on 2–5% of driven frames,
-and it no longer takes over Oval. It still does not help:
+and it no longer takes over Oval. It still does not help. This run has one seed
+family and n = 6, so it is weaker than the measured one:
 
 | Track | Better / worse / tie | Crash rate g0–4, off → on | Fires / 1000 driven frames | Champions lapping bare, on arm |
 |---|---|---|---|---|
@@ -93,16 +108,23 @@ and it no longer takes over Oval. It still does not help:
   styles other than `balanced`. With `SENSOR_STRIDE` > 1, cars outside the
   privileged set sense, and so get the shield, only every few frames.
 - Warm starts (memories or a saved driver).
+- The per-track reflex tuning of #70 (`reflexTuner.js`), which merged after these
+  runs. Both arms here seed generation 0 with the fixed `REFLEX_TUNING` reflex, and
+  the shield always drives with `reflexBrain()` at its fixed tuning, not a
+  per-track one.
 
 ## Parity
 
 - `cloud-brain/sim` `run_shielded` drives as `car.js` with `Car.shield` set:
-  200 of 200 cases in `tests/fixtures/cloud-brain-sim/shield-traces.json` are
+  300 of 300 cases in `tests/fixtures/cloud-brain-sim/shield-traces.json` are
   identical frame by frame. This includes which frames the shield drove, and
   `shieldFrames`. The cases are random and reflex-like brains on 5 presets,
-  4 settings (balanced, careful and wild styles) and 2 threshold pairs. The
-  fixture holds its own reflex brain, so a retune of `reflex.js` does not
-  invalidate it.
+  4 settings (balanced, careful and wild styles) and 3 threshold pairs: the
+  default, .75/.85, and .9/.5 (front above side). The fixture holds its own
+  reflex brain, so a retune of `reflex.js` does not invalidate it.
+  `tests/reflex-shield.test.mjs` regenerates the fixture from `car.js` and
+  compares, so drift on either side fails a test. Equality at a threshold
+  (`>` against `>=`) is not pinned: no case has a reading within 1e-9 of one.
 - Shield off: `node scripts/cloud-brain-sim-traces.mjs` remakes
   `traces.json` byte for byte, and the existing traces still pass.
 - The Worker (`cloud-brain/core`, `cloud-brain/src`) is unchanged: verification and

@@ -1426,16 +1426,26 @@ function begin(preservePause = false, resetPlayers = false){
 
 // Reflex shield (#73): OFF unless globalThis.vvReflexShield is true (the
 // default thresholds, car.js Car.SHIELD_DEFAULTS) or {front, side}. Each
-// generation reads it again. Paired runs did not clear the kill criterion
-// (docs/validation/reflex-shield.md), so it stays off.
+// generation reads it again; a threshold that is not a finite number turns it
+// off. Paired runs did not clear the kill criterion
+// (docs/validation/reflex-shield.md), so it stays off. The reflex brain is
+// loaded with the page, so a shielded generation has it from frame 1.
+var reflexShieldBrain = null;
+import('./learning/reflex.js').then(m => { reflexShieldBrain = m.reflexBrain(); }, e => console.warn('[reflex shield] reflex.js unavailable', e));
 function reflexShieldFlag(){
-    const v = globalThis.vvReflexShield;
-    if (v === true) return {};
-    if (!v || typeof v !== 'object') return null;
-    const out = {};
-    if (Number.isFinite(v.front)) out.front = v.front;
-    if (Number.isFinite(v.side)) out.side = v.side;
-    return out;
+    try {
+        const v = globalThis.vvReflexShield;
+        if (v !== true && (!v || typeof v !== 'object' || Array.isArray(v))) return null;
+        if (!reflexShieldBrain) { console.warn('[reflex shield] the reflex is not loaded yet: this generation runs without it'); return null; }
+        const out = { brain: Array.from(reflexShieldBrain) };
+        if (v === true) return out;
+        for (const k of ['front', 'side']) {
+            if (v[k] === undefined) continue;
+            if (!Number.isFinite(v[k])) { console.warn('[reflex shield] ' + k + ' must be a finite number: off'); return null; }
+            out[k] = v[k];
+        }
+        return out;
+    } catch (_) { return null; }
 }
 
 function performBegin(N){

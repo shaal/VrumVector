@@ -24,7 +24,8 @@ const tracks=(options.tracks||'Rectangle,Triangle').split(',');
 const family=options.family||'s1',runs=Number(options.runs)||6,start=Number(options.start)||0;
 const generations=Number(options.generations)||30,seconds=Number(options.seconds)||20,population=Number(options.population)||24;
 const evalSeconds=Number(options['eval-seconds'])||60;
-const shieldConfig={front:Number(options.front)||.4,side:Number(options.side)||.6};
+const threshold=(k,d)=>{if(options[k]===undefined)return d;const v=Number(options[k]);if(options[k]===''||!Number.isFinite(v))throw Error(`--${k} must be a number`);return v;};
+const shieldConfig={front:threshold('front',.4),side:threshold('side',.6)};
 const output=options.output||'test-results/reflex-shield.jsonl';
 // The reflex this run measured: a later retune of learning/reflex.js changes it.
 const reflexHash=createHash('sha256').update(Buffer.from(reflexBrain().buffer)).digest('hex').slice(0,16);

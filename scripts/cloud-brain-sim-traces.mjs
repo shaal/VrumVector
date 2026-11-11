@@ -168,10 +168,12 @@ const cases = [];
 const t0 = Date.now();
 // The shield cases: random brains, and the reflex with noise (it drives
 // far, so the shield both fires and stays quiet), under several styles and
-// two threshold pairs.
+// three threshold pairs.
 const {reflexBrain} = SHIELD ? await import('../AI-Car-Racer/learning/reflex.js') : {};
 const REFLEX = SHIELD ? reflexBrain() : null;
-const SHIELDS = [{front: 0.75, side: 0.85}, {front: 0.6, side: 0.7}];
+// The default (car.js SHIELD_DEFAULTS), a gentler pair, and one with front
+// above side (so the front ray's threshold is told apart from the others').
+const SHIELDS = [{front: 0.4, side: 0.6}, {front: 0.75, side: 0.85}, {front: 0.9, side: 0.5}];
 for (const name of SHIELD ? ['Rectangle', 'Oval', 'Triangle', 'Monza', 'Monaco'] : []) {
   const preset = PRESETS.find(p => p.name === name);
   const random = seededRandom('shield:' + name);

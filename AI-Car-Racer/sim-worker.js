@@ -11,7 +11,7 @@
 //     { type: 'begin',  N, seconds, maxSpeed, traction, startInfo,
 //                        brains: Float32Array(N*FLAT_LENGTH),
 //                        collisions?: null | {heatSize},     — see collisions.js
-//                        shield?: null | {front?, side?} }   — reflex shield, #73
+//                        shield?: null | {front?, side?, brain} }   — reflex shield, #73
 //     { type: 'setSimSpeed', v }
 //     { type: 'setPause', pause }
 //     { type: 'setTraction', v }
@@ -181,22 +181,12 @@ function poseInCorridor(x, y, angle, width, height){
     return CarCollisions.poseClear(self.road, x, y, angle, width, height);
 }
 
-// Reflex shield (#73): OFF unless 'begin' carries shield ({} for
-// Car.SHIELD_DEFAULTS, or {front, side}). The reflex brain is loaded on the
-// first shielded generation; until it arrives that generation drives without
-// the shield. Every 'begin' sets the shield again, so it never carries over.
-let reflexFlat = null, reflexLoad = null, shieldSerial = 0;
+// Reflex shield (#73): OFF unless 'begin' carries shield = {front?, side?,
+// brain} (main.js sends reflexBrain() as brain). Every 'begin' sets it again,
+// for the whole generation, so it never carries over or switches on midway.
 function setShield(config) {
-    const serial = ++shieldSerial;
     if (typeof Car.makeShield !== 'function') return; // an older cached car.js
-    Car.shield = null;
-    if (!config || typeof config !== 'object') return;
-    const arm = () => { if (serial === shieldSerial && reflexFlat) Car.shield = Car.makeShield({ ...config, brain: reflexFlat }); };
-    if (reflexFlat) { arm(); return; }
-    reflexLoad ||= import('./learning/reflex.js')
-        .then(r => { reflexFlat = r.reflexBrain(); })
-        .catch(e => { reflexLoad = null; console.warn('[sim-worker] reflex shield unavailable', e); });
-    reflexLoad.then(arm);
+    Car.shield = Car.makeShield(config);
 }
 function shieldSummary() {
     let frames = 0, drivenFrames = 0, laps = 0;
