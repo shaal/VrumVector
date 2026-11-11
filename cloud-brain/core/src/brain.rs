@@ -55,11 +55,16 @@ pub struct Config {
     /// What one contributor may send in a UTC day; a request that would go
     /// past it is refused whole (429 `rate-limited`).
     pub quota: Usage,
+    /// Training breeds children by sparse additive mutation (#63), as the
+    /// browser's `mutateInto` with `sparse` set (learning/policy.js): each
+    /// weight moves with probability TRAIN_SPARSE_P by N(0, rate). Off by
+    /// default, as in the browser: every weight lerps toward uniform noise.
+    pub sparse_mutation: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { max_brains: 20_000, max_tracks: 5_000, keep_per_track: 3, corroborators: 2, quota: QUOTA }
+        Self { max_brains: 20_000, max_tracks: 5_000, keep_per_track: 3, corroborators: 2, quota: QUOTA, sparse_mutation: false }
     }
 }
 
@@ -532,6 +537,9 @@ pub const TRAIN_CONTEXTS: usize = 3;
 /// Brains of the service's own held at most.
 pub const CLOUD_BRAINS: usize = 50;
 const TRAIN_RATES: [f64; 3] = [0.05, 0.1, 0.2];
+/// With `Config::sparse_mutation`, the chance each weight moves (the
+/// browser's SPARSE_MUTATION.p); it moves by N(0, rate), sigmaScale 1.
+const TRAIN_SPARSE_P: f64 = 0.15;
 
 /// xorshift64*: training's random numbers, the same for a seed natively and
 /// in Wasm.
@@ -549,6 +557,21 @@ impl Xorshift {
     /// In [0, 1).
     fn unit(&mut self) -> f64 {
         (self.next() >> 11) as f64 / (1u64 << 53) as f64
+    }
+    /// A standard normal (Box-Muller), the browser's `gaussian`: two draws.
+    fn gaussian(&mut self) -> f64 {
+        let r = (-2.0 * (1.0 - self.unit()).ln()).sqrt();
+        r * (2.0 * std::f64::consts::PI * self.unit()).cos()
+    }
+}
+
+/// One training child of `parent` moved by `rate`: every weight lerps toward
+/// uniform noise, or (`sparse`) a few move by N(0, rate).
+fn mutate(parent: &[f32], rate: f64, sparse: bool, random: &mut Xorshift) -> Vec<f32> {
+    if sparse {
+        parent.iter().map(|w| if random.unit() < TRAIN_SPARSE_P { (f64::from(*w) + rate * random.gaussian()) as f32 } else { *w }).collect()
+    } else {
+        parent.iter().map(|w| (f64::from(*w) + (random.unit() * 2.0 - 1.0 - f64::from(*w)) * rate) as f32).collect()
     }
 }
 
@@ -1794,7 +1817,7 @@ impl Brain {
             // A parent among the best so far.
             let parent = &pool[(random.next() % pool.len().min(TRAIN_PARENTS) as u64) as usize];
             let rate = TRAIN_RATES[runs % TRAIN_RATES.len()];
-            let child: Vec<f32> = parent.0.iter().map(|w| (f64::from(*w) + (random.unit() * 2.0 - 1.0 - f64::from(*w)) * rate) as f32).collect();
+            let child = mutate(&parent.0, rate, self.config.sparse_mutation, &mut random);
             let (lineage, depth) = (parent.2, parent.3 + 1);
             let Some(o) = drive(&child) else { break };
             runs += 1;
@@ -2243,5 +2266,36 @@ impl Store for MemStore {
         let before = self.crashes.len();
         self.crashes.retain(|r| r.contributor != contributor);
         Ok(before - self.crashes.len())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mutation_off_is_the_lerp_and_on_moves_a_few_weights() {
+        let parent: Vec<f32> = (0..244).map(|i| ((i as f32) / 122.0) - 1.0).collect();
+        // Off: the old lerp toward uniform noise, draw for draw.
+        let (mut a, mut b) = (Xorshift::new(7), Xorshift::new(7));
+        let lerp: Vec<f32> = parent.iter().map(|w| (f64::from(*w) + (b.unit() * 2.0 - 1.0 - f64::from(*w)) * 0.1) as f32).collect();
+        assert_eq!(mutate(&parent, 0.1, false, &mut a), lerp);
+        assert_eq!(a.next(), b.next(), "the same draws");
+        // On: about TRAIN_SPARSE_P of the weights move, the rest are the parent's.
+        let mut random = Xorshift::new(7);
+        let (mut moved, mut steps) = (0usize, Vec::new());
+        for _ in 0..200 {
+            let child = mutate(&parent, 0.1, true, &mut random);
+            for (c, p) in child.iter().zip(&parent) {
+                if c != p {
+                    moved += 1;
+                    steps.push(f64::from(c - p));
+                }
+            }
+        }
+        let share = moved as f64 / (200.0 * 244.0);
+        assert!((share - TRAIN_SPARSE_P).abs() < 0.01, "{share}");
+        let sd = (steps.iter().map(|s| s * s).sum::<f64>() / steps.len() as f64).sqrt();
+        assert!((sd - 0.1).abs() < 0.005, "steps are N(0, rate): {sd}");
     }
 }

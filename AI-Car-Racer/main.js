@@ -1158,8 +1158,24 @@ function inflateBrainInline(flat){
 function copyFlat(dst, dstOff, src){
     for (let i = 0; i < FLAT_LENGTH; i++) dst[dstOff + i] = src[i];
 }
+// Off by default: every weight lerps toward uniform noise. With
+// globalThis.vvSparseMutation set (true, or {p, sigmaScale}), the sparse
+// additive mutation of learning/policy.js (mutateInto, #63) instead.
 function fillMutated(dst, dstOff, src, amt){
     if (amt <= 0){ copyFlat(dst, dstOff, src); return; }
+    // Only true or an object turns it on, as sparseMutationFlag (policy.js);
+    // 0.15 and 1 are its SPARSE_MUTATION defaults.
+    const sparse = globalThis.vvSparseMutation;
+    if (sparse === true || (sparse && typeof sparse === 'object')){
+        const p = sparse === true || sparse.p == null ? 0.15 : Math.max(0, Math.min(1, Number(sparse.p) || 0));
+        const sigma = amt * (sparse === true || sparse.sigmaScale == null ? 1 : Math.max(0, Number(sparse.sigmaScale) || 0));
+        for (let i = 0; i < FLAT_LENGTH; i++){
+            dst[dstOff + i] = Math.random() < p
+                ? src[i] + sigma * (Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random()))
+                : src[i];
+        }
+        return;
+    }
     for (let i = 0; i < FLAT_LENGTH; i++){
         dst[dstOff + i] = lerp(src[i], Math.random() * 2 - 1, amt);
     }

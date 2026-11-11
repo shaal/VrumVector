@@ -25,6 +25,7 @@
     "benchmark:learning": "node scripts/benchmark-learning.mjs",
     "benchmark:crash-similarity": "node scripts/measure-crash-similarity.mjs",
     "benchmark:transfer": "node scripts/benchmark-transfer.mjs",
+    "benchmark:sparse-mutation": "node scripts/benchmark-sparse-mutation.mjs",
     "benchmark:health": "node scripts/benchmark-health.mjs",
     "test:auto-train:browser": "node tests/auto-train-browser.mjs",
     "benchmark:auto-train": "node scripts/benchmark-auto-train.mjs",

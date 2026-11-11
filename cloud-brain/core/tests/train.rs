@@ -416,3 +416,31 @@ fn twelve_sessions_are_pinned_change_the_search_on_purpose_then_this() {
     assert_eq!(summary, PINNED);
 }
 const PINNED: &str = "7:bbea40df 7:- 8:c959e870 8:- 8:- 8:- 8:- 8:- 9:a143f48c 9:- 9:- 9:c268fb45";
+
+/// Sparse mutation (#63), off by default: with it on, sessions still breed
+/// and keep valid children, and the flag reaches the trainer (the same
+/// sessions breed other children than the lerp's).
+#[test]
+fn sparse_mutation_sessions_breed_valid_children() {
+    let run = |sparse: bool| {
+        let mut store = MemStore::default();
+        let mut brain = Brain::open(Config { sparse_mutation: sparse, ..Config::default() }, &mut store, T0).unwrap();
+        contribute(&mut brain, &mut store, OWNER, &seeds(), &context(&rectangle_key()), T0);
+        let mut now = T0 + 11 * MINUTE;
+        let mut reports = Vec::new();
+        for session in 1_000..1_004u64 {
+            let r = brain.train(TRAINING, now, session, &mut store).unwrap().expect("a session");
+            assert!(r.best_fitness >= r.seed_fitness, "{r:?}");
+            reports.push((r.runs, r.best_fitness, r.archived));
+            now += 30 * MINUTE;
+        }
+        for (row, vector) in store.brains.values() {
+            assert!(wire::brain_problem(Some(vector)).is_none(), "{}", row.id);
+        }
+        reports
+    };
+    let (sparse, plain) = (run(true), run(false));
+    eprintln!("sparse {sparse:?}\nplain  {plain:?}");
+    assert_eq!(sparse.iter().map(|r| r.0).collect::<Vec<_>>(), plain.iter().map(|r| r.0).collect::<Vec<_>>(), "the same budget");
+    assert_ne!(sparse, plain, "the flag changes the children");
+}
