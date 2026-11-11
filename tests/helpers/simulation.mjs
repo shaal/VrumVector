@@ -1,6 +1,7 @@
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import {seededRandom} from '../../AI-Car-Racer/graphics/state.js';
+import {reflexBrain} from '../../AI-Car-Racer/learning/reflex.js';
 
 const files=['utils.js','spatialGrid.js','network.js','controls.js','sensor.js','driver/profiles.js','car.js','collisions.js'];
 const sources=await Promise.all(files.map(file=>readFile(new URL('../../AI-Car-Racer/'+file,import.meta.url),'utf8')));
@@ -13,7 +14,9 @@ export class Simulation {
   // scripts ({'sensor.js': source, ...}) replaces any of the files.
   // collisions ({heatSize}, or true) turns on collision mode, as in the
   // workers: a start row per heat and CarCollisions.step() every step.
-  constructor({track='Rectangle',seed='simulation',maxSpeed=15,traction=.5,profile='balanced',carScript=null,scripts={},collisions=null,timeTieBreak=false}={}){
+  // shield (#73): null (off), true (Car.SHIELD_DEFAULTS), or {front, side,
+  // brain}; brain defaults to reflexBrain().
+  constructor({track='Rectangle',seed='simulation',maxSpeed=15,traction=.5,profile='balanced',carScript=null,scripts={},collisions=null,timeTieBreak=false,shield=null}={}){
     const math=Object.create(Math);math.random=seededRandom(seed);
     this.scope=vm.createContext({Math:math,frameCount:0,bestCar:null,traction,invincible:false,SENSOR_STRIDE:1});
     const replace={...(carScript!=null?{'car.js':carScript}:{}),...scripts};
@@ -21,6 +24,9 @@ export class Simulation {
     sources.forEach((source,i)=>vm.runInContext(replace[files[i]]??source,this.scope,{filename:files[i]}));
     vm.runInContext('globalThis.CarClass=Car;globalThis.GridClass=SpatialGrid;',this.scope);
     if(this.scope.DriverProfiles.settings)this.scope.DriverProfiles.settings.timeTieBreak=timeTieBreak===true;
+    const C=this.scope.CarClass;
+    if(shield&&typeof C.makeShield!=='function')throw Error('This car.js has no reflex shield');
+    if(C.makeShield){C.shield=shield?C.makeShield({brain:reflexBrain(),...(shield===true?{}:shield)}):null;if(shield&&!C.shield)throw Error('Unusable shield config');}
     const preset=presets.find(p=>p.name===track);if(!preset)throw Error('Unknown track '+track);
     const borders=[];
     for(const loop of [preset.points,preset.points2])for(let i=0;i<loop.length;i++)borders.push([loop[i],loop[(i+1)%loop.length]]);

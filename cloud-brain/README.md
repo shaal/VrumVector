@@ -60,7 +60,11 @@ Routes: `GET /health`, `POST /v1/recall`, `POST /v1/contribute`,
 `sim/` is the game's simulation in Rust (crate `vectorvroom-sim`), which a
 verification drives; `node scripts/cloud-brain-sim-traces.mjs` remakes its
 golden traces from the game's own scripts (and the presets' keys the
-service pins, `--presets`).
+service pins, `--presets`). `run_shielded` mirrors the browser's reflex
+shield (#73, `car.js` `Car.shield`, off by default); `--shield` remakes its
+traces (`tests/fixtures/cloud-brain-sim/shield-traces.json`). The Worker never
+uses it: verification and cloud training drive the brain alone
+([results](../docs/validation/reflex-shield.md)).
 Variables: `DISABLE_BRAIN=true` answers every `/v1/` route with 503
 `disabled`; `ALLOW_LOCAL=true` allows `http://localhost:<port>` and
 `http://127.0.0.1:<port>` origins besides the deployed ones;
