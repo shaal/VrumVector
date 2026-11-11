@@ -10,7 +10,10 @@
 // /health must say the schema opened (ok), the brain is on (no DISABLE_BRAIN),
 // the per-address limits are bound and the protocol is the page's; /v1/stats
 // and a recall must answer the site's origin with CORS. A fresh deploy can take a few
-// seconds to answer everywhere: each check is tried for up to a minute.
+// seconds to answer everywhere: each check is tried for up to a minute. Waiting
+// for a commit, /health is tried for up to five minutes: a new version can take
+// more than a minute to replace the one before on every edge (the deploys of
+// 61a3cc0 and PR #78 answered with the previous build for the whole minute).
 // Exits 1 with the reason otherwise. Reads only: nothing is stored.
 import {PROTOCOL, DIMS, recallBody} from '../AI-Car-Racer/cloud/wire.js';
 
@@ -20,9 +23,9 @@ const commit = process.argv[3] || null;
 const local = base.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(base.hostname);
 if (base.protocol !== 'https:' && !local) throw new Error(`not an https endpoint: ${process.argv[2]}`);
 
-async function check(name, attempt) {
+async function check(name, attempt, {tries: most = 12} = {}) {
   let last = null;
-  for (let tries = 0; tries < 12; tries++) {
+  for (let tries = 0; tries < most; tries++) {
     try {
       const why = await attempt();
       if (!why) {
@@ -50,7 +53,7 @@ const health = await check('/health', async () => {
   if (h.protocol !== PROTOCOL) return `protocol ${h.protocol}, the page speaks ${PROTOCOL}`;
   if (commit && h.build?.commit !== commit) return `build ${h.build?.commit} answers, not ${commit} (still the version before?)`;
   return null;
-});
+}, {tries: commit ? 60 : 12});
 
 const stats = health && await check(`/v1/stats for ${SITE}`, async () => {
   const res = await fetch(new URL('/v1/stats', base), {headers: {Origin: SITE}, signal: AbortSignal.timeout(15_000)});
