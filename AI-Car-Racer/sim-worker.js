@@ -36,7 +36,7 @@
 // embedder identity guard; without it, recording would reset on every
 // snapshot.
 
-importScripts('utils.js', 'spatialGrid.js', 'network.js', 'controls.js', 'sensor.js', 'driver/profiles.js', 'car.js', 'collisions.js', 'graphics/recorder.js');
+importScripts('utils.js', 'spatialGrid.js', 'network.js', 'controls.js', 'sensor.js', 'driver/profiles.js', 'car.js', 'collisions.js', 'graphics/recorder.js', 'eliteRescore.js');
 
 // Worker-scope globals that sensor.js / car.js read directly by name.
 self.frameCount = 0;
@@ -63,6 +63,8 @@ let runSerial=0, learningContext=null, seedParents=[], seedKinds=[], seedOrigins
 // Collision mode for this generation: null when off, else {row, state}
 // (CarCollisions.generation) plus per-car scratch for death records.
 let collision = null;
+// Elite re-score config from 'begin' (eliteRescore.js); null = off.
+let eliteRescore = null;
 
 // Per-tick wall-time budget base. Scaled up with simSpeed so 100× can burn
 // real CPU instead of yielding every 20ms after only a handful of steps.
@@ -192,6 +194,7 @@ function handleBegin(m) {
     // Time tie-break (#60): OFF unless 'begin' carries timeTieBreak:true.
     if (DriverProfiles.settings) DriverProfiles.settings.timeTieBreak = m.timeTieBreak === true;
     startInfo = m.startInfo;
+    eliteRescore = EliteRescore.config(m.eliteRescore);
 
     // Pose jitter: uniform disk around the canonical spawn (already offset
     // forward from cp0 gate-mid by computeStartInfoInPlace in main.js, which
@@ -625,6 +628,8 @@ function endGen() {
         if (f > eliteFit) { eliteFit = f; elite = c; }
     }
     if (!elite) return;
+    const rescore = rescoreElite(cpLen);
+    if (rescore) elite = cars[rescore.index];
     self.bestCar = elite;
     const bc = elite;
     const eliteIndex=cars.indexOf(elite);
@@ -728,10 +733,23 @@ function endGen() {
         popCheckpoints, popDeathFrames, popDeathCauses, popDeathXY,
         bestHiddenActivations,
         genSeconds: seconds,
+        ...(rescore ? {eliteRescore: rescoreSummary(rescore)} : {}),
         ...(collision ? {collisions: collisionSummary()} : {})
     }, transfer);
     // Wait for main's next `begin` — stepping is paused until then.
     pause = true;
+}
+
+// Elite re-score (issue #61, off by default): drive the top cars again with
+// full sensors from the canonical and a few jittered poses, and crown the most
+// robust one. Not in collision mode, where cars drive as a heat, not alone.
+function rescoreElite(cpLen) {
+    if (!eliteRescore || collision || !cpLen) return null;
+    return EliteRescore.crown({cars, road: self.road, startInfo, maxSpeed: self.maxSpeed, seconds, config: eliteRescore});
+}
+function rescoreSummary(r) {
+    return {mode: eliteRescore.mode, pool: eliteRescore.pool, changed: r.changed, poses: r.poses, rejected: r.rejected, carFrames: r.carFrames, ms: r.ms,
+        ranked: r.ranked.map(x => ({index: x.index, rank: x.rank, mean: x.mean, min: x.min}))};
 }
 
 // What collision mode did this generation (genEnd.collisions). sensed:
