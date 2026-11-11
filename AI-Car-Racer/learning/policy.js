@@ -206,9 +206,20 @@ export function mutateInto(out,offset,src,amount,random,sparse=null){
   const p=clamp(sparse.p,0,1),sigma=amount*Math.max(0,Number(sparse.sigmaScale)||0);
   for(let j=0;j<FLAT_LENGTH;j++)out[offset+j]=random()<p?src[j]+sigma*gaussian(random):src[j];
 }
+// Stagnation flag for the reflex re-injection (#72): the coach's explore
+// threshold. plan.stagnant counts generations since the last improvement.
+export const REINJECT_STAGNANT=5;
+// true when a plan should get a re-injected reflex: on the flag (stagnant 5)
+// and then once every `every` more stagnant generations (10, 15, ... for 5).
+export function reinjectDue(plan,every=REINJECT_STAGNANT){
+  const s=plan?.stagnant,m=Math.max(1,Math.floor(Number(every)||REINJECT_STAGNANT));
+  return Number.isInteger(s)&&s>=REINJECT_STAGNANT&&(s-REINJECT_STAGNANT)%m===0;
+}
 // reflex (#62): on a cold start (no seed and no champion), slot 0 holds the
 // hand-written reflex driver from reflex.js instead of a random brain.
-export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.random,conservative=.65,sparse=null,reflex=false}) {
+// reinjectReflex (#72): a period M (true = 5) or null. With a champion or seed,
+// when reinjectDue(plan, M), the first novel slot holds the reflex instead.
+export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.random,conservative=.65,sparse=null,reflex=false,reinjectReflex=null}) {
   N=Math.max(1,Math.min(2000,N|0));
   const pool=seeds.filter(s=>validBrain(s.vector));
   const protectedSeed=incumbent&&validBrain(incumbent.vector)?incumbent:pool[0]||null;
@@ -222,6 +233,8 @@ export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.rand
   const counts={archive_recall:0,localStorage_prior:0,random_init:0,protected_elite:0,demonstration:0,reflex:0};
   const mutation=clamp(plan?.mutation??.22,.01,1),novel=clamp(plan?.novel??.1,0,.8);
   const nNovel=protectedSeed&&N>1?(N===2?(plan?.stagnant>=5&&plan.round%5===0?1:0):Math.min(N-1,Math.max(1,Math.floor(N*novel)))):N;
+  // The re-injected reflex takes the first novel slot, never the elite.
+  const reinjectAt=protectedSeed&&N>1&&nNovel>0&&reinjectReflex&&reinjectDue(plan,reinjectReflex===true?REINJECT_STAGNANT:reinjectReflex)?N-nNovel:-1;
   function fillRandom(offset){
     for(let j=0;j<FLAT_LENGTH;j++)flat[offset+j]=random()*2-1;
     const push=.5*clamp(conservative,0,1);
@@ -239,7 +252,7 @@ export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.rand
       // The reflex car still draws its random weights first, so every other
       // car matches the population built without it (paired trials).
       fillRandom(offset);counts.random_init++;kinds[i]='random';
-      if(reflex&&!protectedSeed&&i===0){flat.set(reflexBrain(),offset);kinds[i]='reflex';counts.reflex++;}
+      if((reflex&&!protectedSeed&&i===0)||i===reinjectAt){flat.set(reflexBrain(),offset);kinds[i]='reflex';counts.reflex++;}
       continue;
     }
     const amount=elite?0:clamp(mutation*(i%2?.5:1.8),.005,1);
