@@ -30,6 +30,8 @@ class Car{
         this.laps=0;
         // Frame of the last gate this car gained (time tie-break, #60).
         this.lastGateFrame=0;
+        // Frames the reflex shield drove this car (#73); 0 while it is off.
+        this.shieldFrames=0;
 
         this.controlType = controlType;
         this.useBrain=controlType=="AI";
@@ -186,8 +188,15 @@ class Car{
                 // Human demonstrations record exactly what the network sees.
                 (this.lastInputs||=new Float32Array(offsets.length)).set(offsets);
                 const rawOutputs=NeuralNetwork.feedForward(offsets,this.brain);
-                const outputs=(this.useBrain||this.aiDriving)&&globalThis.DriverProfiles
+                let outputs=(this.useBrain||this.aiDriving)&&globalThis.DriverProfiles
                     ? DriverProfiles.apply(this,rawOutputs) : rawOutputs;
+                // Reflex shield (#73), last so it has the final say: with a
+                // wall close ahead or beside, the reflex drives this frame.
+                const shield=Car.shield;
+                if(shield&&this.useBrain&&Car.shieldDanger(offsets,shield)){
+                    outputs=NeuralNetwork.feedForward(offsets,shield.network);
+                    this.shieldFrames++;
+                }
                 if(this.useBrain){
                     this.controls.forward=outputs[0];
                     this.controls.left=outputs[1];
@@ -200,6 +209,37 @@ class Car{
                 }
             }
         }
+    }
+    // Reflex shield (#73): OFF unless the host (sim-worker.js 'begin', the
+    // test simulator) sets Car.shield = Car.makeShield({front, side, brain}).
+    // It fires when the front ray's reading (1 - offset, high = close) is
+    // above `front`, or another ray's is above `side`. The reflex brain
+    // (learning/reflex.js reflexBrain(), 244 floats) then sets all four
+    // controls for that frame, after the driving style. AI cars only.
+    // cloud-brain/sim mirrors it (run_shielded); verification and cloud
+    // training never use it.
+    static shield=null;
+    // Frozen from a pilot on the 'tune' seeds, before the measured runs.
+    static SHIELD_DEFAULTS=Object.freeze({front:.4,side:.6});
+    // A shield, or null when the config is off or not usable. It builds the
+    // reflex network without Math.random (reviveBrain), so a shield draws
+    // nothing from the seeded streams.
+    static makeShield(config){
+        if(!config||typeof config!=='object')return null;
+        const front=config.front??Car.SHIELD_DEFAULTS.front,side=config.side??Car.SHIELD_DEFAULTS.side,flat=config.brain;
+        if(!Number.isFinite(front)||!Number.isFinite(side)||!flat||flat.length!==244)return null;
+        for(let i=0;i<244;i++)if(!Number.isFinite(flat[i]))return null;
+        const part=(a,b)=>Array.from(flat.slice(a,b));
+        const network=reviveBrain({levels:[
+            {inputCount:10,outputCount:16,biases:part(0,16),weights:part(16,176)},
+            {inputCount:16,outputCount:4,biases:part(176,180),weights:part(180,244)}]});
+        return Object.freeze({front,side,network});
+    }
+    // Inputs 0..6 are the rays; ray 3 points straight ahead.
+    static shieldDanger(inputs,shield){
+        if(inputs[3]>shield.front)return true;
+        for(let i=0;i<7;i++)if(i!==3&&inputs[i]>shield.side)return true;
+        return false;
     }
     #assessDamage(roadBoarders){
         // Broad-phase: only test borders whose AABB overlaps the car polygon's

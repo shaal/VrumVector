@@ -116,6 +116,13 @@ async function readConfig(fetchImpl, url) {
  * a fake with the same functions); `page` gives the current track vector,
  * dynamics query vector and learning context.
  */
+/** The reflex shield (#73): the page flag is set (true or an object), or the
+ *  generation that just ended drove with it (main.js __reflexShieldRan). */
+export function reflexShieldOn(g = globalThis) {
+  const v = g?.vvReflexShield;
+  return v === true || (!!v && typeof v === 'object') || g?.__reflexShieldRan === true;
+}
+
 export class SharedSession {
   constructor({bridge, client, page, setInterval: every = globalThis.setInterval?.bind(globalThis), clearInterval: stop = globalThis.clearInterval?.bind(globalThis)}) {
     this.bridge = bridge;
@@ -153,10 +160,12 @@ export class SharedSession {
   }
 
   start() {
+    // A run with the reflex shield on (#73) is not the brain's own driving:
+    // send none of its brains, feedback or crash maps.
     this.bridge.setCloudHooks({
-      onArchive: entry => this.#track(this.pushBrain(entry)),
-      onFeedback: rows => this.#track(this.pushFeedback(rows)),
-      onCrash: crash => this.queueCrash(crash),
+      onArchive: entry => { if (!reflexShieldOn()) this.#track(this.pushBrain(entry)); },
+      onFeedback: rows => { if (!reflexShieldOn()) this.#track(this.pushFeedback(rows)); },
+      onCrash: crash => !reflexShieldOn() && this.queueCrash(crash),
     });
     if (this.every) {
       this.timers.push(this.every(() => this.#track(this.tick()), FLUSH_MS));

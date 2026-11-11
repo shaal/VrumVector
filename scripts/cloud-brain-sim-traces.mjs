@@ -9,6 +9,7 @@
 //
 //   node scripts/cloud-brain-sim-traces.mjs [--out tests/fixtures/cloud-brain-sim/traces.json] [--extra N]
 //   node scripts/cloud-brain-sim-traces.mjs --presets
+//   node scripts/cloud-brain-sim-traces.mjs --shield
 //
 // Both write cloud-brain/core/src/presets.json: the ten presets' walls and
 // gates, with the page's key and the SHA-256 of the text it hashes (the
@@ -20,6 +21,14 @@
 // the outcome. --extra N adds N more random cases on all ten presets (not
 // for the fixture: write them elsewhere with --out, and run
 // `SIM_TRACES=<file> cargo test --release -p vectorvroom-sim --test traces`).
+//
+// --shield writes tests/fixtures/cloud-brain-sim/shield-traces.json instead:
+// cases with the reflex shield on (#73, car.js Car.makeShield), for the
+// port's run_shielded. The fixture holds the reflex brain it used, so a
+// later retune of learning/reflex.js does not invalidate it. Each case also
+// records the frames the shield drove (`shielded`, one 0/1 a frame) and
+// counts as near a frame where a ray's reading was within 1e-9 of a shield
+// threshold, or where the reflex drove with an output within 1e-9 of flipping.
 import vm from 'node:vm';
 import {readFile, writeFile, mkdir} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
@@ -30,7 +39,8 @@ import {evolveTeacher} from '../tests/helpers/teacher.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const arg = (name, fallback) => { const i = process.argv.indexOf('--' + name); return i > 0 ? process.argv[i + 1] : fallback; };
-const OUT = arg('out', 'tests/fixtures/cloud-brain-sim/traces.json');
+const SHIELD = process.argv.includes('--shield');
+const OUT = arg('out', SHIELD ? 'tests/fixtures/cloud-brain-sim/shield-traces.json' : 'tests/fixtures/cloud-brain-sim/traces.json');
 const EXTRA = Number(arg('extra', 0));
 const FILES = ['utils.js', 'spatialGrid.js', 'network.js', 'controls.js', 'sensor.js', 'driver/profiles.js', 'car.js'];
 const sources = await Promise.all(FILES.map(f => readFile(path.join(root, 'AI-Car-Racer', f), 'utf8')));
@@ -91,9 +101,13 @@ function flatten(car) {
 }
 
 /** One car alone, as the trial worker runs it; the trace of each frame. */
-function trace(scope, preset, flat, {maxSpeed, traction, profile, seconds}) {
+function trace(scope, preset, flat, {maxSpeed, traction, profile, seconds, shield = null}, reflex = null) {
   const {road: r, start} = road(scope, preset);
   scope.road = r; scope.traction = traction; scope.maxSpeed = maxSpeed; scope.frameCount = 0;
+  const Shield = shield ? scope.CarClass.makeShield({...shield, brain: reflex}) : null;
+  if (shield && !Shield) throw Error('unusable shield');
+  scope.CarClass.shield = Shield;
+  const shielded = [];
   const car = new scope.CarClass(start.x, start.y, 30, 50, 'AI', maxSpeed, start.angle);
   car.driverProfile = profile;
   load(car, flat);
@@ -110,14 +124,24 @@ function trace(scope, preset, flat, {maxSpeed, traction, profile, seconds}) {
     const c = car.controls, bits = (c.forward ? 1 : 0) | (c.left ? 2 : 0) | (c.right ? 4 : 0) | (c.reverse ? 8 : 0);
     controls.push(bits.toString(16));
     const margins = Array.from(car.brain.levels[1].preThreshold);
-    if (margins.some(m => Math.abs(m) < 1e-9)) near.push({frame: f, margins});
+    let isNear = margins.some(m => Math.abs(m) < 1e-9);
+    if (Shield) {
+      const fired = car.shieldFrames > shielded.reduce((a, b) => a + b, 0);
+      shielded.push(fired ? 1 : 0);
+      const rays = car.sensor.readings.map(s => s == null ? 0 : 1 - s.offset);
+      if (rays.some((v, i) => Math.abs(v - (i === 3 ? Shield.front : Shield.side)) < 1e-9)) isNear = true;
+      if (fired && Array.from(Shield.network.levels[1].preThreshold).some(m => Math.abs(m) < 1e-9)) isNear = true;
+    }
+    if (isNear) near.push({frame: f, margins});
     frames = f;
     if (f % 30 === 0) states.push(state(f));
     if (car.damaged) { crashedAt = f; states.push(state(f)); break; }
   }
   if (!crashedAt && frames % 30) states.push(state(frames));
-  return {start, controls: controls.join(''), states, near,
-    outcome: {fitness: car.checkPointsCount + car.laps * gates, laps: car.laps, lapFrames: laps, crashedAt, frames}};
+  scope.CarClass.shield = null;
+  return {start, controls: controls.join(''), ...(Shield ? {shielded: shielded.join('')} : {}), states, near,
+    outcome: {fitness: car.checkPointsCount + car.laps * gates, laps: car.laps, lapFrames: laps, crashedAt, frames,
+      ...(Shield ? {shieldFrames: car.shieldFrames} : {})}};
 }
 
 /** Brains the game's own learning loop evolves on the track
@@ -142,7 +166,31 @@ const SETTINGS = [
 ];
 const cases = [];
 const t0 = Date.now();
-for (const name of ['Rectangle', 'Oval', 'Triangle', 'Monza', 'Monaco']) {
+// The shield cases: random brains, and the reflex with noise (it drives
+// far, so the shield both fires and stays quiet), under several styles and
+// three threshold pairs.
+const {reflexBrain} = SHIELD ? await import('../AI-Car-Racer/learning/reflex.js') : {};
+const REFLEX = SHIELD ? reflexBrain() : null;
+// The default (car.js SHIELD_DEFAULTS), a gentler pair, and one with front
+// above side (so the front ray's threshold is told apart from the others').
+const SHIELDS = [{front: 0.4, side: 0.6}, {front: 0.75, side: 0.85}, {front: 0.9, side: 0.5}];
+for (const name of SHIELD ? ['Rectangle', 'Oval', 'Triangle', 'Monza', 'Monaco'] : []) {
+  const preset = PRESETS.find(p => p.name === name);
+  const random = seededRandom('shield:' + name);
+  const brains = [0, 1].map(i => ({vector: Float32Array.from({length: 244}, () => random() * 2 - 1), kind: 'random ' + i}));
+  brains.push({vector: Float32Array.from(REFLEX), kind: 'reflex'});
+  for (const i of [0, 1]) brains.push({vector: Float32Array.from(REFLEX, v => v + (random() * 2 - 1) * 0.3), kind: 'reflex with noise ' + i});
+  for (const brain of brains) {
+    for (const shield of SHIELDS) {
+      for (const settings of [SETTINGS[0], SETTINGS[1], SETTINGS[2], SETTINGS[6]]) {
+        const s = {...settings, shield};
+        cases.push({track: name, brain: brain.kind, settings: s, vector: b64(brain.vector), ...trace(game('trace'), preset, brain.vector, s, REFLEX)});
+      }
+    }
+  }
+  process.stderr.write(`${name}: ${cases.length} shield cases, ${((Date.now() - t0) / 1000).toFixed(0)} s\n`);
+}
+for (const name of SHIELD ? [] : ['Rectangle', 'Oval', 'Triangle', 'Monza', 'Monaco']) {
   const preset = PRESETS.find(p => p.name === name);
   const random = seededRandom('brains:' + name);
   const brains = [0, 1].map(i => ({vector: Float32Array.from({length: 244}, () => random() * 2 - 1), kind: 'random ' + i}));
@@ -182,6 +230,6 @@ const numbers = [0, -0, 1, -1, 0.1, 0.1 + 0.2, 1 / 3, 2 / 3, 1e-6, 9.99e-7, 1e-7
   ...Array.from({length: 200}, () => Math.round((nr() * 3200) * 100) / 100),
   ...Array.from({length: 100}, () => nr() * 3200)].map(x => [x, JSON.stringify(x)]);
 await mkdir(path.dirname(path.resolve(root, OUT)), {recursive: true});
-await writeFile(path.resolve(root, OUT), JSON.stringify({node: process.version, tracks, numbers, cases}) + '\n');
+await writeFile(path.resolve(root, OUT), JSON.stringify(SHIELD ? {node: process.version, reflex: b64(REFLEX), tracks, cases} : {node: process.version, tracks, numbers, cases}) + '\n');
 const laps = cases.filter(c => c.outcome.laps > 0).length;
 process.stderr.write(`${cases.length} cases (${laps} with a lap) → ${OUT}\n`);

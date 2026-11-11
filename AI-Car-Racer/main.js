@@ -836,6 +836,9 @@ simWorker.onmessage = (ev) => {
             handleSnapshot(m);
             break;
         case 'genEnd':
+            // Whether this generation drove with the reflex shield (#73): the
+            // cloud session sends nothing from it (cloud/session.js).
+            window.__reflexShieldRan = !!m.shield;
             handleGenEnd(m);
             break;
         case 'driverBrain':
@@ -1424,6 +1427,30 @@ function begin(preservePause = false, resetPlayers = false){
     performBegin(batchSize);
 }
 
+// Reflex shield (#73): OFF unless globalThis.vvReflexShield is true (the
+// default thresholds, car.js Car.SHIELD_DEFAULTS) or {front, side}. Each
+// generation reads it again; a threshold that is not a finite number turns it
+// off. Paired runs did not clear the kill criterion
+// (docs/validation/reflex-shield.md), so it stays off. The reflex brain is
+// loaded with the page, so a shielded generation has it from frame 1.
+var reflexShieldBrain = null;
+import('./learning/reflex.js').then(m => { reflexShieldBrain = m.reflexBrain(); }, e => console.warn('[reflex shield] reflex.js unavailable', e));
+function reflexShieldFlag(){
+    try {
+        const v = globalThis.vvReflexShield;
+        if (v !== true && (!v || typeof v !== 'object' || Array.isArray(v))) return null;
+        if (!reflexShieldBrain) { console.warn('[reflex shield] the reflex is not loaded yet: this generation runs without it'); return null; }
+        const out = { brain: Array.from(reflexShieldBrain) };
+        if (v === true) return out;
+        for (const k of ['front', 'side']) {
+            if (v[k] === undefined) continue;
+            if (!Number.isFinite(v[k])) { console.warn('[reflex shield] ' + k + ' must be a finite number: off'); return null; }
+            out[k] = v[k];
+        }
+        return out;
+    } catch (_) { return null; }
+}
+
 function performBegin(N){
     presentationRunSerial++;
     if (!workerInited){
@@ -1465,6 +1492,7 @@ function performBegin(N){
         poseJitter: Object.assign({ radiusPx: 0, angleDeg: 0, maxAttempts: 8 }, window.__poseJitter || {}),
         eliteRescore: window.__eliteRescore || null,
         collisions,
+        shield: reflexShieldFlag(),
         brains
     }, [brains.buffer]);
     // Worker handleBegin always sets pause=false and starts the step loop.
@@ -2216,6 +2244,7 @@ window.__downloadCSV = function(label, rows){
             // Same re-score as worker A, so the A − B delta stays ruvector only.
             eliteRescore: window.__eliteRescore || null,
             collisions: activeCollisions,
+            shield: reflexShieldFlag(),
             brains: brains
         }, [brains.buffer]);
     }

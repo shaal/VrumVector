@@ -10,7 +10,8 @@
 //     { type: 'init',   canvasW, canvasH, borders, checkPointList }
 //     { type: 'begin',  N, seconds, maxSpeed, traction, startInfo,
 //                        brains: Float32Array(N*FLAT_LENGTH),
-//                        collisions?: null | {heatSize} }   — see collisions.js
+//                        collisions?: null | {heatSize},     — see collisions.js
+//                        shield?: null | {front?, side?, brain} }   — reflex shield, #73
 //     { type: 'setSimSpeed', v }
 //     { type: 'setPause', pause }
 //     { type: 'setTraction', v }
@@ -20,7 +21,8 @@
 //     { type: 'ready' }
 //     { type: 'snapshot', ...see postSnapshot }   — throttled to ~60Hz
 //     { type: 'genEnd', bestBrain, fitness, laps, lapTimes, checkPointsCount, frameCount,
-//                        collisions?: {heatSize, heats, rowFitted, contacts, contactDeaths, ...} }
+//                        collisions?: {heatSize, heats, rowFitted, contacts, contactDeaths, ...},
+//                        shield?: {frames, drivenFrames, laps, cars} }
 //
 // Collision mode (docs/plan/car-collisions.md): when 'begin' carries
 // collisions, cars in the same heat are solid. Each heat starts in a row
@@ -179,6 +181,19 @@ function poseInCorridor(x, y, angle, width, height){
     return CarCollisions.poseClear(self.road, x, y, angle, width, height);
 }
 
+// Reflex shield (#73): OFF unless 'begin' carries shield = {front?, side?,
+// brain} (main.js sends reflexBrain() as brain). Every 'begin' sets it again,
+// for the whole generation, so it never carries over or switches on midway.
+function setShield(config) {
+    if (typeof Car.makeShield !== 'function') return; // an older cached car.js
+    Car.shield = Car.makeShield(config);
+}
+function shieldSummary() {
+    let frames = 0, drivenFrames = 0, laps = 0;
+    for (const c of cars) { frames += c.shieldFrames || 0; drivenFrames += c.drivingStats?.frames || 0; laps += c.laps || 0; }
+    return { frames, drivenFrames, laps, cars: cars.length };
+}
+
 function handleBegin(m) {
     const _t0 = performance.now();
     self.frameCount = 0;
@@ -193,6 +208,7 @@ function handleBegin(m) {
     self.traction = m.traction;
     // Time tie-break (#60): OFF unless 'begin' carries timeTieBreak:true.
     if (DriverProfiles.settings) DriverProfiles.settings.timeTieBreak = m.timeTieBreak === true;
+    setShield(m.shield);
     startInfo = m.startInfo;
     eliteRescore = EliteRescore.config(m.eliteRescore);
 
@@ -734,7 +750,8 @@ function endGen() {
         bestHiddenActivations,
         genSeconds: seconds,
         ...(rescore ? {eliteRescore: rescoreSummary(rescore)} : {}),
-        ...(collision ? {collisions: collisionSummary()} : {})
+        ...(collision ? {collisions: collisionSummary()} : {}),
+        ...(Car.shield ? {shield: shieldSummary()} : {})
     }, transfer);
     // Wait for main's next `begin` — stepping is paused until then.
     pause = true;

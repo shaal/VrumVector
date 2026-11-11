@@ -8,7 +8,7 @@
 
 use base64::Engine as _;
 use serde_json::Value;
-use vectorvroom_sim::{run, Brain, Car, Point, Pose, Profile, Settings, Track};
+use vectorvroom_sim::{run, run_shielded, Brain, Car, Point, Pose, Profile, Settings, Shield, Track};
 
 /// The fixture, or SIM_TRACES (a larger set made with --extra, for a check
 /// run by hand).
@@ -17,6 +17,11 @@ fn fixture() -> Value {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/cloud-brain-sim/traces.json"));
     serde_json::from_str(&std::fs::read_to_string(path).expect("run scripts/cloud-brain-sim-traces.mjs")).unwrap()
+}
+/// The reflex shield's cases (#73; `--shield`), with the reflex they used.
+fn shield_fixture() -> Value {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/cloud-brain-sim/shield-traces.json");
+    serde_json::from_str(&std::fs::read_to_string(path).expect("run scripts/cloud-brain-sim-traces.mjs --shield")).unwrap()
 }
 fn points(v: &Value) -> Vec<Point> {
     v.as_array().unwrap().iter().map(|p| Point { x: p[0].as_f64().unwrap(), y: p[1].as_f64().unwrap() }).collect()
@@ -29,7 +34,10 @@ pub fn track(t: &Value) -> Track {
     Track::new(t["width"].as_f64().unwrap(), t["height"].as_f64().unwrap(), &points(&t["inner"]), &points(&t["outer"]), &gates)
 }
 fn brain(c: &Value) -> Brain {
-    let bytes = base64::engine::general_purpose::STANDARD.decode(c["vector"].as_str().unwrap()).unwrap();
+    decode(&c["vector"])
+}
+fn decode(v: &Value) -> Brain {
+    let bytes = base64::engine::general_purpose::STANDARD.decode(v.as_str().unwrap()).unwrap();
     let flat: Vec<f32> = bytes.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
     Brain::from_flat(&flat).unwrap()
 }
@@ -67,7 +75,7 @@ struct Tally {
 
 /// Runs a case from the browser's start pose, or (`own_pose`) from the one
 /// the port finds itself, as the service does.
-fn compare(t: &Track, c: &Value, own_pose: bool, tally: &mut Tally) -> Result<Verdict, String> {
+fn compare(t: &Track, c: &Value, own_pose: bool, reflex: Option<&Value>, tally: &mut Tally) -> Result<Verdict, String> {
     let js_start = &c["start"];
     let pose = if own_pose {
         t.start().unwrap()
@@ -81,13 +89,22 @@ fn compare(t: &Track, c: &Value, own_pose: bool, tally: &mut Tally) -> Result<Ve
     let mut problem: Option<String> = None;
     let mut parted: Option<u64> = None;
     let mut next_state = 0;
-    let outcome = run(t, pose, brain(c), settings, frames, |frame, car: &Car| {
+    let shield = c["settings"].get("shield").map(|s| Shield {
+        front: s["front"].as_f64().unwrap(),
+        side: s["side"].as_f64().unwrap(),
+        brain: decode(reflex.expect("a shield case needs the fixture's reflex")),
+    });
+    let shielded: Vec<u8> = c["shielded"].as_str().unwrap_or("").bytes().map(|b| b - b'0').collect();
+    let mut shield_frames = 0;
+    let observe = |frame: u64, car: &Car| {
         if problem.is_some() || parted.is_some() {
             return;
         }
+        shield_frames = car.shield_frames;
         let bits = car.controls.iter().enumerate().fold(0u8, |acc, (i, on)| acc | (u8::from(*on) << i));
         let want = controls.get(frame as usize - 1).copied();
-        if want != Some(bits) {
+        let fired = shielded.get(frame as usize - 1).map(|b| *b == 1);
+        if want != Some(bits) || (shield.is_some() && fired != Some(car.shielded)) {
             if near.contains(&frame) {
                 parted = Some(frame);
             } else {
@@ -112,7 +129,11 @@ fn compare(t: &Track, c: &Value, own_pose: bool, tally: &mut Tally) -> Result<Ve
                 problem = Some(format!("frame {frame}: slide/checkpoints/laps differ: {s}"));
             }
         }
-    });
+    };
+    let outcome = match shield.clone() {
+        Some(shield) => run_shielded(t, pose, brain(c), settings, shield, frames, observe),
+        None => run(t, pose, brain(c), settings, frames, observe),
+    };
     if let Some(p) = problem {
         return Err(p);
     }
@@ -127,6 +148,7 @@ fn compare(t: &Track, c: &Value, own_pose: bool, tally: &mut Tally) -> Result<Ve
         || outcome.lap_frames != lap_frames
         || outcome.crashed_at != js["crashedAt"].as_u64()
         || outcome.frames != js["frames"].as_u64().unwrap()
+        || (shield.is_some() && Some(shield_frames) != js["shieldFrames"].as_u64())
     {
         return Err(format!("outcome {outcome:?} vs the browser's {js}"));
     }
@@ -136,14 +158,18 @@ fn compare(t: &Track, c: &Value, own_pose: bool, tally: &mut Tally) -> Result<Ve
 /// Every case of the fixture (or SIM_TRACES), from the browser's start pose
 /// or the port's own.
 fn drive_every_case(own_pose: bool) {
-    let f = fixture();
+    drive_cases(&fixture(), own_pose, 60);
+}
+
+fn drive_cases(f: &Value, own_pose: bool, at_least: usize) {
     let tracks = &f["tracks"];
+    let reflex = f.get("reflex");
     let cases = f["cases"].as_array().unwrap();
-    assert!(cases.len() >= 60, "{} cases", cases.len());
+    assert!(cases.len() >= at_least, "{} cases", cases.len());
     let (mut same, mut parted, mut failures, mut tally) = (0, Vec::new(), Vec::new(), Tally::default());
     for (i, c) in cases.iter().enumerate() {
         let t = track(&tracks[c["track"].as_str().unwrap()]);
-        match compare(&t, c, own_pose, &mut tally) {
+        match compare(&t, c, own_pose, reflex, &mut tally) {
             Ok(Verdict::Same) => same += 1,
             Ok(Verdict::Parted(frame)) => parted.push((i, frame)),
             Err(e) => failures.push(format!("case {i} ({}, {}, {}): {e}", c["track"], c["brain"], c["settings"])),
@@ -165,6 +191,16 @@ fn drive_every_case(own_pose: bool) {
 #[test]
 fn the_port_drives_as_the_browser() {
     drive_every_case(false);
+}
+
+#[test]
+fn the_reflex_shield_drives_as_the_browser() {
+    // #73: run_shielded against car.js with Car.shield set, frame by frame,
+    // including which frames the shield drove and how many.
+    let f = shield_fixture();
+    drive_cases(&f, false, 100);
+    let fired = f["cases"].as_array().unwrap().iter().filter(|c| c["outcome"]["shieldFrames"].as_u64().unwrap() > 0).count();
+    assert!(fired >= 50, "cases where the shield fired: {fired}");
 }
 
 #[test]

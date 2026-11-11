@@ -263,6 +263,27 @@ impl Brain {
     }
 }
 
+// ─── the reflex shield ──────────────────────────────────────────────────────
+
+/// The reflex shield (#73, car.js `Car.makeShield`): when the front ray's
+/// reading (1 - offset) is above `front`, or another ray's is above `side`,
+/// `brain` (the reflex, learning/reflex.js `reflexBrain()`) sets all four
+/// controls for that frame, after the driving style. Off unless a run is
+/// `run_shielded`; verification and cloud training never use it.
+#[derive(Clone, Debug)]
+pub struct Shield {
+    pub front: f64,
+    pub side: f64,
+    pub brain: Brain,
+}
+
+impl Shield {
+    /// `Car.shieldDanger`: ray 3 points straight ahead.
+    fn danger(&self, inputs: &[f64; INPUTS]) -> bool {
+        inputs[RAYS / 2] > self.front || (0..RAYS).any(|i| i != RAYS / 2 && inputs[i] > self.side)
+    }
+}
+
 // ─── driving styles ─────────────────────────────────────────────────────────
 
 /// The driving styles (driver/profiles.js). A style changes the network's
@@ -345,6 +366,11 @@ pub struct Car {
     pub margins: [f64; 4],
     /// The rays' readings (offset along the ray, 0..1; None: nothing).
     pub readings: [Option<f64>; RAYS],
+    /// Perceptions the reflex shield drove (`shieldFrames`); 0 without one.
+    pub shield_frames: u64,
+    /// The shield drove the last perception.
+    pub shielded: bool,
+    shield: Option<Shield>,
     polygon: [Point; 3],
     acceleration: f64,
     break_accel: f64,
@@ -395,6 +421,9 @@ impl Car {
             controls: [false; 4],
             margins: [0.0; 4],
             readings: [None; RAYS],
+            shield_frames: 0,
+            shielded: false,
+            shield: None,
             polygon: polygon_at(pose.x, pose.y, pose.angle),
             acceleration: m / 50.0,
             break_accel: m / 60.0,
@@ -534,6 +563,14 @@ impl Car {
         let (raw, margins) = self.brain.decide(&inputs);
         self.margins = margins;
         self.controls = self.styled(raw);
+        self.shielded = false;
+        if let Some(shield) = &self.shield {
+            if shield.danger(&inputs) {
+                self.controls = shield.brain.decide(&inputs).0;
+                self.shield_frames += 1;
+                self.shielded = true;
+            }
+        }
     }
 
     /// DriverProfiles.apply: a style damps quick opposite turns and brakes
@@ -738,8 +775,19 @@ pub fn run(track: &Track, pose: Pose, brain: Brain, settings: Settings, frames: 
 
 /// `run`, stopped (`over_budget`) once the car has examined more than
 /// `budget` segments: what bounds the cost of a track made to be costly.
-pub fn run_within(track: &Track, pose: Pose, brain: Brain, settings: Settings, frames: u64, budget: u64, mut observe: impl FnMut(u64, &Car)) -> Outcome {
+pub fn run_within(track: &Track, pose: Pose, brain: Brain, settings: Settings, frames: u64, budget: u64, observe: impl FnMut(u64, &Car)) -> Outcome {
+    drive_run(Car::new(pose, brain, settings, track), track, frames, budget, observe)
+}
+
+/// `run` with the reflex shield on (#73; sim-worker.js with `shield`).
+/// `observe` sees `Car::shield_frames` and `Car::shielded`.
+pub fn run_shielded(track: &Track, pose: Pose, brain: Brain, settings: Settings, shield: Shield, frames: u64, observe: impl FnMut(u64, &Car)) -> Outcome {
     let mut car = Car::new(pose, brain, settings, track);
+    car.shield = Some(shield);
+    drive_run(car, track, frames, u64::MAX, observe)
+}
+
+fn drive_run(mut car: Car, track: &Track, frames: u64, budget: u64, mut observe: impl FnMut(u64, &Car)) -> Outcome {
     let mut done = 0;
     let mut crashed_at = None;
     let mut over_budget = false;
