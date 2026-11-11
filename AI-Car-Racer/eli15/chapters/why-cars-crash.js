@@ -29,6 +29,9 @@ export default {
     'The rare few that happen to wire up a sensible reflex — "if the centre ray reads low,',
     'stop going forward" — are the seeds everything else descends from. Gen 0 isn\'t dumb;',
     'it\'s <strong>random</strong>, and random is mostly broken.</p>',
+    '<p>Since issue #62, a cold start also gets one hand-written reflex car, so',
+    'generation 0 is no longer <em>all</em> dice rolls. See',
+    '<a href="#" data-eli15="reflex-seed">Giving generation 0 one car that can already drive</a>.</p>',
 
     '<h3>3. The first half-decent car becomes the ancestor of everyone</h3>',
     '<p>Fitness is brutally simple: <code>checkPointsCount + laps × cpLen</code>',

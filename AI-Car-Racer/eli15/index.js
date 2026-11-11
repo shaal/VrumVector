@@ -53,6 +53,12 @@
       oneLiner: 'Copy the winners, nudge their weights, discard the losers. Repeat.',
       loader: function () { return import('./chapters/genetic-algorithm.js'); },
     },
+    'reflex-seed': {
+      title: 'Giving generation 0 one car that can already drive',
+      oneLiner: 'One hand-written "reflex" car joins the random cars, so evolution starts next to a car that works.',
+      related: ['why-cars-crash', 'genetic-algorithm'],
+      loader: function () { return import('./chapters/reflex-seed.js'); },
+    },
     'fitness-function': {
       title: 'How we decide which car is "best"',
       oneLiner: 'Checkpoints passed + completed laps × track length.',
