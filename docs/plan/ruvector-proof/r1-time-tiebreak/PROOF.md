@@ -11,7 +11,8 @@
 - Workers send `lastGateFrame` with a generation result only when the flag is on.
 - `LearningCoach.record` then takes a tied champion (same progress, no worse style) whose last gate came strictly sooner than the stored one. A tie win does not reset stagnation.
 - Turn it on: `begin` messages to `sim-worker.js` take `timeTieBreak:true`, and so do `trial` messages to `learning/trial-worker.js`. `main.js` sends neither yet.
-- With the flag OFF, results, messages and champions are the same as before. The bit-identity tests pass.
+- With the flag OFF, results and messages are the same as before, and the coach picks the same champions. The bit-identity tests pass.
+- A champion saved during a flag-on session keeps a `lastGateFrame` field. A flag-off session ignores it. A flag-on session treats a champion with no stored frame as beatable by any tied, sooner run.
 
 ## Cheap check: how often the top gate count ties
 
@@ -45,7 +46,7 @@ Share of generations where two or more cars share the top gate count. These are 
 
 - Best progress: on ahead in 4 runs, off ahead in 2, equal in 2.
 - Lap time, on/off, for the 6 runs where both champions lapped: 0.524, 0.925, 0.931, 1.090, 1.135, 2.202. The median is about 1.01, so there is no lap gain.
-- Champion crashes: off 0/8, on 3/8. Mean final survival: off 0.612, on 0.536.
+- Champion crashes: off 0/8, on 3/8. Mean final survival: off 0.612, on 0.536 (unrounded data).
 
 ### Triangle (n=8)
 

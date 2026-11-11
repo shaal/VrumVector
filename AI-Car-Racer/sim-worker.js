@@ -190,7 +190,7 @@ function handleBegin(m) {
     self.maxSpeed = m.maxSpeed;
     self.traction = m.traction;
     // Time tie-break (#60): OFF unless 'begin' carries timeTieBreak:true.
-    DriverProfiles.settings.timeTieBreak = m.timeTieBreak === true;
+    if (DriverProfiles.settings) DriverProfiles.settings.timeTieBreak = m.timeTieBreak === true;
     startInfo = m.startInfo;
 
     // Pose jitter: uniform disk around the canonical spawn (already offset
@@ -717,7 +717,7 @@ function endGen() {
         presentationRun,
         bestBrain: flat,
         fitness: bc.checkPointsCount + bc.laps * cpLen,
-        ...DriverProfiles.lastGateFrame(bc),
+        ...DriverProfiles.lastGateFrame?.(bc),
         laps: bc.laps,
         lapTimes: Array.isArray(bc.lapTimes) ? bc.lapTimes.slice() : [],
         checkPointsCount: bc.checkPointsCount,
