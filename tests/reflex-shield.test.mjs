@@ -42,7 +42,20 @@ test('the shield fixture is what car.js drives today (styles included)',async()=
     const want=JSON.parse(read(new URL('./fixtures/cloud-brain-sim/shield-traces.json',import.meta.url),'utf8')),got=JSON.parse(read(out,'utf8'));
     delete want.node;delete got.node;
     assert.ok(want.cases.some(c=>c.settings.profile==='careful'&&c.outcome.shieldFrames>0));
-    assert.deepEqual(got,want);
+    // Numbers within 1e-9 relative, as traces.rs compares: sin and cos
+    // differ in the last bits between platforms (the fixture is from macOS,
+    // CI runs Linux). Everything else, the controls included, is exact.
+    const near=(a,b)=>a===b||Math.abs(a-b)<=1e-9*Math.max(Math.abs(a),Math.abs(b),1);
+    const same=(a,b,at)=>{
+      if(typeof a==='number'&&typeof b==='number'){assert.ok(near(a,b),`${at}: ${a} vs ${b}`);return;}
+      if(a&&b&&typeof a==='object'&&typeof b==='object'){
+        assert.equal(Array.isArray(a),Array.isArray(b),at);
+        assert.deepEqual(Object.keys(a).sort(),Object.keys(b).sort(),at);
+        for(const k of Object.keys(a))same(a[k],b[k],`${at}.${k}`);return;
+      }
+      assert.deepEqual(a,b,at);
+    };
+    same(got,want,'traces');
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
