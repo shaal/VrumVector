@@ -4,16 +4,20 @@
 // vector, driving} for one generation, so the same loop runs in the browser
 // trial worker and in Node tests.
 import {LearningCoach,buildPopulation} from './policy.js';
+import {applyReflexTuning} from './reflexTuner.js';
 
 export const TRIAL_DEFAULTS={generations:6,population:24,mutation:.22,conservative:.65};
 
-export function runTrialArm({simulate,context,seeds=[],random,exploration=1,returnChampion=false,sparse=null,reflex=false,reinjectReflex=null,...options}){
+// reflexTuning (#70): the reflex car of a cold start uses this tuning
+// (reflexTuner.js) instead of the fixed one. It needs reflex:true.
+export function runTrialArm({simulate,context,seeds=[],random,exploration=1,returnChampion=false,sparse=null,reflex=false,reinjectReflex=null,reflexTuning=null,...options}){
   const {generations,population,mutation,conservative}={...TRIAL_DEFAULTS,...options};
   const coach=new LearningCoach();coach.setContext(context);let lastMean=0;
   for(let generation=0;generation<generations;generation++){
     // Fixed exploration, as with the default live setting.
     const plan=coach.plan(mutation,false,exploration);
     const batch=buildPopulation({N:population,seeds,incumbent:coach.incumbent,plan,random,conservative,sparse,reflex,reinjectReflex});
+    if(reflexTuning)applyReflexTuning(batch,reflexTuning);
     const result=simulate(batch.flat,batch);coach.record(result,result.vector);
     lastMean=Number.isFinite(result.meanProgress)?result.meanProgress:result.fitness;
   }

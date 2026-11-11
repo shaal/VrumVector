@@ -1,6 +1,7 @@
 import {LearningCoach,buildPopulation,sparseMutationFlag,cleanContext,contextKey,validBrain,collisionsLabel} from './policy.js';
 import {geometryKey} from '../graphics/state.js';
 import {reflexSeedEnabled,reflexReinjectEnabled} from './reflex.js';
+import {reflexTuneEnabled,cachedTuning,storeTuning,tuningKey,tuneReflex,pageDrive,applyReflexTuning,REFLEX_TUNE_BUDGET_MS} from './reflexTuner.js';
 import {applyTransferGuard,transferGuard,isTransferPaused,resumeTransfer,runTransferCheck,clearTransferGuards} from './transferCheck.js';
 import {TrainingHealth,loadHealth,HEALTH_WINDOW} from './health.js';
 import {DemonstrationRecorder,DemonstrationStore,MAX_DEMONSTRATIONS,MAX_SECONDS} from './demonstration.js';
@@ -78,7 +79,33 @@ class DriverLearning {
     if(this.forceSaved){this.coach.incumbent=null;this.forceSaved=false;}
     this.batch=buildPopulation({N,seeds:pool,incumbent:this.coach.incumbent,plan:this.lastPlan,conservative,sparse:sparseMutationFlag(),reflex:reflexSeedEnabled(),
       reinjectReflex:reflexReinjectEnabled()});
+    this.applyReflexTuning(this.batch);
     this.seeds=pool;this.render();return this.batch;
+  }
+  // #70: on a cold start, the reflex car (slot 0) uses a tuning fitted to this
+  // track. A cached one is reused; otherwise a short search runs here, on the
+  // page's simulator, within REFLEX_TUNE_BUDGET_MS. Any failure keeps the
+  // fixed reflex. Returns the tuning used, or null.
+  reflexTuningFor(context){
+    if(!context||!reflexTuneEnabled())return null;
+    // The memo keeps arm A, arm B and the transfer check on one tuning, also
+    // when localStorage cannot be written (quota, private mode).
+    const key=tuningKey(context);this.reflexTunings??=new Map();
+    // The memo comes first, so another tab's later tuning cannot split this tab's arms.
+    const cached=this.reflexTunings.get(key)||cachedTuning(context);if(cached){this.reflexTunings.set(key,cached);return cached;}
+    try{
+      if(typeof Car==='undefined'||typeof road==='undefined'||!road?.checkPointList?.length)return null;
+      // Never tune on a road that is not this context's track (a preset
+      // loaded after the last generation started): it would cache the wrong track.
+      if(geometryKey(road)!==context.track)return null;
+      const makeCar=()=>{const car=new Car(startInfo.x,startInfo.y,30,50,'AI',context.maxSpeed,startInfo.heading||0);car.driverProfile=context.profile;return car;};
+      const result=tuneReflex({drive:pageDrive({makeCar,road,seconds:context.seconds}),budgetMs:REFLEX_TUNE_BUDGET_MS});
+      storeTuning(context,result);this.reflexTunings.set(key,result.tuning);this.reflexTune={...result,key:contextKey(context)};
+      return result.tuning;
+    }catch(error){console.warn('[learning] reflex tuning skipped',error);return null;}
+  }
+  applyReflexTuning(batch,context=this.context){
+    return batch?.kinds?.[0]==='reflex'&&applyReflexTuning(batch,this.reflexTuningFor(context));
   }
   // "Use my driving": the clone of one context's recordings. demo is
   // {key (offerKey), seed, report, seeding}; seeding means it joins the pool.
@@ -113,11 +140,14 @@ class DriverLearning {
     // Trials run in the context's collision mode (runTransferCheck reads it
     // from the context), so a check in collision mode measures transfer into
     // collision mode.
+    // #70: the fresh arm's reflex car uses this track's tuning, as a live cold
+    // start here does. It is tuned now if no cached tuning exists.
+    const reflexTuning=seeds.length&&reflexSeedEnabled()?this.reflexTuningFor(context):null;
     const promise=runTransferCheck({context,track,profile:context.profile,maxSpeed:context.maxSpeed,traction:context.traction,
       seconds:context.seconds,exploration:DriverProfiles.get(context.profile).exploration,seeds,signal:controller.signal,
       mutation:liveNumber(typeof mutateValue==='undefined'?null:mutateValue,.22),
       conservative:liveNumber(typeof conservativeInit==='undefined'?null:conservativeInit,.65),
-      onProgress:progress=>{this.transferProgress=progress;this.render();},...options})
+      onProgress:progress=>{this.transferProgress=progress;this.render();},...(reflexTuning?{reflexTuning}:{}),...options})
       .then(result=>{
         if(result?.state==='no-memories')this.setTransferStatus(context,'Transfer check: no memories from other tracks, styles, or conditions yet.');
         else if(result?.decided)this.setTransferStatus(context,'Transfer check: already decided for these memories and settings. Resume transfer or change a setting to test again.');

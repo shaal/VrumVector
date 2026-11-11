@@ -25,6 +25,7 @@ import {compareOutcomes} from './trial.js';
 import {contextKey,cleanContext,collisionSettings} from './policy.js';
 import {hashBrain} from '../archive/hash.js';
 import {reflexSeedEnabled} from './reflex.js';
+import {reflexTuneEnabled,cachedTuning,validTuning,tuningTag} from './reflexTuner.js';
 
 const STORE='vv.transferGuard',MAX_ENTRIES=40;
 export const CHECK_DEFAULTS={trialsPerRun:60,generations:6,population:24};
@@ -60,9 +61,11 @@ export function resumeTransfer(context){
 export function clearTransferGuards(){storeEpoch++;try{localStorage.removeItem(STORE);}catch{}}
 export function testIdentity(seeds,settings){
   const memories=(seeds||[]).map(v=>hashBrain(v instanceof Float32Array?v:new Float32Array(v))).join('.');
-  const {mutation,conservative,generations,population,seconds,reflex}=settings;
-  // A fresh arm with the reflex car (#62) is a different baseline: a new test.
-  return `${memories}|m${mutation}|c${conservative}|g${generations}|p${population}|s${seconds}`+(reflex?'|r1':'');
+  const {mutation,conservative,generations,population,seconds,reflex,reflexTuning}=settings;
+  // A fresh arm with the reflex car (#62), or with a reflex tuned for the
+  // track (#70), is a different baseline: a new test.
+  return `${memories}|m${mutation}|c${conservative}|g${generations}|p${population}|s${seconds}`+(reflex?'|r1':'')+
+    (reflex&&validTuning(reflexTuning)?'|t'+tuningTag(reflexTuning):'');
 }
 
 // Keep only memories recorded under this exact context when transfer is paused.
@@ -83,7 +86,12 @@ export async function runTransferCheck({context,track,profile,maxSpeed,traction,
   // The fresh arm starts the way a live cold start does: with the reflex car
   // (#62) when it is on. The memory arm has seeds, so it never gets one. The
   // key joins the test identity only when on, so opted-out tests keep theirs.
-  const {trialsPerRun,...trialOptions}={...CHECK_DEFAULTS,mutation:.22,conservative:.65,...(reflexSeedEnabled()?{reflex:true}:{}),...options};
+  // With #70 on, the fresh arm's reflex car uses this track's cached tuning
+  // (the one a live cold start here uses). session.js passes the tuning in
+  // options, tuning on demand; with neither, the fixed reflex.
+  const tuned=reflexSeedEnabled()&&reflexTuneEnabled()?cachedTuning(context):null;
+  const {trialsPerRun,...trialOptions}={...CHECK_DEFAULTS,mutation:.22,conservative:.65,...(reflexSeedEnabled()?{reflex:true}:{}),
+    ...(tuned?{reflexTuning:tuned}:{}),...options};
   const key=contextKey(context),identity=testIdentity(seeds,{...trialOptions,seconds});
   if(!seeds?.length)return {state:'no-memories',trials:0};
   const entry=transferGuard(context),epoch=storeEpoch;
