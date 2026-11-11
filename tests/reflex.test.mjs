@@ -74,3 +74,23 @@ test('the generation-0 reflex seed is on by default and follows localStorage.ref
   try{assert.equal(reflexSeedEnabled(),true);}
   finally{if(saved)Object.defineProperty(globalThis,'localStorage',saved);else delete globalThis.localStorage;}
 });
+
+test('a transfer check gives the reflex car to the fresh arm only, and keys its test on it',async()=>{
+  const store=new Map();
+  const saved=Object.getOwnPropertyDescriptor(globalThis,'localStorage');
+  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,String(v)),removeItem:k=>store.delete(k)}});
+  try{
+    const {runTransferCheck,testIdentity,clearTransferGuards}=await import('../AI-Car-Racer/learning/transferCheck.js');
+    const posted=[];
+    const spawn=()=>{const w={postMessage(m){posted.push(m);setTimeout(()=>w.onmessage({data:{type:'result',id:m.id,arm:m.arm,best:1,area:1,lastMean:0,history:[]}}),0);},terminate(){}};return w;};
+    const context={profile:'balanced',track:'rect-geometry',maxSpeed:15,traction:.5,seconds:4};
+    const base={context,track:{},profile:'balanced',maxSpeed:15,traction:.5,seconds:4,seeds:[new Float32Array(244).fill(.3)],spawn,trialsPerRun:1};
+    await runTransferCheck(base);
+    assert.ok(posted.length===2&&posted.every(m=>m.options.reflex===true),'on by default; the memory arm has seeds, so buildPopulation never seeds it');
+    clearTransferGuards();posted.length=0;store.set('reflexSeed','0');
+    await runTransferCheck(base);
+    assert.ok(posted.every(m=>!('reflex' in m.options)),'off: the options are as before #62');
+    const settings={mutation:.22,conservative:.65,generations:6,population:24,seconds:4};
+    assert.equal(testIdentity([],settings)+'|r1',testIdentity([],{...settings,reflex:true}));
+  }finally{if(saved)Object.defineProperty(globalThis,'localStorage',saved);else delete globalThis.localStorage;}
+});
