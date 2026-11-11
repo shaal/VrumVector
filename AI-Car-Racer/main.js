@@ -2174,6 +2174,7 @@ window.__downloadCSV = function(label, rows){
             var batch=window.DriverLearning.buildPopulation({N:N,incumbent:bState.coach.incumbent,plan:plan,conservative:conservativeInit,
                 reflex:!!window.DriverLearning.reflexSeedEnabled?.(), // #62: same cold start as arm A
                 reinjectReflex:window.DriverLearning.reflexReinjectEnabled?.()||null}); // #72: and the same re-injection
+            window.DriverLearning.applyReflexTuning?.(batch); // #70: and the same tuned reflex
             bState.lastKinds=batch.kinds;return batch.flat;
         }
         var out = new Float32Array(N * FLAT_LENGTH);

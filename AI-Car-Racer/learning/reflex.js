@@ -19,6 +19,8 @@ export const REFLEX_LAYOUT=Object.freeze({inputs:10,hidden:16,outputs:4,length:2
 // results. The reflex's own score is sensitive to these numbers: gateSteer .5
 // instead of 1 takes Rect from 10 to 3 gates, and gateGain 18 makes it lap Tri.
 // side weights the left-minus-right ray difference (outer ray first).
+// #70: a cold start now tunes these numbers per track (reflexTuner.js); this
+// fixed tuning is the search's first candidate and its fallback.
 export const REFLEX_TUNING=Object.freeze({
   side:[.5,1,1.5],     // rays 0,1,2 (left) against rays 6,5,4 (right)
   steerGain:1,         // hidden 0 = tanh(steerGain * (left - right))

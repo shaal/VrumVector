@@ -83,6 +83,9 @@ censored, so the Tri reductions are lower bounds.
 
 ## Where the reflex car is used
 
+Since #70 the reflex car uses a tuning fitted to the track, not the fixed one
+below (`docs/plan/reflex-tune/RESULTS.md`). The fixed tuning is its fallback.
+
 - Live training (`DriverLearning.build` → `buildPopulation`) on a cold start.
 - The A/B view's baseline arm (`main.js`), whenever its coach is cold. Arm A
   may start from memory, so the A/B lift now measures memory against a
