@@ -46,7 +46,8 @@ const freePort = () => new Promise((resolve, reject) => {
   const probe = createServer(); probe.once('error', reject);
   probe.listen(0, '127.0.0.1', () => { const {port} = probe.address(); probe.close(() => resolve(port)); });
 });
-const [STATIC_PORT, FAKE_PORT] = [await freePort(), await freePort()];
+const STATIC_PORT = await freePort();
+let FAKE_PORT; do FAKE_PORT = await freePort(); while (FAKE_PORT === STATIC_PORT);
 let REAL_PORT = 0, REAL = ''; // probed just before wrangler binds it
 const server = startStaticServer(String(STATIC_PORT));
 const origin = `http://127.0.0.1:${STATIC_PORT}`;
@@ -480,6 +481,9 @@ try {
         if (!mine()?.ok) await sleep(1000);
       }
       answer = mine();
+      // A verification the session's timer finished may still be reading
+      // the leaderboard: wait for it before the board is read below.
+      if (s.verifying) await s.verifying;
       const pool = await s.client.recall({trackVec: (await import('./cloud/session.js')).unit(window.currentTrackVec), context: ctx, k: 50});
       return {answer, waiting, key: ctx.track, pageMaxSpeed: maxSpeed, pageTraction: traction,
         served: pool?.find(p => p.id === answer?.id)?.fitness ?? null, board: s.board,
