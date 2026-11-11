@@ -68,6 +68,22 @@ computeStartInfoInPlace(currentCheckpointList());
 // Applied to AI cars only (not elite at i=0, not player cars).
 window.__poseJitter = window.__poseJitter || { radiusPx: 0, angleDeg: 0, maxAttempts: 8 };
 
+// Elite re-score (issue #61, eliteRescore.js) — OFF by default: in the paired
+// benchmark (docs/validation/elite-rescore.md) no variant gained the 5
+// points of start-pose survival the issue requires on both Rectangle and
+// Triangle (stride 1, n=8 per track: -3.9 to +6.3 points, none significant).
+// At the end of a generation it drives the leading cars again (up to 8: by
+// default only those tied with the winner) with full sensors from the start
+// pose and 3 small jittered poses, and crowns the most robust one. Opt in with
+//   window.__eliteRescore = { enabled: true, mode: 'mean', pool: 'tied' }   // mode 'min', pool 'top'
+// or `?rescore=1`, `?rescore=min`, `?rescore=tied-min`, `?rescore=top`, `?rescore=top-min`
+// (any other value, such as `?rescore=0` or `off`, keeps it off).
+window.__eliteRescore = window.__eliteRescore || (function(){
+    const v = (new URLSearchParams(location.search).get('rescore') || '').toLowerCase();
+    if (!/^(1|on|true|mean|min|tied|tied-min|top|top-min)$/.test(v)) return { enabled: false };
+    return { enabled: true, mode: v.includes('min') ? 'min' : 'mean', pool: v.includes('top') ? 'top' : 'tied' };
+})();
+
 // Car collisions (docs/plan/car-collisions.md) — an experiment, OFF by
 // default: 🧪 Experiments → "Solid cars", or `?collide=1`. It is not a saved
 // physics setting, so a reload without the flag starts with it off. When on,
@@ -1431,6 +1447,7 @@ function performBegin(N){
         recordPresentation: !!(window.CircuitStudio?.ready && window.CircuitStudio?.enabled),
         startInfo: { x: startInfo.x, y: startInfo.y, heading: startInfo.heading || 0 },
         poseJitter: Object.assign({ radiusPx: 0, angleDeg: 0, maxAttempts: 8 }, window.__poseJitter || {}),
+        eliteRescore: window.__eliteRescore || null,
         collisions,
         brains
     }, [brains.buffer]);
@@ -2177,6 +2194,8 @@ window.__downloadCSV = function(label, rows){
             traction: traction,
             startInfo: { x: startInfo.x, y: startInfo.y, heading: startInfo.heading || 0 },
             poseJitter: Object.assign({ radiusPx: 0, angleDeg: 0, maxAttempts: 8 }, window.__poseJitter || {}),
+            // Same re-score as worker A, so the A − B delta stays ruvector only.
+            eliteRescore: window.__eliteRescore || null,
             collisions: activeCollisions,
             brains: brains
         }, [brains.buffer]);
