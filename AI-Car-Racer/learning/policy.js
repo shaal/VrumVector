@@ -1,5 +1,6 @@
 // Pure learning policy: usable in the game, deterministic tests, and real
 // physics benchmarks without a DOM, WASM store, or graphics renderer.
+import {reflexBrain} from './reflex.js';
 export const FLAT_LENGTH=244;
 export const clamp=(n,lo,hi)=>Math.max(lo,Math.min(hi,Number(n)||0));
 export const validBrain=vector=>vector?.length===FLAT_LENGTH&&Array.from(vector).every(Number.isFinite);
@@ -205,7 +206,9 @@ export function mutateInto(out,offset,src,amount,random,sparse=null){
   const p=clamp(sparse.p,0,1),sigma=amount*Math.max(0,Number(sparse.sigmaScale)||0);
   for(let j=0;j<FLAT_LENGTH;j++)out[offset+j]=random()<p?src[j]+sigma*gaussian(random):src[j];
 }
-export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.random,conservative=.65,sparse=null}) {
+// reflex (#62): on a cold start (no seed and no champion), slot 0 holds the
+// hand-written reflex driver from reflex.js instead of a random brain.
+export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.random,conservative=.65,sparse=null,reflex=false}) {
   N=Math.max(1,Math.min(2000,N|0));
   const pool=seeds.filter(s=>validBrain(s.vector));
   const protectedSeed=incumbent&&validBrain(incumbent.vector)?incumbent:pool[0]||null;
@@ -215,8 +218,8 @@ export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.rand
   const origins=new Array(N).fill(null);
   // Every car counts once in archive_recall, localStorage_prior,
   // demonstration (a clone of your driving, H4), or random_init; the elite
-  // also counts in protected_elite.
-  const counts={archive_recall:0,localStorage_prior:0,random_init:0,protected_elite:0,demonstration:0};
+  // also counts in protected_elite, and the reflex car (#62) also in reflex.
+  const counts={archive_recall:0,localStorage_prior:0,random_init:0,protected_elite:0,demonstration:0,reflex:0};
   const mutation=clamp(plan?.mutation??.22,.01,1),novel=clamp(plan?.novel??.1,0,.8);
   const nNovel=protectedSeed&&N>1?(N===2?(plan?.stagnant>=5&&plan.round%5===0?1:0):Math.min(N-1,Math.max(1,Math.floor(N*novel)))):N;
   function fillRandom(offset){
@@ -232,7 +235,13 @@ export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.rand
     // Always mutate the champion as well as recalling other memories. This
     // matters for N=2, where the only challenger must refine the incumbent.
     const source=elite||single||i%2===1?protectedSeed:pool.length?pool[Math.floor((i-2)/2)%pool.length]:protectedSeed;
-    if(fresh){fillRandom(offset);counts.random_init++;kinds[i]='random';continue;}
+    if(fresh){
+      // The reflex car still draws its random weights first, so every other
+      // car matches the population built without it (paired trials).
+      fillRandom(offset);counts.random_init++;kinds[i]='random';
+      if(reflex&&!protectedSeed&&i===0){flat.set(reflexBrain(),offset);kinds[i]='reflex';counts.reflex++;}
+      continue;
+    }
     const amount=elite?0:clamp(mutation*(i%2?.5:1.8),.005,1);
     mutateInto(flat,offset,source.vector,amount,random,sparse);
     parents[i]=source.id||null;kinds[i]=elite?'elite':'mutation';

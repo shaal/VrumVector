@@ -1,5 +1,6 @@
 import {LearningCoach,buildPopulation,sparseMutationFlag,cleanContext,contextKey,validBrain,collisionsLabel} from './policy.js';
 import {geometryKey} from '../graphics/state.js';
+import {reflexSeedEnabled} from './reflex.js';
 import {applyTransferGuard,transferGuard,isTransferPaused,resumeTransfer,runTransferCheck,clearTransferGuards} from './transferCheck.js';
 import {TrainingHealth,loadHealth,HEALTH_WINDOW} from './health.js';
 import {DemonstrationRecorder,DemonstrationStore,MAX_DEMONSTRATIONS,MAX_SECONDS} from './demonstration.js';
@@ -75,7 +76,7 @@ class DriverLearning {
     const pool=seedPool(seeds?.length&&!this.forceSaved?seeds:validBrain(prior)?[{vector:prior,id:null}]:[],
       this.demonstrationSeedFor(this.context),{forceSaved:this.forceSaved});
     if(this.forceSaved){this.coach.incumbent=null;this.forceSaved=false;}
-    this.batch=buildPopulation({N,seeds:pool,incumbent:this.coach.incumbent,plan:this.lastPlan,conservative,sparse:sparseMutationFlag()});
+    this.batch=buildPopulation({N,seeds:pool,incumbent:this.coach.incumbent,plan:this.lastPlan,conservative,sparse:sparseMutationFlag(),reflex:reflexSeedEnabled()});
     this.seeds=pool;this.render();return this.batch;
   }
   // "Use my driving": the clone of one context's recordings. demo is
@@ -216,7 +217,7 @@ class DriverLearning {
 }
 export const learning=window.DriverLearning=new DriverLearning();
 // Both arms of the A/B comparison can use the same genetic policy.
-learning.createCoach=()=>new LearningCoach();learning.buildPopulation=buildPopulation;
+learning.createCoach=()=>new LearningCoach();learning.buildPopulation=buildPopulation;learning.reflexSeedEnabled=reflexSeedEnabled;
 
 // Recording your driving (WASD car only). Samples stay in this browser's
 // IndexedDB; multiplayer never sends them, and recording is off while it is on.
