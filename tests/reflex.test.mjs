@@ -3,8 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {Simulation} from './helpers/simulation.mjs';
-import {reflexBrain,reflexSeedEnabled,REFLEX_SEED_DEFAULT} from '../AI-Car-Racer/learning/reflex.js';
-import {buildPopulation} from '../AI-Car-Racer/learning/policy.js';
+import {reflexBrain,reflexSeedEnabled,REFLEX_SEED_DEFAULT,reflexReinjectEnabled,REFLEX_REINJECT_DEFAULT} from '../AI-Car-Racer/learning/reflex.js';
+import {buildPopulation,reinjectDue,LearningCoach} from '../AI-Car-Racer/learning/policy.js';
 import {runTrialArm} from '../AI-Car-Racer/learning/trial.js';
 import {seededRandom} from '../AI-Car-Racer/graphics/state.js';
 import {brainProblem,LIMITS} from '../AI-Car-Racer/cloud/wire.js';
@@ -96,4 +96,76 @@ test('a transfer check gives the reflex car to the fresh arm only, and keys its 
     const settings={mutation:.22,conservative:.65,generations:6,population:24,seconds:4};
     assert.equal(testIdentity([],settings)+'|r1',testIdentity([],{...settings,reflex:true}));
   }finally{if(saved)Object.defineProperty(globalThis,'localStorage',saved);else delete globalThis.localStorage;}
+});
+
+// Issue #72: the reflex re-joins a stalled population.
+const champion={vector:new Float32Array(244).fill(.1),fitness:3,styleScore:0};
+const memory2={vector:new Float32Array(244).fill(.2),id:'m'};
+const stalled=stagnant=>({mutation:.22,novel:.1,round:stagnant+3,stagnant});
+
+test('reinjectDue fires on the stagnation flag and then once every M stagnant generations',()=>{
+  const due=(s,m)=>reinjectDue({stagnant:s},m);
+  assert.deepEqual([0,1,4,5,6,9,10,11,15,20].filter(s=>due(s)),[5,10,15,20],'default M = 5');
+  assert.deepEqual([4,5,6,7,8,9].filter(s=>due(s,2)),[5,7,9]);
+  assert.deepEqual([3,4,5,6,7].filter(s=>due(s,1)),[5,6,7]);
+  // Hostile periods fall back to a sane one; a plan without a count never fires.
+  assert.ok(due(5,0)&&due(5,-3)&&due(5,'x')&&due(10,NaN));
+  assert.ok(!due(undefined)&&!reinjectDue(null)&&!reinjectDue({stagnant:5.5})&&!reinjectDue({stagnant:'5'}));
+  // It reads the coach's own counter.
+  const coach=new LearningCoach();coach.setContext({track:'t'});
+  for(let g=0;g<6;g++)coach.record({fitness:2,styleScore:0},champion.vector);
+  assert.equal(coach.plan(.22,false).stagnant,5);assert.ok(reinjectDue(coach.plan(.22,false)));
+});
+
+test('a re-injected reflex takes the first novel slot when stalled, and every other car is unchanged',()=>{
+  const build=(stagnant,reinjectReflex,extra={})=>buildPopulation({N:24,incumbent:champion,seeds:[memory2],plan:stalled(stagnant),random:seededRandom('stall'+stagnant),reflex:true,reinjectReflex,...extra});
+  for(const s of [5,10]){
+    const off=build(s,null),on=build(s,5),slot=on.kinds.indexOf('reflex');
+    assert.equal(slot,24-2,'first of floor(24 * .1) = 2 novel slots');assert.equal(off.kinds[slot],'random');
+    assert.deepEqual(Array.from(on.flat.slice(slot*244,(slot+1)*244)),Array.from(reflexBrain()));
+    const rest=(b)=>Array.from(b.flat).filter((_,j)=>Math.floor(j/244)!==slot);
+    assert.deepEqual(rest(on),rest(off),'paired: every other car matches');
+    assert.equal(on.kinds.filter(k=>k==='reflex').length,1);assert.equal(on.kinds[0],'elite');
+    assert.deepEqual(on.counts,{...off.counts,reflex:1},'the tally still sums to N');
+  }
+  for(const s of [0,4,6,9]){
+    const off=build(s,null),on=build(s,5);
+    assert.deepEqual(on.flat,off.flat,`stagnant ${s}: no re-injection`);assert.deepEqual(on.kinds,off.kinds);
+  }
+  // true means the default period; off (null/false/0) is the build from before #72.
+  assert.equal(build(10,true).counts.reflex,1);assert.equal(build(15,true).counts.reflex,1);assert.equal(build(7,true).counts.reflex,0);
+  for(const flag of [null,false,0,undefined])assert.deepEqual(build(5,flag).flat,buildPopulation({N:24,incumbent:champion,seeds:[memory2],plan:stalled(5),random:seededRandom('stall5'),reflex:true}).flat);
+  // The live explore plan has more novel slots; the reflex is the first of them.
+  const explore=buildPopulation({N:20,incumbent:champion,plan:{mutation:.27,novel:.2,round:9,stagnant:5},random:seededRandom('ex'),reinjectReflex:5});
+  assert.equal(explore.kinds.indexOf('reflex'),16);
+});
+
+test('re-injection leaves the cold start, N = 1 and N = 2 alone',()=>{
+  // Cold: the #62 seed only, in slot 0; stagnation cannot add a second one.
+  const cold=buildPopulation({N:24,plan:stalled(5),random:seededRandom('c'),reflex:true,reinjectReflex:5});
+  assert.equal(cold.counts.reflex,1);assert.equal(cold.kinds[0],'reflex');
+  assert.equal(buildPopulation({N:24,plan:stalled(5),random:seededRandom('c'),reinjectReflex:5}).counts.reflex,0);
+  // N = 1: the only car is the champion or its mutation; never the reflex.
+  for(const s of [5,10])assert.ok(!buildPopulation({N:1,incumbent:champion,plan:{...stalled(s),round:10},random:seededRandom('one'),reinjectReflex:5}).kinds.includes('reflex'));
+  // N = 2: slot 0 stays the elite; the reflex may take the novel slot 1 only.
+  const two=buildPopulation({N:2,incumbent:champion,plan:{...stalled(5),round:10},random:seededRandom('two'),reinjectReflex:5});
+  assert.equal(two.kinds[0],'elite');assert.equal(two.kinds[1],'reflex');
+  const twoNoNovel=buildPopulation({N:2,incumbent:champion,plan:{...stalled(5),round:11},random:seededRandom('two'),reinjectReflex:5});
+  assert.deepEqual(twoNoNovel.kinds,['elite','mutation']);
+});
+
+test('runTrialArm passes reinjectReflex through',()=>{
+  let reflexCars=0;
+  runTrialArm({simulate:(flat,batch)=>{reflexCars+=batch.counts.reflex;return {fitness:1,styleScore:0,vector:flat.slice(0,244),popN:6,popStillAlive:0};},
+    context:{profile:'balanced',track:'t',maxSpeed:15,traction:.5,seconds:4},random:seededRandom('arm'),generations:12,population:20,reinjectReflex:5});
+  // Stalled from generation 1: stagnant 5 at generation 6 and 10 at generation 11.
+  assert.equal(reflexCars,2);
+});
+
+test('re-injection is off by default and follows localStorage.reflexReinject',()=>{
+  const store=v=>({getItem:k=>k==='reflexReinject'?v:null});
+  assert.equal(REFLEX_REINJECT_DEFAULT,false);
+  assert.equal(reflexReinjectEnabled(store(null)),false);assert.equal(reflexReinjectEnabled(null),false);
+  assert.equal(reflexReinjectEnabled(store('1')),true);assert.equal(reflexReinjectEnabled(store('0')),false);
+  assert.equal(reflexReinjectEnabled({getItem(){throw Error('blocked');}}),false);
 });

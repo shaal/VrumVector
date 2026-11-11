@@ -43,6 +43,15 @@ export function reflexSeedEnabled(storage){
   return REFLEX_SEED_DEFAULT;
 }
 
+// Re-injecting the reflex when progress stalls (#72) is OFF: it did not clear
+// the #72 kill criterion (docs/plan/reflex-seed/REINJECT.md). Turn it on for
+// one browser with localStorage.reflexReinject = '1'.
+export const REFLEX_REINJECT_DEFAULT=false;
+export function reflexReinjectEnabled(storage){
+  try{const v=(storage===undefined?globalThis.localStorage:storage)?.getItem?.('reflexReinject');if(v==='1')return true;if(v==='0')return false;}catch{}
+  return REFLEX_REINJECT_DEFAULT;
+}
+
 export function reflexBrain(tuning={}){
   const t={...REFLEX_TUNING,...tuning};
   const H=16,O=4,flat=new Float32Array(244);
