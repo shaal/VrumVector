@@ -27,6 +27,7 @@
 //   BROWSER=firefox (or webkit) runs it in that engine instead of Chromium.
 import assert from 'node:assert/strict';
 import {mkdtemp, mkdir, readFile, rm, writeFile} from 'node:fs/promises';
+import {createServer} from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import * as playwright from 'playwright';
@@ -38,9 +39,18 @@ import {DISCLOSURE, ARRIVAL_DISCLOSURE} from '../AI-Car-Racer/cloud/ui.js';
 import * as wire from '../AI-Car-Racer/cloud/wire.js';
 
 const out = 'test-results/cloud-brain'; await mkdir(out, {recursive: true});
-const server = startStaticServer('8876');
-const origin = 'http://127.0.0.1:8876';
-const FAKE = 'http://127.0.0.1:8875', REAL_PORT = 8874, REAL = `http://127.0.0.1:${REAL_PORT}`;
+// Free ports, so a server another checkout left on a fixed port cannot answer
+// in place of this one (#74). The fake service is routed in the page, so its
+// port only has to differ from the others.
+const freePort = () => new Promise((resolve, reject) => {
+  const probe = createServer(); probe.once('error', reject);
+  probe.listen(0, '127.0.0.1', () => { const {port} = probe.address(); probe.close(() => resolve(port)); });
+});
+const [STATIC_PORT, FAKE_PORT] = [await freePort(), await freePort()];
+let REAL_PORT = 0, REAL = ''; // probed just before wrangler binds it
+const server = startStaticServer(String(STATIC_PORT));
+const origin = `http://127.0.0.1:${STATIC_PORT}`;
+const FAKE = `http://127.0.0.1:${FAKE_PORT}`;
 let browser, stage = 'boot', dev = null, persist = null;
 const VIEW = {viewport: {width: 1120, height: 800}};
 const errors = [], report = {};
@@ -203,6 +213,9 @@ try {
     let page = await openPage(context, {endpoint: FAKE, fake});
     await train(page, 2);
     const championsBefore = await page.evaluate(() => localStorage.getItem('vv.driverChampions'));
+    // The archive reaches IndexedDB 250 ms after a change; closing the page
+    // can cut that write off, so it is written out first (#74).
+    await page.evaluate(() => window.__rvBridge.persist());
     await page.close();
     page = await openPage(context, {endpoint: FAKE, fake, query: '?brain=shared'});
     const localBefore = await dump(page, 'rv_car_learning');
@@ -386,6 +399,8 @@ try {
   stage = 'real service';
   {
     persist = await mkdtemp(path.join(os.tmpdir(), 'cloud-brain-browser-'));
+    do REAL_PORT = await freePort(); while (REAL_PORT === STATIC_PORT || REAL_PORT === FAKE_PORT);
+    REAL = `http://127.0.0.1:${REAL_PORT}`;
     dev = await startDev({port: REAL_PORT, persist, vars: {ALLOW_LOCAL: 'true'}});
     const [contextA, contextB] = [await browser.newContext(VIEW), await browser.newContext(VIEW)];
     const a = await openPage(contextA, {endpoint: REAL, query: '?brain=shared'});
@@ -420,6 +435,11 @@ try {
     // One other contributor corroborates nothing yet: every claim is served as at most 0.
     assert.ok(poolA.every(p => p.fitness <= 0), JSON.stringify(poolA.slice(0, 5)));
     report.real = {statsA, seedsB, entriesWithFeedback: poolA.filter(p => p.feedback.contributors >= 1).length, pool: poolA.length};
+    // B only reads from here on: it pauses. A and B share one address and
+    // its write limit (24 a minute), and B's training kept it spent (#74).
+    // pauseGame(), as the Pause button does (the button may be off screen).
+    await b.evaluate(() => { if (!pause) pauseGame(); });
+    assert.equal(await b.evaluate(() => pause), true, 'paused');
 
     // ─── 5. a verified lap (X1) ──────────────────────────────────────────
     stage = 'a verified lap';
@@ -428,6 +448,12 @@ try {
     const traces = JSON.parse(await readFile('tests/fixtures/cloud-brain-sim/traces.json', 'utf8'));
     const lap = traces.cases.find(c => c.track === 'Rectangle' && c.outcome.laps > 0 && c.settings.seconds === 20 && c.settings.profile === 'balanced');
     assert.ok(lap && lap.settings.maxSpeed === 15 && lap.settings.traction === 0.5, 'a lapping case in the page\'s physics');
+    // A pauses too, so its training's feedback does not keep the write
+    // limit spent while the brain to verify waits to be sent (#74). Stage 6
+    // resumes it.
+    // pauseGame(), as the Pause button does (the button may be off screen).
+    await a.evaluate(() => { if (!pause) pauseGame(); });
+    assert.equal(await a.evaluate(() => pause), true, 'paused');
     const run = await a.evaluate(async ({vector, fitness}) => {
       const s = window.__rvCloud, {decodeF32} = await import('./cloud/wire.js'), {cleanContext} = await import('./learning/policy.js');
       const {geometryKey} = await import('./graphics/state.js');
@@ -439,15 +465,21 @@ try {
       window.__rvBridge.archiveBrain(unflatten(decodeF32(vector, 244)), fitness, window.currentTrackVec, 40, [], 16.6, undefined, {context: ctx, styleScore: 0});
       await s.settled();
       const waiting = s.verifications.length;
-      // Sent, then verified: a backoff (A and B share one address and its
-      // limits) or a busy service only delays it.
+      // Sent, then verified: a busy service (its verification limit) only
+      // delays it. Refused contributions (A and B share one address and its
+      // write limit) do not: a verification has its own limit (#74).
+      // The session's own timer ticks too, and may take the answer first.
+      // A deadline, not a count, bounds the wait, so a failure fails and
+      // never hangs the job.
       const sleep = ms => new Promise(r => setTimeout(r, ms));
+      const deadline = Date.now() + 5 * 60_000;
       let answer = null;
-      for (let i = 0; i < 60 && !answer; i++) {
-        while (!s.client.canTry('send')) await sleep(250);
-        answer = await s.tick();
-        if (!answer) await sleep(2000);
+      const mine = () => answer?.ok ? answer : s.verified.at(-1) || null;
+      while (!mine()?.ok && Date.now() < deadline) {
+        if (s.client.canVerify()) answer = await s.tick();
+        if (!mine()?.ok) await sleep(1000);
       }
+      answer = mine();
       const pool = await s.client.recall({trackVec: (await import('./cloud/session.js')).unit(window.currentTrackVec), context: ctx, k: 50});
       return {answer, waiting, key: ctx.track, pageMaxSpeed: maxSpeed, pageTraction: traction,
         served: pool?.find(p => p.id === answer?.id)?.fitness ?? null, board: s.board,
@@ -538,8 +570,10 @@ try {
       // that, archive and send in one step, so no training map replaces this
       // one in between.
       const sleep = ms => new Promise(r => setTimeout(r, ms));
-      for (let attempt = 0; attempt < 30; attempt++) {
-        while (s.crashSending || !s.client.canTry('send')) await sleep(250);
+      const deadline = Date.now() + 5 * 60_000; // fails, never hangs the job (#74)
+      for (let attempt = 0; attempt < 30 && Date.now() < deadline; attempt++) {
+        while ((s.crashSending || !s.client.canTry('send')) && Date.now() < deadline) await sleep(250);
+        if (Date.now() >= deadline) break;
         s.crash = null;
         window.__rvBridge.archiveCrashMap(m.map(x => x / n), {survival: 0.99, nDeaths: 8, generation: 3, geometrySig: g, walls: g, cps, measured: false});
         if (s.crash !== null) throw new Error('an unmeasured layout was queued');
