@@ -77,6 +77,9 @@ export class CloudBrainClient {
     this.backoff = {send: {failures: 0, retryAt: 0, error: null}, read: {failures: 0, retryAt: 0, error: null}};
     this.flushing = null;
     this.verifyAt = 0;
+    // Until when the last network failure holds a verification (#74): set on
+    // every network failure, even when a refusal keeps a channel's label.
+    this.offlineUntil = 0;
     // The service has crash maps (X4; one from before them answers 404: they
     // stop for this page, and nothing backs off).
     this.crashMaps = true;
@@ -213,6 +216,7 @@ export class CloudBrainClient {
   }
   #ok(channel) {
     const clear = {failures: 0, retryAt: 0, error: null};
+    this.offlineUntil = 0;
     this.backoff[channel] = {...clear};
     // The network is back for both; a refusal or a busy service on the other
     // side still waits out its own backoff.
@@ -232,6 +236,7 @@ export class CloudBrainClient {
       if (!(error === 'network' && b.error && b.error !== 'network')) b.error = error;
       const delay = Math.min(BACKOFF_MS.max, BACKOFF_MS.first * 2 ** (b.failures - 1));
       b.retryAt = this.now() + delay * (0.8 + 0.4 * this.random());
+      if (error === 'network') this.offlineUntil = Math.max(this.offlineUntil, b.retryAt);
     }
     this.#set({state: this.outdated ? 'outdated' : CloudBrainClient.stateFor(error), lastError: error});
   }
@@ -241,6 +246,14 @@ export class CloudBrainClient {
   }
   get retryAt() {
     return Math.max(this.backoff.send.retryAt, this.backoff.read.retryAt);
+  }
+  /**
+   * A verification has its own limit at the service (VERIFY_LIMIT), so a
+   * refused contribution (429 on WRITE_LIMIT) does not hold it: only no
+   * connection, an outdated page, or its own wait (verifyAt) does (#74).
+   */
+  canVerify() {
+    return !!this.endpoint && !this.outdated && this.now() >= this.verifyAt && this.now() >= this.offlineUntil;
   }
 
   /** POST or GET; the answer as bytes, or {error: 'network'}. */
@@ -329,7 +342,7 @@ export class CloudBrainClient {
    * busy: try later).
    */
   async verify({vector, track, context}) {
-    if (!this.canTry('send') || this.now() < this.verifyAt) return null;
+    if (!this.canVerify()) return null;
     const answer = await this.#request('/v1/verify', verifyBody({token: this.token, vector, track, context}));
     if (answer.error) { this.#failed('send', answer.error); return null; }
     const wait = () => { this.verifyAt = this.now() + VERIFY_WAIT_MS * (0.8 + 0.4 * this.random()); return null; };

@@ -488,6 +488,43 @@ test('a verification sends the brain, its track and its context; a refusal waits
   assert.equal(await client.leaderboard({track: RECT.key, maxSpeed: 15, traction: 0.5}), null);
 });
 
+test('a rate-limited contribution does not hold a verification; no connection does (#74)', async () => {
+  const fake = createFakeCloudBrain(), clock = {t: 1_000_000}, client = clientFor(fake, {clock});
+  const vector = sine(DIMS.brain, 80);
+  await fake.seed([{vector, fitness: 30, track: null}]);
+  // The page's contributions hit the write limit and back off...
+  fake.refuse.contribute = 'rate-limited';
+  await client.enqueueBrain({brain: wireBrain(1), track: null});
+  for (let i = 0; i < 4; i++) await client.flush();
+  assert.equal(client.backoff.send.error, 'rate-limited');
+  assert.equal(client.canTry('send'), false);
+  // ...but a verification counts against its own limit at the service.
+  assert.equal(client.canVerify(), true);
+  assert.equal((await client.verify({vector, track: rectangle, context: lapContext})).ok, true);
+  // With no connection, nothing is tried until the network backoff ends.
+  fake.down = 'offline';
+  await client.stats();
+  fake.down = null;
+  assert.equal(client.canVerify(), false);
+  const asked = fake.requests.length;
+  assert.equal(await client.verify({vector, track: rectangle, context: lapContext}), null);
+  assert.equal(fake.requests.length, asked, 'offline: no request');
+  clock.t = client.offlineUntil;
+  assert.equal(client.canVerify(), true);
+  // Both channels refused when the network drops: their labels stay, but
+  // the network failure still holds a verification.
+  fake.refuse.recall = 'rate-limited';
+  await client.recall({trackVec: unit(sine(DIMS.track, 3)), context, k: 5});
+  fake.refuse.recall = null;
+  assert.equal(client.backoff.read.error, 'rate-limited');
+  clock.t = client.backoff.read.retryAt;
+  fake.down = 'offline';
+  await client.stats();
+  fake.down = null;
+  assert.ok(client.backoff.send.error === 'rate-limited' && client.backoff.read.error === 'rate-limited', 'refusals keep their labels');
+  assert.equal(client.canVerify(), false, 'offline: no verification');
+});
+
 test('a session verifies a brain that drove a lap once it is sent, the fastest lap first, and reads the leaderboard', async () => {
   const fake = createFakeCloudBrain(), clock = {t: 1_000_000}, client = clientFor(fake, {clock});
   const bridge = {hooks: null, setCloudHooks(h) { this.hooks = h; }, brainVector: () => null, acceptCloudPool: () => 0};
