@@ -182,7 +182,30 @@ export class LearningCoach {
     return {stage,mutation,novel:stage==='breakthrough'?.35:stage==='explore'?.2:.1,stagnant:this.stagnant,round:this.rounds};
   }
 }
-export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.random,conservative=.65}) {
+// Sparse additive mutation (#63): each weight moves with probability p, by
+// N(0, sigma) with sigma = sigmaScale * amount, instead of every weight being
+// pulled toward uniform noise. Off by default (SPARSE_MUTATION is the shape to
+// pass, not a switch): it had not beaten the lerp on both Rectangle and
+// Triangle (docs/validation/sparse-mutation.md). cloud-brain/core/src/brain.rs
+// mirrors it behind Config::sparse_mutation.
+export const SPARSE_MUTATION=Object.freeze({p:.15,sigmaScale:1});
+// The live switch: globalThis.vvSparseMutation = true (or {p, sigmaScale}) in
+// the console turns it on for the next generations; anything else is off.
+// main.js's fallback fillMutated reads the same global.
+export function sparseMutationFlag(value=globalThis.vvSparseMutation){
+  if(value===true)return SPARSE_MUTATION;
+  return value&&typeof value==='object'?{p:value.p??SPARSE_MUTATION.p,sigmaScale:value.sigmaScale??SPARSE_MUTATION.sigmaScale}:null;
+}
+// A standard normal from two uniform draws (Box-Muller).
+export function gaussian(random){return Math.sqrt(-2*Math.log(1-random()))*Math.cos(2*Math.PI*random());}
+// One child: out[offset..offset+244) from src, moved by amount. sparse null
+// keeps the lerp toward uniform noise, draw for draw as before.
+export function mutateInto(out,offset,src,amount,random,sparse=null){
+  if(!sparse){for(let j=0;j<FLAT_LENGTH;j++)out[offset+j]=src[j]*(1-amount)+(random()*2-1)*amount;return;}
+  const p=clamp(sparse.p,0,1),sigma=amount*Math.max(0,Number(sparse.sigmaScale)||0);
+  for(let j=0;j<FLAT_LENGTH;j++)out[offset+j]=random()<p?src[j]+sigma*gaussian(random):src[j];
+}
+export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.random,conservative=.65,sparse=null}) {
   N=Math.max(1,Math.min(2000,N|0));
   const pool=seeds.filter(s=>validBrain(s.vector));
   const protectedSeed=incumbent&&validBrain(incumbent.vector)?incumbent:pool[0]||null;
@@ -211,7 +234,7 @@ export function buildPopulation({N,seeds=[],incumbent=null,plan,random=Math.rand
     const source=elite||single||i%2===1?protectedSeed:pool.length?pool[Math.floor((i-2)/2)%pool.length]:protectedSeed;
     if(fresh){fillRandom(offset);counts.random_init++;kinds[i]='random';continue;}
     const amount=elite?0:clamp(mutation*(i%2?.5:1.8),.005,1);
-    for(let j=0;j<FLAT_LENGTH;j++)flat[offset+j]=source.vector[j]*(1-amount)+(random()*2-1)*amount;
+    mutateInto(flat,offset,source.vector,amount,random,sparse);
     parents[i]=source.id||null;kinds[i]=elite?'elite':'mutation';
     if(amount===0&&source.kind==='demonstration')origins[i]='demonstration';
     if(source.kind==='demonstration')counts.demonstration++;else if(source.id)counts.archive_recall++;else counts.localStorage_prior++;

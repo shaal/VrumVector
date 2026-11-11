@@ -405,7 +405,7 @@ impl DurableObject for SharedBrain {
         };
         // Fewer tracks than the default, never more (memory is sized for it).
         let max_tracks = number(&env, "MAX_TRACKS", base.max_tracks as u64).clamp(1, base.max_tracks as u64) as usize;
-        let config = Config { quota, max_tracks, ..base };
+        let config = Config { quota, max_tracks, sparse_mutation: flag(&env, "TRAIN_SPARSE_MUTATION"), ..base };
         let limits = ["WRITE_LIMIT", "READ_LIMIT", "FORGET_LIMIT", "VERIFY_LIMIT"].iter().all(|name| env.rate_limiter(name).is_ok());
         let frames = number(&env, "TRAIN_FRAMES", 0);
         // At most ~1 s of CPU a session, and a session a week at least.

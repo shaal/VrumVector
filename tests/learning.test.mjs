@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
-import {LearningCoach,buildPopulation,cleanContext,contextKey,matchContext,selectDiverse,offspringFeedback,qualityFromFitness,mergeEvaluations,evaluationFor,collisionsLabel,collisionSettings} from '../AI-Car-Racer/learning/policy.js';
+import {LearningCoach,buildPopulation,mutateInto,sparseMutationFlag,SPARSE_MUTATION,cleanContext,contextKey,matchContext,selectDiverse,offspringFeedback,qualityFromFitness,mergeEvaluations,evaluationFor,collisionsLabel,collisionSettings} from '../AI-Car-Racer/learning/policy.js';
 import {seededRandom} from '../AI-Car-Racer/graphics/state.js';
 import {Simulation} from './helpers/simulation.mjs';
 import {CircuitJournal} from '../AI-Car-Racer/sona/journal.js';
@@ -332,3 +332,61 @@ for(const [name,source,file,count] of [
     const hash=createHash('sha256').update(await readFile(new URL(file,import.meta.url))).digest('hex');
     for(const tag of tags)assert.equal(tag,hash.slice(0,8),`Set ?v=…-<first 8 hex of the wasm SHA-256> in ${source.split('/').pop()} after a rebuild`);
   });
+
+test('sparse mutation (#63) is off by default and, when off, is the lerp draw for draw',()=>{
+  const src=Float32Array.from({length:244},(_,i)=>i/122-1);
+  const a=new Float32Array(244),b=new Float32Array(244),ra=seededRandom('mut-off'),rb=seededRandom('mut-off');
+  mutateInto(a,0,src,.3,ra,null);
+  for(let j=0;j<244;j++)b[j]=src[j]*(1-.3)+(rb()*2-1)*.3;
+  assert.deepEqual(a,b);assert.equal(ra(),rb(),'the same draws');
+  assert.equal(sparseMutationFlag(undefined),null);assert.equal(sparseMutationFlag(false),null);assert.equal(sparseMutationFlag('1'),null);
+  assert.deepEqual(sparseMutationFlag(true),SPARSE_MUTATION);
+  assert.deepEqual(sparseMutationFlag({p:.2}),{p:.2,sigmaScale:SPARSE_MUTATION.sigmaScale});
+  // buildPopulation without `sparse` is the population from before #63: the
+  // hash was computed with the policy.js of 852020c.
+  const seed=Float32Array.from({length:244},(_,i)=>Math.sin(i*3));
+  const off=buildPopulation({N:40,seeds:[{vector:seed,id:'m'}],incumbent:{vector:src,fitness:3,styleScore:0},
+    plan:{mutation:.22,novel:.1,stagnant:0,round:1},random:seededRandom('pin')});
+  let h=0;for(const v of new Uint32Array(off.flat.buffer))h=(Math.imul(h,31)+v)>>>0;
+  assert.equal(h,2487630231);
+});
+
+test('sparse mutation moves about p of the weights by N(0, sigmaScale * amount)',()=>{
+  const src=Float32Array.from({length:244},(_,i)=>Math.sin(i)),out=new Float32Array(244),random=seededRandom('mut-on');
+  let moved=0,sq=0;const rounds=300;
+  for(let r=0;r<rounds;r++){mutateInto(out,0,src,.2,random,{p:.15,sigmaScale:1});
+    for(let j=0;j<244;j++)if(out[j]!==src[j]){moved++;sq+=(out[j]-src[j])**2;}}
+  assert.ok(Math.abs(moved/(rounds*244)-.15)<.01,String(moved/(rounds*244)));
+  assert.ok(Math.abs(Math.sqrt(sq/moved)-.2)<.01,String(Math.sqrt(sq/moved)));
+  // In a population, the elite stays an exact copy and children are sparse.
+  const incumbent={vector:src,fitness:3,styleScore:0},plan={mutation:.22,novel:.1,stagnant:0,round:1};
+  const batch=buildPopulation({N:12,incumbent,plan,random:seededRandom('pop'),sparse:SPARSE_MUTATION});
+  assert.deepEqual(batch.flat.slice(0,244),src);
+  for(let i=1;i<12;i++)if(batch.kinds[i]==='mutation'){
+    const child=batch.flat.slice(i*244,i*244+244),same=child.filter((w,j)=>w===src[j]).length;
+    assert.ok(same>150&&same<244,`child ${i} keeps ${same} of 244`);
+    assert.ok(child.every(Number.isFinite));
+  }
+  // p 0 copies; sigmaScale 0 copies.
+  mutateInto(out,0,src,.5,random,{p:0,sigmaScale:1});assert.deepEqual(out,src);
+  mutateInto(out,0,src,.5,random,{p:1,sigmaScale:0});assert.deepEqual(out,src);
+});
+
+test('main.js fillMutated: the lerp unless vvSparseMutation is set, then sparse',async()=>{
+  const source=await readFile(new URL('../AI-Car-Racer/main.js',import.meta.url),'utf8');
+  const pick=name=>{const at=source.indexOf('function '+name+'(');let depth=0,i=source.indexOf('{',at);
+    for(;i<source.length;i++){if(source[i]==='{')depth++;else if(source[i]==='}'&&--depth===0)break;}return source.slice(at,i+1);};
+  const run=(flag,seed)=>{const math=Object.create(Math);math.random=seededRandom(seed);
+    const scope=vm.createContext({Math:math,FLAT_LENGTH:244,lerp:(a,b,t)=>a+(b-a)*t,vvSparseMutation:flag});
+    vm.runInContext(pick('copyFlat')+pick('fillMutated')+';globalThis.fillMutated=fillMutated;',scope);
+    const src=Float32Array.from({length:244},(_,i)=>Math.cos(i)),out=new Float32Array(244);
+    scope.fillMutated(out,0,src,.3);return {src,out};};
+  const off=run(undefined,'fm');const random=seededRandom('fm');
+  for(const flag of [1,'true',false])assert.deepEqual(run(flag,'fm').out,off.out,'only true or an object turns it on: '+flag);
+  assert.deepEqual(off.out,Float32Array.from(off.src,w=>w+(random()*2-1-w)*.3));
+  // On: the same children as policy.js mutateInto with the same stream.
+  const on=run(true,'fm2'),expect=new Float32Array(244);
+  mutateInto(expect,0,on.src,.3,seededRandom('fm2'),SPARSE_MUTATION);
+  assert.deepEqual(on.out,expect);
+  assert.ok(on.out.filter((w,j)=>w!==on.src[j]).length<100);
+});

@@ -76,6 +76,10 @@ object runs at most 30 verifications a minute in all.
 Cloud training (X2) is off unless `TRAIN_FRAMES` is set (frames a session,
 e.g. 120 000: about 0.1 s); `TRAIN_EVERY_SECONDS` (1 800) and
 `TRAIN_IDLE_MINUTES` (10) set when sessions run; `/health` says `training`.
+`TRAIN_SPARSE_MUTATION` (`true`; off by default) breeds a session's
+children by sparse additive mutation (#63) instead of the lerp toward
+uniform noise, as the browser's `globalThis.vvSparseMutation`; it did not
+beat the lerp on both shapes (docs/validation/sparse-mutation.md).
 
 ## Test
 
