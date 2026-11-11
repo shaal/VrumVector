@@ -166,6 +166,9 @@ test('cloud session: a page with the shield on sends no brains, feedback or cras
   const {SharedSession,reflexShieldOn}=await import('../AI-Car-Racer/cloud/session.js');
   for(const v of [undefined,null,false,0,'1'])assert.equal(reflexShieldOn({vvReflexShield:v}),false,String(v));
   assert.equal(reflexShieldOn({vvReflexShield:true}),true);assert.equal(reflexShieldOn({vvReflexShield:{front:.5}}),true);
+  assert.equal(reflexShieldOn({__reflexShieldRan:true}),true,'the flag is off now, but the last generation ran shielded');
+  assert.equal(reflexShieldOn({__reflexShieldRan:false}),false);
+  assert.match(readFileSync(new URL('../AI-Car-Racer/main.js',import.meta.url),'utf8'),/case 'genEnd':\s*\/\/[^\n]*\n[^\n]*\n\s*window\.__reflexShieldRan = !!m\.shield;\s*handleGenEnd\(m\);/);
   const bridge={hooks:null,setCloudHooks(h){this.hooks=h;}};
   const session=new SharedSession({bridge,client:{},page:{},setInterval:null});
   const sent=[];session.pushBrain=async()=>sent.push('brain');session.pushFeedback=async()=>sent.push('feedback');session.queueCrash=()=>{sent.push('crash');return true;};

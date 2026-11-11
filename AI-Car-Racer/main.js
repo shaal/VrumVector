@@ -836,6 +836,9 @@ simWorker.onmessage = (ev) => {
             handleSnapshot(m);
             break;
         case 'genEnd':
+            // Whether this generation drove with the reflex shield (#73): the
+            // cloud session sends nothing from it (cloud/session.js).
+            window.__reflexShieldRan = !!m.shield;
             handleGenEnd(m);
             break;
         case 'driverBrain':

@@ -7,8 +7,10 @@ reading above `side`. The reflex then sets all four controls for that frame,
 after the driving style (`car.js` `Car.makeShield`, `Car.shieldDanger`).
 `cloud-brain/sim` mirrors it (`run_shielded`). Verification and cloud training
 never use it. A page with the shield on sends no brains, feedback or crash maps to
-the shared brain (`cloud/session.js` `reflexShieldOn`), because a shielded run is
-not the brain's own driving.
+the shared brain (`cloud/session.js` `reflexShieldOn`), nor does one whose last
+generation drove with it, because a shielded run is not the brain's own driving.
+Shielded champions do stay in the local archive, so their descendants can be
+sent later, after the flag is off.
 
 **Verdict: the shield does not clear the kill criterion. It stays OFF.**
 `globalThis.vvReflexShield = true` (or `{front, side}`) turns it on for one

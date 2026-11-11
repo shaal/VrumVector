@@ -116,10 +116,11 @@ async function readConfig(fetchImpl, url) {
  * a fake with the same functions); `page` gives the current track vector,
  * dynamics query vector and learning context.
  */
-/** The reflex shield's page flag (main.js reflexShieldFlag, #73): true or an object. */
+/** The reflex shield (#73): the page flag is set (true or an object), or the
+ *  generation that just ended drove with it (main.js __reflexShieldRan). */
 export function reflexShieldOn(g = globalThis) {
   const v = g?.vvReflexShield;
-  return v === true || (!!v && typeof v === 'object');
+  return v === true || (!!v && typeof v === 'object') || g?.__reflexShieldRan === true;
 }
 
 export class SharedSession {
