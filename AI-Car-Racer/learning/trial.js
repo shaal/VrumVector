@@ -7,7 +7,7 @@ import {LearningCoach,buildPopulation} from './policy.js';
 
 export const TRIAL_DEFAULTS={generations:6,population:24,mutation:.22,conservative:.65};
 
-export function runTrialArm({simulate,context,seeds=[],random,exploration=1,...options}){
+export function runTrialArm({simulate,context,seeds=[],random,exploration=1,returnChampion=false,...options}){
   const {generations,population,mutation,conservative}={...TRIAL_DEFAULTS,...options};
   const coach=new LearningCoach();coach.setContext(context);let lastMean=0;
   for(let generation=0;generation<generations;generation++){
@@ -19,7 +19,9 @@ export function runTrialArm({simulate,context,seeds=[],random,exploration=1,...o
   }
   const best=coach.incumbent?.fitness??0,curve=coach.history.map(row=>row.best);
   // area: summed champion progress over generations (who got there first).
-  return {best,area:curve.reduce((sum,v)=>sum+v,0),lastMean,history:coach.history.map(row=>row.fitness)};
+  // returnChampion adds the final incumbent's weights, so a benchmark can score it.
+  return {best,area:curve.reduce((sum,v)=>sum+v,0),lastMean,history:coach.history.map(row=>row.fitness),
+    ...(returnChampion?{champion:coach.incumbent?.vector??null}:{})};
 }
 
 // Which arm did better: final champion progress, then the same champion

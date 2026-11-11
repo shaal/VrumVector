@@ -159,12 +159,21 @@ export class LearningCoach {
     const progress=Math.max(0,result.fitness),style=clamp(result.styleScore,0,1);
     const improved=!this.incumbent||progress>this.incumbent.fitness||
       (progress===this.incumbent.fitness&&style>this.incumbent.styleScore+1e-5);
-    if(improved)this.incumbent={vector:new Float32Array(vector),fitness:progress,styleScore:style,id,meta:{fitness:progress,learningContext:this.context}};
+    // Time tie-break (#60): only results that carry lastGateFrame (the flag
+    // is on). On equal progress and no worse style, a strictly sooner last
+    // gate takes the incumbent. It counts as no improvement, so stagnation
+    // and exploration run as before.
+    const frame=Number.isFinite(result.lastGateFrame)?result.lastGateFrame:undefined;
+    const tieWin=!improved&&frame!==undefined&&progress===this.incumbent.fitness&&style>=this.incumbent.styleScore&&
+      !(this.incumbent.lastGateFrame<=frame);
+    if(improved||tieWin)this.incumbent={vector:new Float32Array(vector),fitness:progress,styleScore:style,id,
+      ...(frame!==undefined?{lastGateFrame:frame}:{}),meta:{fitness:progress,learningContext:this.context}};
     this.stagnant=improved?0:this.stagnant+1;this.rounds++;this.lastImproved=improved;
     this.history.push({generation:result.generation??this.rounds,fitness:progress,best:this.incumbent.fitness,
       survival:clamp(result.popStillAlive/Math.max(1,result.popN),0,1),speed:clamp(result.driving?.averageSpeed,0,1),improved});
     if(this.history.length>40)this.history.shift();
-    return improved;
+    // true when the incumbent changed (a tie win too), so callers save it.
+    return improved||tieWin;
   }
   plan(baseMutation=.22,adaptive=true,exploration=1){
     const stage=!adaptive?'manual':this.stagnant>=10?'breakthrough':this.stagnant>=5?'explore':this.lastImproved&&this.rounds>1?'refine':'steady';

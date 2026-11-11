@@ -13,13 +13,14 @@ export class Simulation {
   // scripts ({'sensor.js': source, ...}) replaces any of the files.
   // collisions ({heatSize}, or true) turns on collision mode, as in the
   // workers: a start row per heat and CarCollisions.step() every step.
-  constructor({track='Rectangle',seed='simulation',maxSpeed=15,traction=.5,profile='balanced',carScript=null,scripts={},collisions=null}={}){
+  constructor({track='Rectangle',seed='simulation',maxSpeed=15,traction=.5,profile='balanced',carScript=null,scripts={},collisions=null,timeTieBreak=false}={}){
     const math=Object.create(Math);math.random=seededRandom(seed);
     this.scope=vm.createContext({Math:math,frameCount:0,bestCar:null,traction,invincible:false,SENSOR_STRIDE:1});
     const replace={...(carScript!=null?{'car.js':carScript}:{}),...scripts};
     for(const name of Object.keys(replace))if(!files.includes(name))throw Error('Unknown simulator script '+name);
     sources.forEach((source,i)=>vm.runInContext(replace[files[i]]??source,this.scope,{filename:files[i]}));
     vm.runInContext('globalThis.CarClass=Car;globalThis.GridClass=SpatialGrid;',this.scope);
+    if(this.scope.DriverProfiles.settings)this.scope.DriverProfiles.settings.timeTieBreak=timeTieBreak===true;
     const preset=presets.find(p=>p.name===track);if(!preset)throw Error('Unknown track '+track);
     const borders=[];
     for(const loop of [preset.points,preset.points2])for(let i=0;i<loop.length;i++)borders.push([loop[i],loop[(i+1)%loop.length]]);
@@ -56,7 +57,7 @@ export class Simulation {
     for(const car of this.cars){const rank=profiles.rank(car,gates);if(rank>score){elite=car;score=rank;}}
     const vector=new Float32Array(244);let at=0;
     for(const level of elite.brain.levels){for(const n of level.biases)vector[at++]=n;for(const n of level.weights)vector[at++]=n;}
-    return {vector,fitness:elite.checkPointsCount+elite.laps*gates,laps:elite.laps,styleScore:profiles.styleScore(elite),
+    return {vector,fitness:elite.checkPointsCount+elite.laps*gates,...profiles.lastGateFrame?.(elite),laps:elite.laps,styleScore:profiles.styleScore(elite),
       popN:this.cars.length,popStillAlive:this.cars.filter(c=>!c.damaged).length,driving:profiles.summarize(elite),
       ...(collision?{contactDeaths:this.cars.filter(c=>c.contactCrash).length}:{})};
   }
