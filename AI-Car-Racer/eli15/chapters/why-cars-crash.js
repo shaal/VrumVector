@@ -11,8 +11,8 @@ export default {
     '"the AI isn\'t smart enough yet."</p>',
 
     '<h3>1. The brain is a frozen reflex table, not an agent</h3>',
-    '<p>Every car\'s "brain" is the 92-number neural net from the',
-    '<code>neural-network</code> chapter. Once a car is born, those 92 numbers are <strong>locked</strong>',
+    '<p>Every car\'s "brain" is the 244-number neural net from the',
+    '<code>neural-network</code> chapter. Once a car is born, those 244 numbers are <strong>locked</strong>',
     'for its entire life. No learning, no memory, no "oh I bumped that wall, I\'ll try something',
     'different next time." Each frame it does the same thing: feed sensor readings in the top,',
     'read four booleans out the bottom. It\'s a <em>lookup function</em> dressed up as a driver.',
@@ -29,7 +29,7 @@ export default {
     'The rare few that happen to wire up a sensible reflex — "if the centre ray reads low,',
     'stop going forward" — are the seeds everything else descends from. Gen 0 isn\'t dumb;',
     'it\'s <strong>random</strong>, and random is mostly broken.</p>',
-    '<p>Since issue #62, a cold start also gets one hand-written reflex car, so',
+    '<p>Since issue #62, a cold start gets one hand-written reflex car by default, so',
     'generation 0 is no longer <em>all</em> dice rolls. See',
     '<a href="#" data-eli15="reflex-seed">Giving generation 0 one car that can already drive</a>.</p>',
 
@@ -37,7 +37,7 @@ export default {
     '<p>Fitness is brutally simple: <code>checkPointsCount + laps × cpLen</code>',
     '(<code>sim-worker.js:296</code>). Whichever car grabs the first checkpoint <em>first</em>',
     'wins the generation, even if it immediately crashes one metre later. The GA then copies',
-    'that winner\'s 92 weights, sprinkles a bit of mutation noise, and the whole next',
+    'that winner\'s 244 weights, sprinkles a bit of mutation noise, and the whole next',
     'generation is its near-siblings. After ~10 generations of this, the population has',
     '<strong>locked in</strong> on whatever reflex the first lucky car happened to have —',
     'even if that reflex is "hug the left wall at 0.3 × max speed." Escaping that local',
